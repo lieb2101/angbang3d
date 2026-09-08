@@ -1,0 +1,14 @@
+# Patches must keep their exact bytes or `git apply` fails on checkout.
+*.patch -text
+*.diff -text
+
+# Keep shell scripts and CI workflows LF regardless of platform.
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# PowerShell is happiest with CRLF on Windows.
+*.ps1 text eol=crlf
+
+*.py text eol=lf
+*.md text

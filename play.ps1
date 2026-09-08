@@ -8,6 +8,9 @@
     character; nothing is ever overwritten.
 .PARAMETER List
     List existing save slots and exit.
+.PARAMETER Random
+    Roll a random character instead of going through the creation screens.
+    Only applies when the save slot is empty.
 .PARAMETER Classic
     Skip the client and play plain text Angband in this terminal instead.
 .PARAMETER Editor
@@ -17,11 +20,14 @@
 .EXAMPLE
     .\play.ps1 -Character thorin
 .EXAMPLE
+    .\play.ps1 -Character quick -Random
+.EXAMPLE
     .\play.ps1 -List
 #>
 [CmdletBinding()]
 param(
     [string]$Character = 'angband3d',
+    [switch]$Random,
     [switch]$List,
     [switch]$Classic,
     [switch]$Editor
@@ -93,8 +99,11 @@ if (-not $godot) {
 $existing = Join-Path $saveDir $Character
 if (Test-Path $existing) {
     Write-Host "Continuing character '$Character'." -ForegroundColor Cyan
+} elseif ($Random) {
+    Write-Host "Rolling a random character in slot '$Character'." -ForegroundColor Cyan
 } else {
-    Write-Host "No save called '$Character' - you will create a new character." -ForegroundColor Cyan
+    Write-Host "New character in slot '$Character' - you will pick race and class." -ForegroundColor Cyan
+    Write-Host "(use -Random to skip the creation screens)" -ForegroundColor DarkGray
 }
 
 Write-Host ""
@@ -103,9 +112,9 @@ Write-Host "  arrows          turn / walk         >   descend stairs"
 Write-Host "  M               classic map         <   ascend stairs"
 Write-Host "  Tab             terminal view       i   inventory"
 Write-Host "  Ctrl-S  save    Ctrl-X  save+quit   ?   help"
-Write-Host "  Ctrl-W          wizard (god) mode"
+Write-Host "  Ctrl-W          wizard (god) mode    Ctrl-A  debug commands"
 Write-Host ""
-Write-Host "Character creation and menus appear in the terminal view." -ForegroundColor DarkGray
+Write-Host "Menus, targeting and character creation use the classic terminal view." -ForegroundColor DarkGray
 Write-Host "Other characters:  .\play.ps1 -Character <name>   (.\play.ps1 -List)" -ForegroundColor DarkGray
 Write-Host ""
 
@@ -113,5 +122,6 @@ $client = Join-Path $repo 'client'
 $clientArgs = @('--path', $client)
 if ($Editor) { $clientArgs += '--editor' }
 $clientArgs += @('--', "--save=$Character")
+if ($Random) { $clientArgs += '--autobirth' }
 
 & $godot $clientArgs

@@ -129,10 +129,14 @@ public partial class Main : Node
     }
 
     /// <summary>
-    /// Only a pushed screen - inventory, store, character sheet - needs the
-    /// terminal. Message pauses and one-line prompts stay in the world view and
-    /// are drawn on the HUD instead, so combat does not throw the player out of
-    /// the 3D view on every hit.
+    /// Which states need Angband's own screen.
+    ///
+    /// A pushed screen (inventory, store) obviously does. So does any real
+    /// question - direction, target, which item - because answering those needs
+    /// the map and cursor that only exist on the terminal.
+    ///
+    /// A bare -more- does not: throwing the player out of the world view on
+    /// every combat message is what made fights unreadable.
     /// </summary>
     private static bool NeedsTerminal(JsonElement frame)
     {
@@ -140,7 +144,16 @@ public partial class Main : Node
         {
             return true;
         }
-        return frame.TryGetProperty("ui", out var ui) && ui.GetProperty("overlay").GetInt32() > 0;
+        if (!frame.TryGetProperty("ui", out var ui))
+        {
+            return false;
+        }
+        if (ui.GetProperty("overlay").GetInt32() > 0)
+        {
+            return true;
+        }
+        return !ui.GetProperty("awaiting_command").GetBoolean()
+               && !ui.GetProperty("more").GetBoolean();
     }
 
     /// <summary>The pending prompt, if the game is waiting on something small.</summary>

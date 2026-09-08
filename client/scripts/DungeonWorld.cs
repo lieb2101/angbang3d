@@ -108,8 +108,10 @@ public partial class DungeonWorld : Node3D
         AmbientLightColor = new Color(0.10f, 0.11f, 0.14f),
         AmbientLightEnergy = 0.35f,
         FogEnabled = true,
-        FogLightColor = new Color(0.02f, 0.02f, 0.03f),
-        FogDensity = 0.06f,
+        FogLightColor = new Color(0.03f, 0.03f, 0.04f),
+        // Dense enough that corridors fade into dark rather than ending at a
+        // hard black cutoff where the torch stops.
+        FogDensity = 0.10f,
         TonemapMode = Godot.Environment.ToneMapper.Filmic,
     };
 
@@ -218,7 +220,7 @@ public partial class DungeonWorld : Node3D
             _env.AmbientLightColor = _outdoors
                 ? new Color(0.42f, 0.45f, 0.55f)
                 : new Color(0.10f, 0.11f, 0.14f);
-            _env.FogDensity = _outdoors ? 0.012f : 0.06f;
+            _env.FogDensity = _outdoors ? 0.012f : 0.10f;
             Rebuild(map);
             if (firstOnLevel)
             {

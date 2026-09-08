@@ -17,6 +17,7 @@ public partial class Overlay : Control
     public string Status { get; set; } = "starting...";
     public double Waiting { get; set; }
     public string FacingName { get; set; } = "N";
+    public string PromptLine { get; set; }
 
     public override void _Ready()
     {
@@ -62,7 +63,7 @@ public partial class Overlay : Control
                 break;
         }
 
-        if (Waiting > 1.0)
+        if (Waiting > 2.0)
         {
             DrawString(_font, new Vector2(4, View.Y - _cell.Y * 3),
                 $"waiting for the engine ({Waiting:F0}s)...",
@@ -170,9 +171,16 @@ public partial class Overlay : Control
             ? msgs[msgs.GetArrayLength() - 1].GetProperty("text").GetString()
             : "";
 
-        DrawRect(new Rect2(0, 0, View.X, _cell.Y + 4), new Color(0, 0, 0, 0.55f));
-        DrawString(_font, new Vector2(6, _font.GetAscent(_fontSize) + 2), msg,
-            HorizontalAlignment.Left, -1, _fontSize, Colors.White);
+        // A pending prompt replaces the message line and is highlighted, so a
+        // -more- during a fight is obvious without leaving the world view.
+        var prompt = PromptLine;
+        var text = prompt ?? msg;
+        var bg = prompt != null ? new Color(0.20f, 0.13f, 0.02f, 0.92f) : new Color(0, 0, 0, 0.55f);
+        var fg = prompt != null ? new Color(1.0f, 0.88f, 0.55f) : Colors.White;
+
+        DrawRect(new Rect2(0, 0, View.X, _cell.Y + 6), bg);
+        DrawString(_font, new Vector2(6, _font.GetAscent(_fontSize) + 3), text,
+            HorizontalAlignment.Left, -1, _fontSize, fg);
 
         var wizard = p.GetProperty("wizard").GetBoolean() ? "  [WIZARD]" : "";
         var line =
@@ -187,7 +195,8 @@ public partial class Overlay : Control
         var barH = _cell.Y * 2 + 10;
         DrawRect(new Rect2(0, View.Y - barH, View.X, barH), new Color(0, 0, 0, 0.6f));
         DrawString(_font, new Vector2(6, View.Y - barH + _font.GetAscent(_fontSize) + 3),
-            "arrows: turn/walk   M: map   Tab: terminal   >: stairs   ?: help",
+            "arrows: turn/walk   M: map   Tab: terminal   >: stairs   " +
+            "i: inventory   ^S: save   ^X: save+quit   ?: help",
             HorizontalAlignment.Left, -1, _fontSize, new Color(0.45f, 0.45f, 0.52f));
         DrawString(_font, new Vector2(6, View.Y - 8), line,
             HorizontalAlignment.Left, -1, _fontSize, new Color(0.72f, 0.86f, 1.0f));

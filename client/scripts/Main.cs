@@ -17,7 +17,7 @@ public partial class Main : Node
 
     private bool _forceTerminal;
     private bool _mapMode;
-    private bool _autoBirth = true;
+    private bool _autoBirth;
     private int _birthSteps;
     private double _waiting;
 
@@ -48,6 +48,12 @@ public partial class Main : Node
             else if (arg.StartsWith("--save="))
             {
                 _saveName = arg["--save=".Length..];
+            }
+            // Tests only: skip Angband's character creation screens. A player
+            // should get to choose their own race and class.
+            else if (arg == "--autobirth")
+            {
+                _autoBirth = true;
             }
         }
 
@@ -100,6 +106,8 @@ public partial class Main : Node
         var f = _bridge.Frame!.Value;
         _overlay.Status = null;
         _overlay.Frame = f;
+        _waiting = 0.0;
+        _overlay.Waiting = 0.0;
 
         AutoBirth(f);
         if (!_autoBirth)
@@ -115,22 +123,42 @@ public partial class Main : Node
 
         _overlay.Mode = EffectiveMode(f);
         _overlay.FacingName = Facings[_world.Facing];
+        _overlay.PromptLine = PromptOf(f);
         _overlay.QueueRedraw();
     }
 
     /// <summary>
-    /// Menus, stores and prompts exist only on the terminal channel. Rendering
-    /// the world during them would swallow the player's keystrokes invisibly.
+    /// Only a pushed screen - inventory, store, character sheet - needs the
+    /// terminal. Message pauses and one-line prompts stay in the world view and
+    /// are drawn on the HUD instead, so combat does not throw the player out of
+    /// the 3D view on every hit.
     /// </summary>
     private static bool NeedsTerminal(JsonElement frame)
     {
+        if (frame.GetProperty("phase").GetString() != "play")
+        {
+            return true;
+        }
+        return frame.TryGetProperty("ui", out var ui) && ui.GetProperty("overlay").GetInt32() > 0;
+    }
+
+    /// <summary>The pending prompt, if the game is waiting on something small.</summary>
+    private static string PromptOf(JsonElement frame)
+    {
         if (!frame.TryGetProperty("ui", out var ui))
         {
-            return false;
+            return null;
         }
-        return ui.GetProperty("overlay").GetInt32() > 0
-               || ui.GetProperty("more").GetBoolean()
-               || !ui.GetProperty("awaiting_command").GetBoolean();
+        var waiting = ui.GetProperty("more").GetBoolean()
+                      || !ui.GetProperty("awaiting_command").GetBoolean();
+        if (!waiting || frame.GetProperty("term").ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+        var rows = frame.GetProperty("term").GetProperty("rows");
+        var line = rows.GetArrayLength() > 0 ? rows[0].GetProperty("g").GetString() ?? "" : "";
+        line = line.TrimEnd();
+        return line.Length > 0 ? line : null;
     }
 
     private ViewMode EffectiveMode(JsonElement frame)
@@ -295,10 +323,12 @@ public partial class Main : Node
 
     public override void _Process(double delta)
     {
-        var wasStalled = _waiting > 1.0;
+        // Only a real stall counts: time since the last frame, not merely
+        // having a key in flight.
+        var wasStalled = _waiting > 2.0;
         _waiting = _bridge is { Busy: true } ? _waiting + delta : 0.0;
         _overlay.Waiting = _waiting;
-        if (wasStalled != _waiting > 1.0)
+        if (wasStalled != _waiting > 2.0)
         {
             _overlay.QueueRedraw();
         }

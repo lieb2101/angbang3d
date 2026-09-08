@@ -19,6 +19,8 @@ public partial class Overlay : Control
     public string FacingName { get; set; } = "N";
     public string PromptLine { get; set; }
     public string StairsHint { get; set; }
+    public string[] MenuItems { get; set; } = System.Array.Empty<string>();
+    public int MenuIndex { get; set; }
 
     public override void _Ready()
     {
@@ -35,6 +37,12 @@ public partial class Overlay : Control
 
     public override void _Draw()
     {
+        if (Mode == ViewMode.Menu)
+        {
+            DrawMenu();
+            return;
+        }
+
         if (Status != null)
         {
             DrawRect(new Rect2(Vector2.Zero, View), new Color(0.04f, 0.04f, 0.05f));
@@ -70,6 +78,37 @@ public partial class Overlay : Control
                 $"waiting for the engine ({Waiting:F0}s)...",
                 HorizontalAlignment.Left, -1, _fontSize, Colors.Orange);
         }
+    }
+
+    private void DrawMenu()
+    {
+        DrawRect(new Rect2(Vector2.Zero, View), new Color(0.03f, 0.03f, 0.045f));
+
+        var cx = View.X / 2f;
+        var top = View.Y * 0.28f;
+
+        DrawString(_font, new Vector2(cx - 150, top), "A N G B A N D 3 D",
+            HorizontalAlignment.Left, -1, 40, new Color(1.0f, 0.82f, 0.45f));
+        DrawString(_font, new Vector2(cx - 150, top + 34), "first person Angband 4.2.6",
+            HorizontalAlignment.Left, -1, 16, new Color(0.5f, 0.5f, 0.58f));
+
+        for (var i = 0; i < MenuItems.Length; i++)
+        {
+            var y = top + 90 + i * 38;
+            var selected = i == MenuIndex;
+            if (selected)
+            {
+                DrawRect(new Rect2(cx - 170, y - 22, 620, 32), new Color(0.16f, 0.13f, 0.05f));
+            }
+            DrawString(_font, new Vector2(cx - 160, y),
+                (selected ? "> " : "  ") + $"{i + 1}. " + MenuItems[i],
+                HorizontalAlignment.Left, -1, 20,
+                selected ? new Color(1.0f, 0.9f, 0.6f) : new Color(0.72f, 0.72f, 0.78f));
+        }
+
+        DrawString(_font, new Vector2(cx - 160, top + 110 + MenuItems.Length * 38),
+            "up/down to choose, Enter to start, or press its number",
+            HorizontalAlignment.Left, -1, 15, new Color(0.45f, 0.45f, 0.52f));
     }
 
     private void DrawMap(JsonElement frame)

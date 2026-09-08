@@ -4,7 +4,7 @@ using Godot;
 
 namespace Angband3D;
 
-public enum ViewMode { World, Map, Terminal }
+public enum ViewMode { World, Map, Terminal, Menu }
 /// <summary>
 /// Owns the bridge, decides which view is showing, and routes input.
 /// </summary>
@@ -28,6 +28,11 @@ public partial class Main : Node
     private int _frames;
     private bool _shotTaken;
     private string _saveName = "angband3d";
+    private bool _manualRequested;
+    private bool _inMenu;
+    private int _menuIndex;
+    private int _autoMenuChoice;
+    private readonly System.Collections.Generic.List<(string Label, string Action)> _menu = new();
 
     public override void _Ready()
     {
@@ -55,6 +60,14 @@ public partial class Main : Node
             {
                 _autoBirth = true;
             }
+            else if (arg == "--manual")
+            {
+                _manualRequested = true;
+            }
+            else if (arg.StartsWith("--menu="))
+            {
+                int.TryParse(arg["--menu=".Length..], out _autoMenuChoice);
+            }
         }
 
         _world = new DungeonWorld();
@@ -80,9 +93,99 @@ public partial class Main : Node
             _overlay.Status = "angband.exe not found - build the engine first (build.cmd)";
             return;
         }
-        _overlay.Status = "connecting...";
-        // Never pass -n: that would overwrite an existing character. Angband
-        // loads the save if there is one and starts birth if there is not.
+
+        // A flag means the caller already decided; otherwise offer the choice.
+        if (_autoBirth || _manualRequested)
+        {
+            StartGame();
+        }
+        else
+        {
+            OpenMenu();
+        }
+    }
+
+    private static string SaveDir()
+    {
+        var root = ProjectSettings.GlobalizePath("res://").TrimEnd('/', '\\');
+        var repo = System.IO.Path.GetDirectoryName(root) ?? "";
+        return System.IO.Path.Combine(repo, "engine", "build", "game", "lib", "save");
+    }
+
+    private static bool SaveExists(string name) =>
+        System.IO.File.Exists(System.IO.Path.Combine(SaveDir(), name));
+
+    /// <summary>A slot name that is not in use, so nothing is ever overwritten.</summary>
+    private static string FreeSlot(string baseName)
+    {
+        if (!SaveExists(baseName))
+        {
+            return baseName;
+        }
+        for (var i = 2; i < 100; i++)
+        {
+            if (!SaveExists($"{baseName}-{i}"))
+            {
+                return $"{baseName}-{i}";
+            }
+        }
+        return baseName + "-new";
+    }
+
+    private void OpenMenu()
+    {
+        _inMenu = true;
+        _menuIndex = 0;
+        _menu.Clear();
+        if (SaveExists(_saveName))
+        {
+            _menu.Add(($"Continue  -  {_saveName}", "continue"));
+        }
+        _menu.Add(("New character  -  choose race, class and stats", "manual"));
+        _menu.Add(("New character  -  roll one at random", "random"));
+        _menu.Add(("Quit", "quit"));
+
+        _overlay.Status = null;
+        _overlay.Mode = ViewMode.Menu;
+        _overlay.MenuItems = _menu.ConvertAll(m => m.Label).ToArray();
+        _overlay.MenuIndex = _menuIndex;
+        _overlay.QueueRedraw();
+
+        if (_autoMenuChoice > 0 && _autoMenuChoice <= _menu.Count)
+        {
+            _menuIndex = _autoMenuChoice - 1;
+            GD.Print($"menu: auto-selecting {_menu[_menuIndex].Label}");
+            ChooseMenu();
+        }
+    }
+
+    private void ChooseMenu()
+    {
+        switch (_menu[_menuIndex].Action)
+        {
+            case "continue":
+                break;
+            case "manual":
+                _saveName = FreeSlot(_saveName);
+                break;
+            case "random":
+                _saveName = FreeSlot(_saveName);
+                _autoBirth = true;
+                break;
+            case "quit":
+                GetTree().Quit();
+                return;
+        }
+        _inMenu = false;
+        StartGame();
+    }
+
+    private void StartGame()
+    {
+        var exe = FindEngine();
+        _overlay.Mode = ViewMode.Terminal;
+        _overlay.Status = "starting...";
+        _overlay.QueueRedraw();
         _bridge.Start(exe, _saveName, newCharacter: false);
     }
 
@@ -373,6 +476,29 @@ public partial class Main : Node
     {
         if (@event is not InputEventKey { Pressed: true } key || _bridge == null)
         {
+            return;
+        }
+
+        if (_inMenu)
+        {
+            switch (key.Keycode)
+            {
+                case Key.Up: _menuIndex = Mathf.PosMod(_menuIndex - 1, _menu.Count); break;
+                case Key.Down: _menuIndex = Mathf.PosMod(_menuIndex + 1, _menu.Count); break;
+                case Key.Enter or Key.KpEnter or Key.Space: ChooseMenu(); return;
+                case Key.Escape: GetTree().Quit(); return;
+                default:
+                    var n = key.Keycode - Key.Key1;
+                    if (n >= 0 && n < _menu.Count)
+                    {
+                        _menuIndex = (int)n;
+                        ChooseMenu();
+                    }
+                    return;
+            }
+            _overlay.MenuIndex = _menuIndex;
+            _overlay.QueueRedraw();
+            GetViewport().SetInputAsHandled();
             return;
         }
 

@@ -9,9 +9,9 @@
 .PARAMETER List
     List existing save slots and exit.
 .PARAMETER Random
-    Roll a random character without asking. Only applies to a new character.
+    Skip the title screen and roll a random character.
 .PARAMETER Manual
-    Go straight to the creation screens without asking.
+    Skip the title screen and go straight to the creation screens.
 .PARAMETER Classic
     Skip the client and play plain text Angband in this terminal instead.
 .PARAMETER Editor
@@ -99,25 +99,12 @@ if (-not $godot) {
 }
 
 $existing = Join-Path $saveDir $Character
-$rollRandom = $false
-
 if (Test-Path $existing) {
-    Write-Host "Continuing character '$Character'." -ForegroundColor Cyan
+    Write-Host "Character '$Character' found." -ForegroundColor Cyan
 } else {
-    Write-Host "New character in slot '$Character'." -ForegroundColor Cyan
-    if ($Random) {
-        $rollRandom = $true
-    } elseif (-not $Manual) {
-        Write-Host ""
-        Write-Host "  [M] Create it yourself - choose race, class and stats" -ForegroundColor Gray
-        Write-Host "  [R] Roll a random character and start straight away" -ForegroundColor Gray
-        Write-Host ""
-        $answer = Read-Host "Which? [M/r]"
-        $rollRandom = $answer -match '^[Rr]'
-    }
-    Write-Host ($(if ($rollRandom) { "Rolling a random character." }
-                  else { "Character creation will open in the classic view." })) -ForegroundColor Cyan
+    Write-Host "No character called '$Character' yet." -ForegroundColor Cyan
 }
+Write-Host "Choose continue or new character on the title screen." -ForegroundColor DarkGray
 
 Write-Host ""
 Write-Host "Controls" -ForegroundColor Cyan
@@ -135,6 +122,7 @@ $client = Join-Path $repo 'client'
 $clientArgs = @('--path', $client)
 if ($Editor) { $clientArgs += '--editor' }
 $clientArgs += @('--', "--save=$Character")
-if ($rollRandom) { $clientArgs += '--autobirth' }
+if ($Random) { $clientArgs += '--autobirth' }
+if ($Manual) { $clientArgs += '--manual' }
 
 & $godot $clientArgs

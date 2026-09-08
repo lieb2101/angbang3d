@@ -36,6 +36,7 @@ public partial class DungeonWorld : Node3D
     private OmniLight3D _torch;
     private Godot.Environment _env;
     private Node3D _entities;
+    private Node3D _terrainLabels;
     private readonly Dictionary<Kind, MultiMeshInstance3D> _buckets = new();
 
     private Vector3 _targetPos;
@@ -74,6 +75,9 @@ public partial class DungeonWorld : Node3D
 
         _entities = new Node3D();
         AddChild(_entities);
+
+        _terrainLabels = new Node3D();
+        AddChild(_terrainLabels);
 
         foreach (Kind k in Enum.GetValues<Kind>())
         {
@@ -403,9 +407,95 @@ public partial class DungeonWorld : Node3D
                 mm.SetInstanceColor(i, col[kind][i]);
             }
         }
+
+        RebuildTerrainLabels(map, h, w);
     }
 
-    /// <summary>Greybox stand-ins: billboarded glyphs in Angband's own colours.</summary>
+    /// <summary>Stairs and shopfronts are captioned; they are static per level.</summary>
+    private void RebuildTerrainLabels(JsonElement map, int h, int w)
+    {
+        foreach (var child in _terrainLabels.GetChildren())
+        {
+            child.QueueFree();
+        }
+
+        var rows = map.GetProperty("rows");
+        for (var y = 0; y < h; y++)
+        {
+            var flags = rows[y].GetProperty("l").GetString() ?? "";
+            var feats = rows[y].GetProperty("f").GetString() ?? "";
+            for (var x = 0; x < w && x < flags.Length && x * 2 + 1 < feats.Length; x++)
+            {
+                if ((AngbandColors.HexVal(flags[x]) & 0x3) == 0)
+                {
+                    continue;
+                }
+                var feat = (AngbandColors.HexVal(feats[x * 2]) << 4) | AngbandColors.HexVal(feats[x * 2 + 1]);
+                var name = TerrainName(feat);
+                if (name == null)
+                {
+                    continue;
+                }
+                var isShop = KindOf(feat) == Kind.Store;
+                // Shopfronts are solid blocks, so the sign has to sit above the
+                // roofline or it is buried inside the geometry.
+                _terrainLabels.AddChild(Caption(name,
+                    new Vector3(x * Cell, isShop ? WallHeight + 0.6f : 0.9f, y * Cell),
+                    isShop ? new Color(0.55f, 0.95f, 0.65f) : new Color(0.6f, 0.8f, 1.0f), 44));
+            }
+        }
+    }
+
+    /// <summary>
+    /// A floating caption. Outlined so it stays legible against both lit walls
+    /// and darkness, and kept short: the greybox has little else to read.
+    /// </summary>
+    private static Label3D Caption(string text, Vector3 pos, Color colour, int size = 48)
+    {
+        return new Label3D
+        {
+            Text = text,
+            Modulate = colour,
+            OutlineModulate = new Color(0, 0, 0, 0.9f),
+            OutlineSize = 14,
+            FontSize = size,
+            PixelSize = 0.0055f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Shaded = false,
+            NoDepthTest = false,
+            Position = pos,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+    }
+
+    private static Color HealthColour(int hp, int max)
+    {
+        if (max <= 0)
+        {
+            return Colors.White;
+        }
+        var f = Mathf.Clamp(hp / (float)max, 0f, 1f);
+        return f > 0.6f ? new Color(0.45f, 0.95f, 0.45f)
+            : f > 0.3f ? new Color(1.0f, 0.85f, 0.35f)
+            : new Color(1.0f, 0.42f, 0.38f);
+    }
+
+    /// <summary>Terrain names from the engine, so nothing is hard-coded here.</summary>
+    public System.Collections.Generic.Dictionary<int, (string Name, bool Passable)> Features { get; set; }
+
+    private string TerrainName(int feat)
+    {
+        if (Features == null || !Features.TryGetValue(feat, out var info))
+        {
+            return null;
+        }
+        // Only caption things worth walking towards; everything else would be
+        // noise on top of an already busy view.
+        var kind = KindOf(feat);
+        return kind is Kind.Stairs or Kind.Store ? info.Name : null;
+    }
+
+    /// <summary>Greybox stand-ins: billboarded glyphs with names and health.</summary>
     private void RebuildEntities(JsonElement frame)
     {
         foreach (var child in _entities.GetChildren())
@@ -413,31 +503,47 @@ public partial class DungeonWorld : Node3D
             child.QueueFree();
         }
 
-        void Add(JsonElement e, float height, float scale)
-        {
-            var label = new Label3D
-            {
-                Text = e.GetProperty("glyph").GetString() ?? "?",
-                Modulate = AngbandColors.Get(e.GetProperty("attr").GetInt32()),
-                Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-                FontSize = 128,
-                PixelSize = scale,
-                Shaded = false,
-                Position = new Vector3(
-                    e.GetProperty("x").GetInt32() * Cell,
-                    height,
-                    e.GetProperty("y").GetInt32() * Cell),
-            };
-            _entities.AddChild(label);
-        }
-
         foreach (var m in frame.GetProperty("monsters").EnumerateArray())
         {
-            Add(m, 1.0f, 0.012f);
+            var pos = new Vector3(m.GetProperty("x").GetInt32() * Cell, 0,
+                                  m.GetProperty("y").GetInt32() * Cell);
+            var colour = AngbandColors.Get(m.GetProperty("attr").GetInt32());
+
+            _entities.AddChild(Caption(m.GetProperty("glyph").GetString() ?? "?",
+                pos + new Vector3(0, 1.0f, 0), colour, 140));
+
+            if (m.TryGetProperty("race", out var race))
+            {
+                _entities.AddChild(Caption(race.GetString(),
+                    pos + new Vector3(0, 1.85f, 0), colour));
+            }
+            if (m.TryGetProperty("hp", out var hp) && m.TryGetProperty("hp_max", out var hpMax))
+            {
+                _entities.AddChild(Caption($"{hp.GetInt32()}/{hpMax.GetInt32()}",
+                    pos + new Vector3(0, 1.55f, 0),
+                    HealthColour(hp.GetInt32(), hpMax.GetInt32()), 40));
+            }
         }
+
         foreach (var o in frame.GetProperty("objects").EnumerateArray())
         {
-            Add(o, 0.35f, 0.008f);
+            var pos = new Vector3(o.GetProperty("x").GetInt32() * Cell, 0,
+                                  o.GetProperty("y").GetInt32() * Cell);
+            var colour = AngbandColors.Get(o.GetProperty("attr").GetInt32());
+
+            _entities.AddChild(Caption(o.GetProperty("glyph").GetString() ?? "?",
+                pos + new Vector3(0, 0.35f, 0), colour, 90));
+
+            if (o.TryGetProperty("name", out var name))
+            {
+                var text = name.GetString();
+                if (o.TryGetProperty("pile", out var pile) && pile.GetBoolean())
+                {
+                    text += " (pile)";
+                }
+                _entities.AddChild(Caption(text, pos + new Vector3(0, 0.95f, 0),
+                    new Color(0.86f, 0.86f, 0.78f), 40));
+            }
         }
     }
 

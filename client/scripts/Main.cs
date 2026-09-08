@@ -112,6 +112,7 @@ public partial class Main : Node
         AutoBirth(f);
         if (!_autoBirth)
         {
+            _world.Features = _bridge.Features;
             _world.OnFrame(f);
             // Only while a test script still has steps left: this auto-answers
             // prompts, which would slam a human player's menus shut on open.
@@ -378,14 +379,19 @@ public partial class Main : Node
             return;
         }
 
-        // Dungeon Master style controls, but only while walking around: turning
-        // is free because Angband has no facing, so it costs no game turn.
+        // Turning is a camera change, not a game action: it must always be
+        // instant, and must never wait on the engine or cost a game turn.
+        if (inWorld && key.Keycode is Key.Left or Key.Right)
+        {
+            _world.Turn(key.Keycode == Key.Left ? -1 : 1);
+            Refresh();
+            return;
+        }
+
         if (inWorld && !_bridge.Busy)
         {
             switch (key.Keycode)
             {
-                case Key.Left: _world.Turn(-1); Refresh(); return;
-                case Key.Right: _world.Turn(1); Refresh(); return;
                 case Key.Up: _bridge.SendKey(_world.MoveKey(true)); return;
                 case Key.Down: _bridge.SendKey(_world.MoveKey(false)); return;
             }

@@ -51,6 +51,7 @@ class Bridge:
         )
         self.timeout = timeout
         self.frame: dict[str, Any] | None = None
+        self.features: dict[int, dict[str, Any]] = {}
         self.hello = self._read()
         if self.hello.get("t") != "hello":
             raise BridgeError(f"expected hello, got {self.hello!r}")
@@ -80,6 +81,10 @@ class Bridge:
         """Read until a frame newer than ``after_seq`` arrives."""
         while True:
             msg = self._read()
+            if msg.get("t") == "features":
+                # Terrain table, sent once before the first frame.
+                self.features = {f["idx"]: f for f in msg["features"]}
+                continue
             if msg.get("t") == "frame":
                 if msg.get("seq", 0) > after_seq:
                     self.frame = msg

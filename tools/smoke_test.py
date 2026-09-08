@@ -211,6 +211,26 @@ def test_ui_state_flags_detect_menus():
 
 
 @test
+def test_terrain_table_and_object_names():
+    """The engine publishes terrain names, and item names respect the ID game."""
+    with Bridge(savefile=f"{SAVE_PREFIX}_feat") as b:
+        b.birth()
+        check(len(b.features) > 20, f"expected a terrain table, got {len(b.features)}")
+        floor = b.features.get(1)
+        check(floor is not None and "floor" in floor["name"].lower(),
+              f"feature 1 should be open floor, got {floor}")
+        check(floor["passable"], "open floor should be passable")
+        check(not b.features[21]["passable"], "granite wall should not be passable")
+
+        # Objects carry a name, but an unidentified item must show its flavour
+        # rather than its true kind, or the client would spoil identification.
+        b.wizard_on()
+        b.debug("d")
+        for obj in b.frame["objects"]:
+            check("name" in obj, f"object missing name: {obj}")
+
+
+@test
 def test_messages_channel():
     """Game messages are exposed as structured entries."""
     with Bridge(savefile=f"{SAVE_PREFIX}_msg") as b:

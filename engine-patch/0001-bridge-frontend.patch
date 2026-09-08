@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..f41ec56cd
+index 000000000..8c66b714e
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,699 @@
+@@ -0,0 +1,757 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -259,6 +259,7 @@ index 000000000..f41ec56cd
 +#include "main.h"
 +#include "message.h"
 +#include "monster.h"
++#include "obj-desc.h"
 +#include "object.h"
 +#include "player.h"
 +#include "ui-map.h"
@@ -283,6 +284,7 @@ index 000000000..f41ec56cd
 +	int attr;
 +	wchar_t glyph;
 +	uint32_t idx;
++	const struct object_kind *kind;
 +};
 +
 +typedef struct term_data term_data;
@@ -458,6 +460,7 @@ index 000000000..f41ec56cd
 +				obj_buf[obj_count].attr = a;
 +				obj_buf[obj_count].glyph = c;
 +				obj_buf[obj_count].idx = g.multiple_objects ? 2 : 1;
++				obj_buf[obj_count].kind = g.first_kind;
 +				obj_count++;
 +			}
 +		}
@@ -540,6 +543,19 @@ index 000000000..f41ec56cd
 +		bj_wstring(fp, &obj_buf[i].glyph, 1);
 +		fputc(',', fp);
 +		bj_kv_bool(fp, "pile", obj_buf[i].idx > 1);
++
++		if (obj_buf[i].kind) {
++			char name[128];
++
++			/*
++			 * easy_know false keeps the flavour for anything the player
++			 * has not identified, so the client cannot spoil the item
++			 * identification game.
++			 */
++			object_kind_name(name, sizeof(name), obj_buf[i].kind, false);
++			fputc(',', fp);
++			bj_kv_string(fp, "name", name);
++		}
 +		fputc('}', fp);
 +	}
 +	fputc(']', fp);
@@ -649,9 +665,51 @@ index 000000000..f41ec56cd
 +}
 +
 +
++static bool sent_features = false;
++
++/**
++ * The terrain table, sent once. Without it a client has to hard-code feature
++ * indices, which silently rots whenever upstream inserts a terrain type.
++ */
++static void emit_features(void)
++{
++	FILE *fp = stdout;
++	int i;
++
++	if (sent_features || !f_info) return;
++	sent_features = true;
++
++	fputc('{', fp);
++	bj_kv_string(fp, "t", "features");
++	fputc(',', fp);
++	bj_key(fp, "features");
++	fputc('[', fp);
++	for (i = 0; i < FEAT_MAX; i++) {
++		if (i) fputc(',', fp);
++		fputc('{', fp);
++		bj_kv_int(fp, "idx", i);
++		fputc(',', fp);
++		bj_kv_string(fp, "name", f_info[i].name ? f_info[i].name : "");
++		fputc(',', fp);
++		bj_key(fp, "glyph");
++		bj_wstring(fp, &f_info[i].d_char, 1);
++		fputc(',', fp);
++		bj_kv_bool(fp, "passable",
++			tf_has(f_info[i].flags, TF_PASSABLE) ? true : false);
++		fputc('}', fp);
++	}
++	fputc(']', fp);
++	fputc('}', fp);
++	fputc('\n', fp);
++	fflush(fp);
++}
++
++
 +static void emit_frame(void)
 +{
 +	FILE *fp = stdout;
++
++	emit_features();
 +
 +	fputc('{', fp);
 +	bj_kv_string(fp, "t", "frame");

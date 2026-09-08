@@ -26,6 +26,10 @@ public partial class BridgeClient : Node
 
     public JsonElement? Frame { get; private set; }
     public JsonElement? Hello { get; private set; }
+
+    /// <summary>Terrain table sent once by the engine, keyed by feature index.</summary>
+    public readonly System.Collections.Generic.Dictionary<int, (string Name, bool Passable)>
+        Features = new();
     public bool Connected { get; private set; }
 
     /// <summary>True while a command has been sent but its frame has not arrived.</summary>
@@ -120,6 +124,15 @@ public partial class BridgeClient : Node
                 Hello = msg;
                 GD.Print($"bridge: {msg.GetProperty("build").GetString()} " +
                          $"protocol {msg.GetProperty("protocol").GetInt32()}");
+                break;
+
+            case "features":
+                foreach (var f in msg.GetProperty("features").EnumerateArray())
+                {
+                    Features[f.GetProperty("idx").GetInt32()] =
+                        (f.GetProperty("name").GetString(), f.GetProperty("passable").GetBoolean());
+                }
+                GD.Print($"bridge: {Features.Count} terrain types");
                 break;
 
             case "frame":

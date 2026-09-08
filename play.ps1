@@ -9,8 +9,9 @@
 .PARAMETER List
     List existing save slots and exit.
 .PARAMETER Random
-    Roll a random character instead of going through the creation screens.
-    Only applies when the save slot is empty.
+    Roll a random character without asking. Only applies to a new character.
+.PARAMETER Manual
+    Go straight to the creation screens without asking.
 .PARAMETER Classic
     Skip the client and play plain text Angband in this terminal instead.
 .PARAMETER Editor
@@ -28,6 +29,7 @@
 param(
     [string]$Character = 'angband3d',
     [switch]$Random,
+    [switch]$Manual,
     [switch]$List,
     [switch]$Classic,
     [switch]$Editor
@@ -97,13 +99,24 @@ if (-not $godot) {
 }
 
 $existing = Join-Path $saveDir $Character
+$rollRandom = $false
+
 if (Test-Path $existing) {
     Write-Host "Continuing character '$Character'." -ForegroundColor Cyan
-} elseif ($Random) {
-    Write-Host "Rolling a random character in slot '$Character'." -ForegroundColor Cyan
 } else {
-    Write-Host "New character in slot '$Character' - you will pick race and class." -ForegroundColor Cyan
-    Write-Host "(use -Random to skip the creation screens)" -ForegroundColor DarkGray
+    Write-Host "New character in slot '$Character'." -ForegroundColor Cyan
+    if ($Random) {
+        $rollRandom = $true
+    } elseif (-not $Manual) {
+        Write-Host ""
+        Write-Host "  [M] Create it yourself - choose race, class and stats" -ForegroundColor Gray
+        Write-Host "  [R] Roll a random character and start straight away" -ForegroundColor Gray
+        Write-Host ""
+        $answer = Read-Host "Which? [M/r]"
+        $rollRandom = $answer -match '^[Rr]'
+    }
+    Write-Host ($(if ($rollRandom) { "Rolling a random character." }
+                  else { "Character creation will open in the classic view." })) -ForegroundColor Cyan
 }
 
 Write-Host ""
@@ -122,6 +135,6 @@ $client = Join-Path $repo 'client'
 $clientArgs = @('--path', $client)
 if ($Editor) { $clientArgs += '--editor' }
 $clientArgs += @('--', "--save=$Character")
-if ($Random) { $clientArgs += '--autobirth' }
+if ($rollRandom) { $clientArgs += '--autobirth' }
 
 & $godot $clientArgs

@@ -24,3 +24,6 @@ build-*/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Godot rewrites the csproj and leaves a backup
+*.csproj.old

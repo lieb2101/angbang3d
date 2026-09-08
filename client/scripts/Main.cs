@@ -105,7 +105,12 @@ public partial class Main : Node
         if (!_autoBirth)
         {
             _world.OnFrame(f);
-            ScriptTick(f);
+            // Only while a test script still has steps left: this auto-answers
+            // prompts, which would slam a human player's menus shut on open.
+            if (_script != null && _scriptStep < _script.Length)
+            {
+                ScriptTick(f);
+            }
         }
 
         _overlay.Mode = EffectiveMode(f);
@@ -336,15 +341,9 @@ public partial class Main : Node
         var frame = _bridge.Frame;
         var inWorld = frame.HasValue && EffectiveMode(frame.Value) == ViewMode.World;
 
-        if (inWorld && key.Keycode == Key.M)
+        if (key.Keycode == Key.M && (inWorld || _mapMode))
         {
             _mapMode = !_mapMode;
-            Refresh();
-            return;
-        }
-        if (_mapMode && key.Keycode == Key.M)
-        {
-            _mapMode = false;
             Refresh();
             return;
         }

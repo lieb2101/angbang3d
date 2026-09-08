@@ -49,11 +49,11 @@ public partial class Overlay : Control
         switch (Mode)
         {
             case ViewMode.Terminal:
-                DrawRect(new Rect2(Vector2.Zero, View), new Color(0.03f, 0.03f, 0.04f, 0.94f));
+                DrawRect(new Rect2(Vector2.Zero, View), new Color(0.02f, 0.02f, 0.03f));
                 DrawTerminal(frame);
                 break;
             case ViewMode.Map:
-                DrawRect(new Rect2(Vector2.Zero, View), new Color(0.03f, 0.03f, 0.04f, 0.94f));
+                DrawRect(new Rect2(Vector2.Zero, View), new Color(0.02f, 0.02f, 0.03f));
                 DrawMap(frame);
                 DrawHud(frame);
                 break;

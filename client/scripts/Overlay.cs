@@ -18,6 +18,7 @@ public partial class Overlay : Control
     public double Waiting { get; set; }
     public string FacingName { get; set; } = "N";
     public string PromptLine { get; set; }
+    public string StairsHint { get; set; }
 
     public override void _Ready()
     {
@@ -183,20 +184,25 @@ public partial class Overlay : Control
             HorizontalAlignment.Left, -1, _fontSize, fg);
 
         var wizard = p.GetProperty("wizard").GetBoolean() ? "  [WIZARD]" : "";
+        var depth = p.GetProperty("depth").GetInt32();
+        // Depth 0 is the town, which is the same every visit; everything below
+        // is generated fresh each time you arrive.
+        var place = depth == 0 ? "Town" : $"Depth {depth}  ({depth * 50}ft)";
         var line =
             $"{p.GetProperty("race").GetString()} {p.GetProperty("class").GetString()}  " +
             $"L{p.GetProperty("level").GetInt32()}  " +
             $"HP {p.GetProperty("hp").GetInt32()}/{p.GetProperty("hp_max").GetInt32()}  " +
             $"AU {p.GetProperty("gold").GetInt32()}  " +
-            $"Depth {p.GetProperty("depth").GetInt32() * 50}ft  " +
+            $"{place}  " +
             $"Torch {p.GetProperty("light").GetInt32()}  " +
             $"Facing {FacingName}{wizard}";
 
         var barH = _cell.Y * 2 + 10;
         DrawRect(new Rect2(0, View.Y - barH, View.X, barH), new Color(0, 0, 0, 0.6f));
         DrawString(_font, new Vector2(6, View.Y - barH + _font.GetAscent(_fontSize) + 3),
+            (StairsHint != null ? StairsHint + "   |   " : "") +
             "arrows: turn/walk   M: map   Tab: terminal   >: stairs   " +
-            "i: inventory   ^S: save   ^X: save+quit   ?: help",
+            "i: inventory   ^S: save   ?: help",
             HorizontalAlignment.Left, -1, _fontSize, new Color(0.45f, 0.45f, 0.52f));
         DrawString(_font, new Vector2(6, View.Y - 8), line,
             HorizontalAlignment.Left, -1, _fontSize, new Color(0.72f, 0.86f, 1.0f));

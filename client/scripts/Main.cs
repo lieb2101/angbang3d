@@ -125,6 +125,7 @@ public partial class Main : Node
         _overlay.Mode = EffectiveMode(f);
         _overlay.FacingName = Facings[_world.Facing];
         _overlay.PromptLine = PromptOf(f);
+        _overlay.StairsHint = _world.StairsHint;
         _overlay.QueueRedraw();
     }
 

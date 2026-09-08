@@ -51,6 +51,9 @@ public partial class DungeonWorld : Node3D
 
     public int Facing => _facing;
 
+    /// <summary>Bearing and distance to the nearest known down staircase.</summary>
+    public string StairsHint { get; private set; }
+
     public override void _Ready()
     {
         _env = BuildEnvironment();
@@ -237,7 +240,64 @@ public partial class DungeonWorld : Node3D
         // Necromancers and other lightless classes report 0; keep a sliver of
         // visibility so the view is playable rather than pitch black.
         _torchRadius = Math.Max(1, player.GetProperty("light").GetInt32());
+        UpdateStairsHint(map, player.GetProperty("x").GetInt32(), player.GetProperty("y").GetInt32());
         RebuildEntities(frame);
+    }
+
+    private static readonly string[] Compass = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
+
+    /// <summary>
+    /// Stairs are easy to lose track of in first person, which makes the game
+    /// look like it is not generating new levels.
+    /// </summary>
+    private void UpdateStairsHint(JsonElement map, int px, int py)
+    {
+        StairsHint = null;
+        var h = map.GetProperty("h").GetInt32();
+        var w = map.GetProperty("w").GetInt32();
+        var rows = map.GetProperty("rows");
+        var best = int.MaxValue;
+        int bx = 0, by = 0;
+
+        for (var y = 0; y < h; y++)
+        {
+            var flags = rows[y].GetProperty("l").GetString() ?? "";
+            var feats = rows[y].GetProperty("f").GetString() ?? "";
+            for (var x = 0; x < w && x < flags.Length && x * 2 + 1 < feats.Length; x++)
+            {
+                if ((AngbandColors.HexVal(flags[x]) & 0x3) == 0)
+                {
+                    continue;
+                }
+                var feat = (AngbandColors.HexVal(feats[x * 2]) << 4) | AngbandColors.HexVal(feats[x * 2 + 1]);
+                if ((Feat)feat != Feat.More)
+                {
+                    continue;
+                }
+                var d = Math.Abs(x - px) + Math.Abs(y - py);
+                if (d < best)
+                {
+                    best = d;
+                    bx = x;
+                    by = y;
+                }
+            }
+        }
+
+        if (best == int.MaxValue)
+        {
+            StairsHint = "stairs down: not found yet";
+            return;
+        }
+        if (best == 0)
+        {
+            StairsHint = "stairs down: here - press >";
+            return;
+        }
+
+        var angle = Mathf.Atan2(bx - px, -(by - py));
+        var octant = Mathf.PosMod(Mathf.RoundToInt(angle / (Mathf.Pi / 4f)), 8);
+        StairsHint = $"stairs down: {best} {Compass[octant]}";
     }
 
     private static int KnownCount(JsonElement map)

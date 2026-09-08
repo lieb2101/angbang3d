@@ -1,0 +1,942 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 920c537fd..b463d15e5 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -20,6 +20,7 @@ endif()
+ option(SUPPORT_SPOIL_FRONTEND "Support for spoiler front end." ${SPOIL_DEFAULT})
+ option(SUPPORT_STATS_FRONTEND "Support for statistics front end; requires sqlite3 development library." OFF)
+ option(SUPPORT_TEST_FRONTEND "Support for test front end." OFF)
++option(SUPPORT_BRIDGE_FRONTEND "Support for JSON state bridge front end." OFF)
+ option(SUPPORT_WINDOWS_FRONTEND "Support for windows front end." OFF)
+ option(SUPPORT_BUNDLED_PNG "Use bundled Windows PNG+Zlib (32-bit x86 only)" OFF)
+ option(SUPPORT_STATIC_LINKING "Enable static linking where possible" OFF)
+@@ -112,6 +113,10 @@ if(SUPPORT_WINDOWS_FRONTEND)
+         message(WARNING "Disabling test front end because Windows front end is enabled")
+         set(SUPPORT_TEST_FRONTEND OFF)
+     endif()
++    if(SUPPORT_BRIDGE_FRONTEND)
++        message(WARNING "Disabling bridge front end because Windows front end is enabled")
++        set(SUPPORT_BRIDGE_FRONTEND OFF)
++    endif()
+     if(SUPPORT_X11_FRONTEND)
+         message(WARNING "Disabling X11 front end because Windows front end is enabled")
+         set(SUPPORT_X11_FRONTEND OFF)
+@@ -427,6 +432,8 @@ add_executable(OurExecutable
+         $<$<BOOL:${SUPPORT_STATS_FRONTEND}>:src/main-stats.c>
+         $<$<BOOL:${SUPPORT_STATS_FRONTEND}>:src/stats/db.c>
+         $<$<BOOL:${SUPPORT_TEST_FRONTEND}>:src/main-test.c>
++        $<$<BOOL:${SUPPORT_BRIDGE_FRONTEND}>:src/main-bridge.c>
++        $<$<BOOL:${SUPPORT_BRIDGE_FRONTEND}>:src/bridge-json.c>
+         $<$<NOT:$<BOOL:${SUPPORT_WINDOWS_FRONTEND}>>:src/main.c>
+ )
+ 
+@@ -512,6 +519,11 @@ if(SUPPORT_TEST_FRONTEND)
+     configure_test_frontend(OurExecutable)
+ endif()
+ 
++if(SUPPORT_BRIDGE_FRONTEND)
++    include(src/cmake/macros/BRIDGE_Frontend.cmake)
++    configure_bridge_frontend(OurExecutable)
++endif()
++
+ if(SUPPORT_COVERAGE)
+     configure_target_for_coverage(OurExecutable)
+ endif()
+diff --git a/src/Makefile.src b/src/Makefile.src
+index cae25e554..55d525dea 100644
+--- a/src/Makefile.src
++++ b/src/Makefile.src
+@@ -130,6 +130,8 @@ SNDSDLFILES = snd-sdl.o
+ 
+ TESTMAINFILES = main-test.o
+ 
++BRIDGEMAINFILES = main-bridge.o bridge-json.o
++
+ WINMAINFILES = \
+         win/$(PROGNAME).res \
+         main-win.o \
+@@ -154,6 +156,7 @@ ALLMAINFILES = \
+ 	$(SDLMAINFILES) \
+ 	$(SNDSDLFILES) \
+ 	$(TESTMAINFILES) \
++	$(BRIDGEMAINFILES) \
+ 	$(WINMAINFILES) \
+ 	$(X11MAINFILES) \
+ 	$(STATSMAINFILES) \
+diff --git a/src/bridge-json.c b/src/bridge-json.c
+new file mode 100644
+index 000000000..5bb8ec3ad
+--- /dev/null
++++ b/src/bridge-json.c
+@@ -0,0 +1,89 @@
++/**
++ * \file bridge-json.c
++ * \brief Minimal JSON output helpers for the "bridge" front end.
++ *
++ * Copyright (c) 2026 angband3d contributors
++ *
++ * This work is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the
++ * Free Software Foundation, version 2.
++ */
++
++#include "angband.h"
++#include "bridge-json.h"
++
++void bj_codepoint(FILE *fp, uint32_t cp)
++{
++	switch (cp) {
++	case '"':  fputs("\\\"", fp); return;
++	case '\\': fputs("\\\\", fp); return;
++	case '\b': fputs("\\b", fp); return;
++	case '\f': fputs("\\f", fp); return;
++	case '\n': fputs("\\n", fp); return;
++	case '\r': fputs("\\r", fp); return;
++	case '\t': fputs("\\t", fp); return;
++	default: break;
++	}
++
++	if (cp >= 0x20 && cp < 0x7f) {
++		fputc((int)cp, fp);
++	} else if (cp <= 0xffff) {
++		fprintf(fp, "\\u%04x", (unsigned)cp);
++	} else if (cp <= 0x10ffff) {
++		/* Encode as a UTF-16 surrogate pair. */
++		uint32_t v = cp - 0x10000;
++		fprintf(fp, "\\u%04x\\u%04x",
++			(unsigned)(0xd800 + (v >> 10)),
++			(unsigned)(0xdc00 + (v & 0x3ff)));
++	} else {
++		fputs("\\ufffd", fp);
++	}
++}
++
++void bj_string(FILE *fp, const char *s)
++{
++	fputc('"', fp);
++	if (s) {
++		while (*s) {
++			bj_codepoint(fp, (uint32_t)(unsigned char)*s++);
++		}
++	}
++	fputc('"', fp);
++}
++
++void bj_wstring(FILE *fp, const wchar_t *s, int n)
++{
++	int i;
++
++	fputc('"', fp);
++	if (s) {
++		for (i = 0; i < n; i++) {
++			bj_codepoint(fp, (uint32_t)s[i]);
++		}
++	}
++	fputc('"', fp);
++}
++
++void bj_key(FILE *fp, const char *key)
++{
++	bj_string(fp, key);
++	fputc(':', fp);
++}
++
++void bj_kv_string(FILE *fp, const char *key, const char *value)
++{
++	bj_key(fp, key);
++	bj_string(fp, value);
++}
++
++void bj_kv_int(FILE *fp, const char *key, long value)
++{
++	bj_key(fp, key);
++	fprintf(fp, "%ld", value);
++}
++
++void bj_kv_bool(FILE *fp, const char *key, bool value)
++{
++	bj_key(fp, key);
++	fputs(value ? "true" : "false", fp);
++}
+diff --git a/src/bridge-json.h b/src/bridge-json.h
+new file mode 100644
+index 000000000..e00b887fd
+--- /dev/null
++++ b/src/bridge-json.h
+@@ -0,0 +1,49 @@
++/**
++ * \file bridge-json.h
++ * \brief Minimal JSON output helpers for the "bridge" front end.
++ *
++ * Copyright (c) 2026 angband3d contributors
++ *
++ * This work is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the
++ * Free Software Foundation, version 2.
++ */
++
++#ifndef INCLUDED_BRIDGE_JSON_H
++#define INCLUDED_BRIDGE_JSON_H
++
++#include <stdio.h>
++#include <wchar.h>
++
++/**
++ * Write a JSON string literal, including the surrounding quotes.
++ *
++ * Everything outside printable ASCII is emitted as a \\uXXXX escape, so the
++ * output is valid UTF-8 JSON regardless of the process locale.
++ */
++void bj_string(FILE *fp, const char *s);
++
++/**
++ * As bj_string(), but for a fixed-length wide-character buffer. Values above
++ * the BMP are emitted as surrogate pairs.
++ */
++void bj_wstring(FILE *fp, const wchar_t *s, int n);
++
++/**
++ * Write a single Unicode code point as the body of a JSON string (no quotes).
++ */
++void bj_codepoint(FILE *fp, uint32_t cp);
++
++/** Write "key":"value" */
++void bj_kv_string(FILE *fp, const char *key, const char *value);
++
++/** Write "key":value for a signed integer */
++void bj_kv_int(FILE *fp, const char *key, long value);
++
++/** Write "key":true|false */
++void bj_kv_bool(FILE *fp, const char *key, bool value);
++
++/** Write "key": ready for a caller-supplied raw value */
++void bj_key(FILE *fp, const char *key);
++
++#endif /* INCLUDED_BRIDGE_JSON_H */
+diff --git a/src/cmake/macros/BRIDGE_Frontend.cmake b/src/cmake/macros/BRIDGE_Frontend.cmake
+new file mode 100644
+index 000000000..207cde9e9
+--- /dev/null
++++ b/src/cmake/macros/BRIDGE_Frontend.cmake
+@@ -0,0 +1,6 @@
++macro(configure_bridge_frontend _NAME_TARGET)
++
++    target_compile_definitions(${_NAME_TARGET} PRIVATE -D USE_BRIDGE)
++    message(STATUS "Support for bridge front end - Ready")
++
++endmacro()
+diff --git a/src/main-bridge.c b/src/main-bridge.c
+new file mode 100644
+index 000000000..e2a0cb24d
+--- /dev/null
++++ b/src/main-bridge.c
+@@ -0,0 +1,674 @@
++/**
++ * \file main-bridge.c
++ * \brief JSON state bridge front end, for driving Angband from an external client.
++ *
++ * Copyright (c) 2026 angband3d contributors
++ *
++ * This work is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU General Public License as published by the
++ * Free Software Foundation, version 2.
++ *
++ * This front end renders nothing. It implements a minimal 80x24 Term, and
++ * whenever the game blocks for input it writes one JSON object describing the
++ * whole visible game state to stdout, then reads one command line from stdin.
++ *
++ * Input is delivered as *keypresses* rather than through cmdq_push(), so the
++ * entire existing UI surface -- birth, menus, stores, item prompts, targeting
++ * and wizard mode -- works through the bridge with no special casing.
++ */
++
++#include "angband.h"
++#include "buildid.h"
++#include "cave.h"
++#include "cmd-core.h"
++#include "game-world.h"
++#include "init.h"
++#include "main.h"
++#include "message.h"
++#include "monster.h"
++#include "object.h"
++#include "player.h"
++#include "ui-map.h"
++#include "ui-game.h"
++#include "ui-term.h"
++#include "bridge-json.h"
++
++#ifdef USE_BRIDGE
++
++#define BRIDGE_PROTOCOL 1
++
++/* Generous upper bounds; values are clamped rather than trusted. */
++#define BRIDGE_MAX_W 1024
++#define BRIDGE_MAX_H 1024
++#define BRIDGE_MAX_ENTITIES 1024
++#define BRIDGE_MAX_MESSAGES 24
++
++struct bridge_entity {
++	int y, x;
++	int attr;
++	wchar_t glyph;
++	uint32_t idx;
++};
++
++typedef struct term_data term_data;
++struct term_data { term t; };
++
++static term_data td;
++
++static unsigned long frame_seq = 0;
++static bool emit_map_data = true;
++
++static struct bridge_entity mon_buf[BRIDGE_MAX_ENTITIES];
++static int mon_count;
++static struct bridge_entity obj_buf[BRIDGE_MAX_ENTITIES];
++static int obj_count;
++
++static const char hex_digits[] = "0123456789abcdef";
++
++
++/**
++ * True once there is a generated level with the player actually placed on it.
++ * Frames can be emitted mid-generation, so this must be checked before any
++ * grid-relative lookup.
++ */
++static bool bridge_in_play(void)
++{
++	return character_dungeon && character_generated && cave && player
++		&& square_in_bounds(cave, player->grid);
++}
++
++
++/**
++ * ------------------------------------------------------------------------
++ * Frame serialisation
++ * ------------------------------------------------------------------------ */
++
++static void emit_player(FILE *fp)
++{
++	if (!player || !player->upkeep) {
++		fputs("null", fp);
++		return;
++	}
++
++	fputc('{', fp);
++	bj_kv_string(fp, "name", player->full_name);
++	fputc(',', fp);
++	bj_kv_string(fp, "race", player->race ? player->race->name : "");
++	fputc(',', fp);
++	bj_kv_string(fp, "class", player->class ? player->class->name : "");
++	fputc(',', fp);
++	bj_kv_int(fp, "y", player->grid.y);
++	fputc(',', fp);
++	bj_kv_int(fp, "x", player->grid.x);
++	fputc(',', fp);
++	bj_kv_int(fp, "depth", player->depth);
++	fputc(',', fp);
++	bj_kv_int(fp, "max_depth", player->max_depth);
++	fputc(',', fp);
++	bj_kv_int(fp, "level", player->lev);
++	fputc(',', fp);
++	bj_kv_int(fp, "exp", player->exp);
++	fputc(',', fp);
++	bj_kv_int(fp, "gold", player->au);
++	fputc(',', fp);
++	bj_kv_int(fp, "hp", player->chp);
++	fputc(',', fp);
++	bj_kv_int(fp, "hp_max", player->mhp);
++	fputc(',', fp);
++	bj_kv_int(fp, "sp", player->csp);
++	fputc(',', fp);
++	bj_kv_int(fp, "sp_max", player->msp);
++	fputc(',', fp);
++	/* Player's own light radius (torch/lantern) - drives client torch. */
++	bj_kv_int(fp, "light", player->state.cur_light);
++	fputc(',', fp);
++	/*
++	 * Ambient light of the square the player stands on. The player may not
++	 * be placed yet on a freshly generated level, so bounds-check first.
++	 */
++	bj_kv_int(fp, "grid_light",
++		(cave && square_in_bounds(cave, player->grid))
++			? square_light(cave, player->grid) : 0);
++	fputc(',', fp);
++	bj_kv_int(fp, "speed", player->state.speed);
++	fputc(',', fp);
++	bj_kv_bool(fp, "dead", player->is_dead);
++	fputc(',', fp);
++	bj_kv_bool(fp, "wizard", player->wizard);
++	fputc(',', fp);
++	/* Non-zero once wizard/debug mode has been used: scores are void. */
++	bj_kv_int(fp, "noscore", player->noscore);
++	fputc('}', fp);
++}
++
++
++/**
++ * Write the whole known level.
++ *
++ * Uses map_info()/grid_data_as_text(), the same path Angband's own renderer
++ * takes, so the client sees exactly what the game would draw. Monsters and
++ * objects are harvested during the same pass.
++ */
++static void emit_map(FILE *fp)
++{
++	static wchar_t row_glyph[BRIDGE_MAX_W];
++	static char row_attr[BRIDGE_MAX_W * 2 + 1];
++	static char row_feat[BRIDGE_MAX_W * 2 + 1];
++	static char row_flag[BRIDGE_MAX_W + 1];
++	int h, w, y, x;
++
++	mon_count = 0;
++	obj_count = 0;
++
++	if (!cave || !player) {
++		fputs("null", fp);
++		return;
++	}
++
++	h = cave->height;
++	w = cave->width;
++	if (h < 0) h = 0;
++	if (w < 0) w = 0;
++	if (h > BRIDGE_MAX_H) h = BRIDGE_MAX_H;
++	if (w > BRIDGE_MAX_W) w = BRIDGE_MAX_W;
++
++	fputc('{', fp);
++	bj_kv_int(fp, "h", h);
++	fputc(',', fp);
++	bj_kv_int(fp, "w", w);
++	fputc(',', fp);
++	bj_key(fp, "rows");
++	fputc('[', fp);
++
++	for (y = 0; y < h; y++) {
++		if (y) fputc(',', fp);
++
++		for (x = 0; x < w; x++) {
++			struct grid_data g;
++			struct loc grid = loc(x, y);
++			int a = 0, ta = 0;
++			wchar_t c = L' ', tc = L' ';
++			unsigned flags = 0;
++			unsigned feat;
++
++			memset(&g, 0, sizeof(g));
++			map_info(grid, &g);
++			grid_data_as_text(&g, &a, &c, &ta, &tc);
++
++			if (square_isknown(cave, grid)) flags |= 0x1;
++			if (g.in_view) flags |= 0x2;
++			flags |= ((unsigned)g.lighting & 0x3) << 2;
++
++			feat = (unsigned)g.f_idx & 0xff;
++
++			row_glyph[x] = c;
++			row_attr[x * 2]     = hex_digits[((unsigned)a >> 4) & 0xf];
++			row_attr[x * 2 + 1] = hex_digits[(unsigned)a & 0xf];
++			row_feat[x * 2]     = hex_digits[(feat >> 4) & 0xf];
++			row_feat[x * 2 + 1] = hex_digits[feat & 0xf];
++			row_flag[x]         = hex_digits[flags & 0xf];
++
++			if (g.m_idx > 0 && mon_count < BRIDGE_MAX_ENTITIES) {
++				mon_buf[mon_count].y = y;
++				mon_buf[mon_count].x = x;
++				mon_buf[mon_count].attr = a;
++				mon_buf[mon_count].glyph = c;
++				mon_buf[mon_count].idx = g.m_idx;
++				mon_count++;
++			}
++			if (g.first_kind && obj_count < BRIDGE_MAX_ENTITIES) {
++				obj_buf[obj_count].y = y;
++				obj_buf[obj_count].x = x;
++				obj_buf[obj_count].attr = a;
++				obj_buf[obj_count].glyph = c;
++				obj_buf[obj_count].idx = g.multiple_objects ? 2 : 1;
++				obj_count++;
++			}
++		}
++
++		row_attr[w * 2] = '\0';
++		row_feat[w * 2] = '\0';
++		row_flag[w] = '\0';
++
++		fputc('{', fp);
++		bj_key(fp, "g");
++		bj_wstring(fp, row_glyph, w);
++		fputc(',', fp);
++		bj_kv_string(fp, "a", row_attr);
++		fputc(',', fp);
++		bj_kv_string(fp, "f", row_feat);
++		fputc(',', fp);
++		bj_kv_string(fp, "l", row_flag);
++		fputc('}', fp);
++	}
++
++	fputc(']', fp);
++	fputc('}', fp);
++}
++
++
++static void emit_monsters(FILE *fp)
++{
++	int i;
++
++	fputc('[', fp);
++	for (i = 0; i < mon_count; i++) {
++		struct monster *mon = NULL;
++
++		if (cave && mon_buf[i].idx < (uint32_t)cave->mon_max) {
++			mon = cave_monster(cave, mon_buf[i].idx);
++		}
++
++		if (i) fputc(',', fp);
++		fputc('{', fp);
++		bj_kv_int(fp, "y", mon_buf[i].y);
++		fputc(',', fp);
++		bj_kv_int(fp, "x", mon_buf[i].x);
++		fputc(',', fp);
++		bj_kv_int(fp, "attr", mon_buf[i].attr);
++		fputc(',', fp);
++		bj_key(fp, "glyph");
++		bj_wstring(fp, &mon_buf[i].glyph, 1);
++
++		if (mon && mon->race) {
++			fputc(',', fp);
++			bj_kv_string(fp, "race", mon->race->name);
++			fputc(',', fp);
++			bj_kv_int(fp, "race_level", mon->race->level);
++			fputc(',', fp);
++			bj_kv_int(fp, "hp", mon->hp);
++			fputc(',', fp);
++			bj_kv_int(fp, "hp_max", mon->maxhp);
++		}
++		fputc('}', fp);
++	}
++	fputc(']', fp);
++}
++
++
++static void emit_objects(FILE *fp)
++{
++	int i;
++
++	fputc('[', fp);
++	for (i = 0; i < obj_count; i++) {
++		if (i) fputc(',', fp);
++		fputc('{', fp);
++		bj_kv_int(fp, "y", obj_buf[i].y);
++		fputc(',', fp);
++		bj_kv_int(fp, "x", obj_buf[i].x);
++		fputc(',', fp);
++		bj_kv_int(fp, "attr", obj_buf[i].attr);
++		fputc(',', fp);
++		bj_key(fp, "glyph");
++		bj_wstring(fp, &obj_buf[i].glyph, 1);
++		fputc(',', fp);
++		bj_kv_bool(fp, "pile", obj_buf[i].idx > 1);
++		fputc('}', fp);
++	}
++	fputc(']', fp);
++}
++
++
++/**
++ * The raw 80x24 character grid.
++ *
++ * This carries prompts, menus, stores and the character sheet, which are not
++ * separable from Angband's game logic. The client overlays it as text until
++ * native panels replace each one.
++ */
++static void emit_term(FILE *fp)
++{
++	term *t = Term;
++	int y, x, w, h;
++	static char row_attr[256 * 2 + 1];
++
++	if (!t || !t->scr) {
++		fputs("null", fp);
++		return;
++	}
++
++	w = t->wid;
++	h = t->hgt;
++	if (w < 0) w = 0;
++	if (h < 0) h = 0;
++	if (w > 256) w = 256;
++
++	fputc('{', fp);
++	bj_kv_int(fp, "w", w);
++	fputc(',', fp);
++	bj_kv_int(fp, "h", h);
++	fputc(',', fp);
++	bj_kv_int(fp, "cx", t->scr->cx);
++	fputc(',', fp);
++	bj_kv_int(fp, "cy", t->scr->cy);
++	fputc(',', fp);
++	bj_kv_bool(fp, "cursor", !t->scr->cu && t->scr->cv);
++	fputc(',', fp);
++	bj_key(fp, "rows");
++	fputc('[', fp);
++
++	for (y = 0; y < h; y++) {
++		if (y) fputc(',', fp);
++
++		for (x = 0; x < w; x++) {
++			int a = t->scr->a[y][x];
++			row_attr[x * 2]     = hex_digits[((unsigned)a >> 4) & 0xf];
++			row_attr[x * 2 + 1] = hex_digits[(unsigned)a & 0xf];
++		}
++		row_attr[w * 2] = '\0';
++
++		fputc('{', fp);
++		bj_key(fp, "g");
++		bj_wstring(fp, t->scr->c[y], w);
++		fputc(',', fp);
++		bj_kv_string(fp, "a", row_attr);
++		fputc('}', fp);
++	}
++
++	fputc(']', fp);
++	fputc('}', fp);
++}
++
++
++static void emit_messages(FILE *fp)
++{
++	int n = (int)messages_num();
++	int i;
++
++	if (n > BRIDGE_MAX_MESSAGES) n = BRIDGE_MAX_MESSAGES;
++
++	fputc('[', fp);
++	for (i = n - 1; i >= 0; i--) {
++		const char *s = message_str((uint16_t)i);
++
++		if (i != n - 1) fputc(',', fp);
++		fputc('{', fp);
++		bj_kv_string(fp, "text", s ? s : "");
++		fputc(',', fp);
++		bj_kv_int(fp, "count", message_count((uint16_t)i));
++		fputc(',', fp);
++		bj_kv_int(fp, "attr", message_color((uint16_t)i));
++		fputc('}', fp);
++	}
++	fputc(']', fp);
++}
++
++
++static void emit_frame(void)
++{
++	FILE *fp = stdout;
++
++	fputc('{', fp);
++	bj_kv_string(fp, "t", "frame");
++	fputc(',', fp);
++	bj_kv_int(fp, "seq", (long)++frame_seq);
++	fputc(',', fp);
++	bj_kv_string(fp, "phase", bridge_in_play() ? "play" : "setup");
++	fputc(',', fp);
++
++	bj_key(fp, "player");
++	emit_player(fp);
++	fputc(',', fp);
++
++	bj_key(fp, "map");
++	if (emit_map_data) {
++		emit_map(fp);
++	} else {
++		mon_count = obj_count = 0;
++		fputs("null", fp);
++	}
++	fputc(',', fp);
++
++	bj_key(fp, "monsters");
++	emit_monsters(fp);
++	fputc(',', fp);
++
++	bj_key(fp, "objects");
++	emit_objects(fp);
++	fputc(',', fp);
++
++	bj_key(fp, "messages");
++	emit_messages(fp);
++	fputc(',', fp);
++
++	bj_key(fp, "term");
++	emit_term(fp);
++
++	fputc('}', fp);
++	fputc('\n', fp);
++	fflush(fp);
++}
++
++
++static void emit_event(const char *type, const char *detail)
++{
++	FILE *fp = stdout;
++
++	fputc('{', fp);
++	bj_kv_string(fp, "t", type);
++	if (detail) {
++		fputc(',', fp);
++		bj_kv_string(fp, "detail", detail);
++	}
++	fputc('}', fp);
++	fputc('\n', fp);
++	fflush(fp);
++}
++
++
++/**
++ * ------------------------------------------------------------------------
++ * Command input
++ * ------------------------------------------------------------------------ */
++
++/**
++ * Translate a key name into a keycode. Returns 0 if unrecognised.
++ */
++static keycode_t bridge_keycode(const char *spec)
++{
++	if (!spec || !*spec) return 0;
++
++	if (streq(spec, "left")) return ARROW_LEFT;
++	if (streq(spec, "right")) return ARROW_RIGHT;
++	if (streq(spec, "up")) return ARROW_UP;
++	if (streq(spec, "down")) return ARROW_DOWN;
++	if (streq(spec, "space")) return ' ';
++	if (streq(spec, "enter")) return KC_ENTER;
++	if (streq(spec, "return")) return KC_ENTER;
++	if (streq(spec, "escape")) return ESCAPE;
++	if (streq(spec, "tab")) return KC_TAB;
++	if (streq(spec, "backspace")) return KC_BACKSPACE;
++	if (streq(spec, "delete")) return KC_DELETE;
++	if (streq(spec, "home")) return KC_HOME;
++	if (streq(spec, "end")) return KC_END;
++
++	if (spec[0] == 'C' && spec[1] == '-' && spec[2]) return KTRL(spec[2]);
++
++	return (keycode_t)(unsigned char)spec[0];
++}
++
++
++/**
++ * Handle one command line. Returns the number of keypresses queued.
++ */
++static int bridge_handle(char *line)
++{
++	char *cmd, *rest;
++
++	cmd = strtok(line, " \t");
++	if (!cmd) return 0;
++	rest = strtok(NULL, "");
++
++	if (streq(cmd, "key")) {
++		keycode_t k = bridge_keycode(rest);
++		if (k) {
++			Term_keypress(k, 0);
++			return 1;
++		}
++		emit_event("error", "bad key");
++		return 0;
++	}
++
++	if (streq(cmd, "keys")) {
++		int n = 0;
++		if (rest) {
++			while (*rest) {
++				Term_keypress((keycode_t)(unsigned char)*rest++, 0);
++				n++;
++			}
++		}
++		return n;
++	}
++
++	if (streq(cmd, "map")) {
++		emit_map_data = !(rest && streq(rest, "off"));
++		emit_event("ok", emit_map_data ? "map on" : "map off");
++		return 0;
++	}
++
++	if (streq(cmd, "frame")) {
++		emit_frame();
++		return 0;
++	}
++
++	if (streq(cmd, "quit")) {
++		emit_event("bye", NULL);
++		quit(NULL);
++		return 0;
++	}
++
++	if (streq(cmd, "ping")) {
++		emit_event("pong", NULL);
++		return 0;
++	}
++
++	if (cmd[0] == '#') return 0;
++
++	emit_event("error", "unknown command");
++	return 0;
++}
++
++
++/**
++ * Emit a frame, then block until the client sends something that produces a
++ * keypress. EOF on stdin ends the game cleanly.
++ */
++static errr bridge_pump(void)
++{
++	char buf[2048];
++
++	emit_frame();
++
++	for (;;) {
++		if (!fgets(buf, sizeof(buf), stdin)) {
++			emit_event("bye", "eof");
++			quit(NULL);
++			return -1;
++		}
++		if (strchr(buf, '\n')) *strchr(buf, '\n') = '\0';
++		if (strchr(buf, '\r')) *strchr(buf, '\r') = '\0';
++
++		if (bridge_handle(buf) > 0) return 0;
++	}
++}
++
++
++/**
++ * ------------------------------------------------------------------------
++ * Term hooks
++ * ------------------------------------------------------------------------ */
++
++static void term_init_bridge(term *t) { }
++static void term_nuke_bridge(term *t) { }
++static errr term_curs_bridge(int x, int y) { return 0; }
++static errr term_wipe_bridge(int x, int y, int n) { return 0; }
++static errr term_text_bridge(int x, int y, int n, int a, const wchar_t *s)
++{
++	return 0;
++}
++
++static errr term_xtra_bridge(int n, int v)
++{
++	switch (n) {
++	case TERM_XTRA_EVENT:
++		/* v is set when the game is genuinely waiting for input. */
++		if (v) return bridge_pump();
++		return 1;
++
++	case TERM_XTRA_FLUSH:
++	case TERM_XTRA_CLEAR:
++	case TERM_XTRA_FRESH:
++	case TERM_XTRA_SHAPE:
++	case TERM_XTRA_ALIVE:
++	case TERM_XTRA_DELAY:
++	case TERM_XTRA_NOISE:
++	case TERM_XTRA_REACT:
++	default:
++		return 0;
++	}
++}
++
++static void term_data_link(int i)
++{
++	term *t = &td.t;
++
++	term_init(t, 80, 24, 256);
++
++	t->init_hook = term_init_bridge;
++	t->nuke_hook = term_nuke_bridge;
++	t->xtra_hook = term_xtra_bridge;
++	t->curs_hook = term_curs_bridge;
++	t->wipe_hook = term_wipe_bridge;
++	t->text_hook = term_text_bridge;
++
++	t->data = &td;
++
++	Term_activate(t);
++
++	angband_term[i] = t;
++}
++
++
++const char help_bridge[] = "JSON state bridge, subopts -nomap";
++
++errr init_bridge(int argc, char *argv[])
++{
++	int i;
++	FILE *fp = stdout;
++
++	for (i = 1; i < argc; i++) {
++		if (streq(argv[i], "-nomap")) {
++			emit_map_data = false;
++			continue;
++		}
++	}
++
++	/*
++	 * main.c only does this under UNIX, and the Windows front end bypasses
++	 * main.c entirely, so on Windows nothing creates the save directory and
++	 * every save fails. Do it here rather than patching main.c, to keep the
++	 * fork rebasable.
++	 */
++	create_needed_dirs();
++
++	term_data_link(0);
++
++	fputc('{', fp);
++	bj_kv_string(fp, "t", "hello");
++	fputc(',', fp);
++	bj_kv_int(fp, "protocol", BRIDGE_PROTOCOL);
++	fputc(',', fp);
++	bj_kv_string(fp, "build", buildid);
++	fputc(',', fp);
++	bj_kv_string(fp, "savefile", savefile);
++	fputc(',', fp);
++	bj_kv_string(fp, "save_dir", ANGBAND_DIR_SAVE ? ANGBAND_DIR_SAVE : "");
++	fputc('}', fp);
++	fputc('\n', fp);
++	fflush(fp);
++
++	return 0;
++}
++
++#endif /* USE_BRIDGE */
+diff --git a/src/main.c b/src/main.c
+index b685bc809..5aa80b5c8 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -83,6 +83,10 @@ static const struct module modules[] =
+ 	{ "test", help_test, init_test },
+ #endif /* !USE_TEST */
+ 
++#ifdef USE_BRIDGE
++	{ "bridge", help_bridge, init_bridge },
++#endif /* USE_BRIDGE */
++
+ #ifdef USE_STATS
+ 	{ "stats", help_stats, init_stats },
+ #endif /* USE_STATS */
+diff --git a/src/main.h b/src/main.h
+index 229c696f2..caf79bb1d 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -41,6 +41,7 @@ extern errr init_sdl2(int argc, char **argv);
+ extern errr init_test(int argc, char **argv);
+ extern errr init_stats(int argc, char **argv);
+ extern errr init_spoil(int argc, char **argv);
++extern errr init_bridge(int argc, char **argv);
+ 
+ 
+ extern const char help_lfb[];
+@@ -48,6 +49,7 @@ extern const char help_xpj[];
+ extern const char help_x11[];
+ extern const char help_vcs[];
+ extern const char help_gcu[];
++extern const char help_bridge[];
+ extern const char help_cap[];
+ extern const char help_vme[];
+ extern const char help_ami[];

@@ -1,0 +1,44 @@
+angband3d
+Copyright (c) 2026 angband3d contributors
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 2 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program; if not, write to the Free Software Foundation, Inc., 51 Franklin
+Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+The full text of the GNU General Public License version 2 is reproduced in
+engine/docs/copying.rst, and is also available at
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
+
+
+DERIVATION
+----------
+
+angband3d is a derivative work of Angband (https://github.com/angband/angband),
+which is dual licensed under:
+
+  a) the GNU General Public License, version 2; or
+  b) the "Angband licence", which restricts use to educational, research and
+     not-for-profit purposes.
+
+angband3d takes option (a), the GPL v2, for the whole project. Files inherited
+from Angband retain their original copyright notices and dual-licence headers.
+
+Angband is copyright its many contributors; see engine/docs/ for details.
+
+
+THIRD PARTY ASSETS
+------------------
+
+Art, audio and 3D assets carry their own licences independent of this one. Each
+asset pack used by the client is recorded in client/assets/CREDITS.md together
+with its source and licence. Only CC0 or equivalently permissive assets are
+used.

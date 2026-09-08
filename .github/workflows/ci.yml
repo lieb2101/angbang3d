@@ -1,0 +1,59 @@
+name: build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  ANGBAND_TAG: "4.2.6"
+
+jobs:
+  build:
+    name: build + test (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build libncurses-dev
+
+      # Rebuilding the fork from pristine upstream plus our patch proves the
+      # patch still applies, which is the whole rebasability guarantee.
+      - name: Reconstruct the engine fork
+        run: |
+          git clone --origin upstream --branch "$ANGBAND_TAG" --depth 1 \
+            https://github.com/angband/angband.git engine
+          cd engine
+          git apply --verbose ../engine-patch/0001-bridge-frontend.patch
+
+      - name: Configure
+        # A graphical front end must be enabled, or CMake falls back to the
+        # Windows front end and disables the bridge.
+        run: |
+          cmake -G Ninja \
+            -DSUPPORT_BRIDGE_FRONTEND=ON \
+            -DSUPPORT_GCU_FRONTEND=ON \
+            -DSUPPORT_TEST_FRONTEND=ON \
+            -B engine/build engine
+
+      - name: Build
+        run: cmake --build engine/build
+
+      - name: Angband unit tests
+        run: cmake --build engine/build --target allunittests
+
+      - name: Bridge acceptance tests
+        run: python3 tools/smoke_test.py
+
+      - name: Upload failure artefacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-logs
+          path: |
+            engine/build/CMakeFiles/CMakeError.log
+            engine/build/CMakeFiles/CMakeOutput.log
+          if-no-files-found: ignore

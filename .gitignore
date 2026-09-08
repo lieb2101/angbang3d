@@ -1,0 +1,26 @@
+# The Angband fork is a separate repository with its own history and an
+# `upstream` remote. It becomes a submodule once published.
+/engine/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Godot
+/client/.godot/
+/client/.import/
+/client/export_presets.cfg
+*.translation
+
+# Build output
+build/
+build-*/
+*.obj
+*.exe
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

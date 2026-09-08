@@ -18,13 +18,24 @@ public partial class Main : Node2D
     private int _fontSize = 16;
     private Vector2 _cell = new(10, 18);
 
-    private bool _showTerminal;
+    private bool _forceTerminal;
     private string _status = "starting...";
     private bool _autoBirth = true;
     private int _birthSteps;
+    private double _waiting;
+    private string[] _script;
+    private int _scriptStep;
 
     public override void _Ready()
     {
+        foreach (var arg in OS.GetCmdlineUserArgs())
+        {
+            if (arg.StartsWith("--keys="))
+            {
+                _script = arg["--keys=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries);
+            }
+        }
+
         _font = ThemeDB.FallbackFont;
         _cell = new Vector2(
             _font.GetStringSize("#", HorizontalAlignment.Left, -1, _fontSize).X,
@@ -71,6 +82,17 @@ public partial class Main : Node2D
         return null;
     }
 
+    public override void _Process(double delta)
+    {
+        // A key was sent but no frame came back; say so rather than looking frozen.
+        var wasStalled = _waiting > 1.0;
+        _waiting = _bridge is { Busy: true } ? _waiting + delta : 0.0;
+        if (wasStalled != _waiting > 1.0)
+        {
+            QueueRedraw();
+        }
+    }
+
     private void OnFrame()
     {
         var f = _bridge.Frame!.Value;
@@ -84,6 +106,10 @@ public partial class Main : Node2D
         _status = null;
 
         AutoBirth(f);
+        if (!_autoBirth)
+        {
+            RunScript();
+        }
         QueueRedraw();
     }
 
@@ -119,6 +145,25 @@ public partial class Main : Node2D
         _bridge.SendKey(_birthSteps == 1 ? "enter" : "@");
     }
 
+    /// <summary>Replay a scripted key sequence, for automated client testing.</summary>
+    private void RunScript()
+    {
+        if (_script == null || _scriptStep >= _script.Length)
+        {
+            return;
+        }
+        var frame = _bridge.Frame!.Value;
+        GD.Print($"script: view={(NeedsTerminal(frame) || _forceTerminal ? "TERMINAL" : "map")} " +
+                 $"ui={frame.GetProperty("ui")} row0=\"{TermRow(frame, 0).TrimEnd()}\"");
+        _bridge.SendKey(_script[_scriptStep++]);
+    }
+
+    private static string TermRow(JsonElement frame, int y)
+    {
+        var rows = frame.GetProperty("term").GetProperty("rows");
+        return y < rows.GetArrayLength() ? rows[y].GetProperty("g").GetString() ?? "" : "";
+    }
+
     public override void _UnhandledKeyInput(InputEvent @event)
     {
         if (@event is not InputEventKey { Pressed: true } key)
@@ -126,10 +171,10 @@ public partial class Main : Node2D
             return;
         }
 
-        // Tab toggles the raw terminal overlay; it is never sent to the game.
+        // Tab forces the terminal on; it is never sent to the game.
         if (key.Keycode == Key.Tab)
         {
-            _showTerminal = !_showTerminal;
+            _forceTerminal = !_forceTerminal;
             QueueRedraw();
             GetViewport().SetInputAsHandled();
             return;
@@ -188,15 +233,50 @@ public partial class Main : Node2D
             return;
         }
 
-        if (_showTerminal)
+        if (_forceTerminal || NeedsTerminal(frame))
         {
             DrawTerminal(frame, Vector2.Zero);
+            DrawTerminalHint(frame);
         }
         else
         {
             DrawMap(frame);
             DrawHud(frame);
         }
+
+        if (_waiting > 1.0)
+        {
+            DrawString(_font, new Vector2(4, GetViewportRect().Size.Y - _cell.Y * 3),
+                $"waiting for the engine ({_waiting:F0}s)...",
+                HorizontalAlignment.Left, -1, _fontSize, Colors.Orange);
+        }
+    }
+
+    /// <summary>
+    /// Whether Angband is showing something that only exists on the terminal
+    /// channel: a menu, store, prompt or -more- pause. Without this the client
+    /// keeps drawing the map while keystrokes vanish into an invisible menu,
+    /// which looks exactly like a freeze.
+    /// </summary>
+    private static bool NeedsTerminal(JsonElement frame)
+    {
+        if (!frame.TryGetProperty("ui", out var ui))
+        {
+            return false;
+        }
+        return ui.GetProperty("overlay").GetInt32() > 0
+               || ui.GetProperty("more").GetBoolean()
+               || !ui.GetProperty("awaiting_command").GetBoolean();
+    }
+
+    private void DrawTerminalHint(JsonElement frame)
+    {
+        var forced = _forceTerminal && !NeedsTerminal(frame);
+        var text = forced
+            ? "terminal view - Tab to return to the map"
+            : "Angband is asking something - answer it, or press ESC to back out";
+        DrawString(_font, new Vector2(4, GetViewportRect().Size.Y - 6), text,
+            HorizontalAlignment.Left, -1, _fontSize, new Color(0.55f, 0.55f, 0.62f));
     }
 
     private void DrawMap(JsonElement frame)
@@ -300,7 +380,7 @@ public partial class Main : Node2D
         var y = GetViewportRect().Size.Y - _cell.Y;
         DrawString(_font, new Vector2(4, y), line,
             HorizontalAlignment.Left, -1, _fontSize, new Color(0.7f, 0.85f, 1.0f));
-        DrawString(_font, new Vector2(4, y - _cell.Y), "Tab: terminal view",
+        DrawString(_font, new Vector2(4, y - _cell.Y), "Tab: terminal view    ?: help    >: descend",
             HorizontalAlignment.Left, -1, _fontSize, new Color(0.45f, 0.45f, 0.5f));
     }
 

@@ -186,6 +186,31 @@ def test_save_load_roundtrip():
 
 
 @test
+def test_ui_state_flags_detect_menus():
+    """The client can tell a menu from normal play.
+
+    Without this signal the client keeps drawing the map while keystrokes
+    disappear into an invisible menu, which is indistinguishable from a freeze.
+    """
+    with Bridge(savefile=f"{SAVE_PREFIX}_ui") as b:
+        b.birth()
+        ui = b.frame["ui"]
+        check(ui["overlay"] == 0, "no overlay expected during normal play")
+        check(ui["awaiting_command"], "should be awaiting a command during play")
+
+        b.key("i")
+        ui = b.frame["ui"]
+        check(ui["overlay"] > 0, "inventory should push a screen")
+        check(not ui["awaiting_command"], "inventory is not a command prompt")
+        check(b.screen_contains("Inven"), "inventory text should be on the terminal")
+
+        b.key("escape")
+        ui = b.frame["ui"]
+        check(ui["overlay"] == 0, "escape should pop the inventory screen")
+        check(ui["awaiting_command"], "should be back to awaiting a command")
+
+
+@test
 def test_messages_channel():
     """Game messages are exposed as structured entries."""
     with Bridge(savefile=f"{SAVE_PREFIX}_msg") as b:

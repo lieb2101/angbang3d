@@ -47,6 +47,7 @@ Sent whenever the game blocks for input.
 |---|---|---|
 | `seq` | int | Monotonic frame counter. |
 | `phase` | string | `"setup"` during splash/birth/level generation, `"play"` once the player is placed on a level. |
+| `ui` | object | Input state: what the game is currently asking for. |
 | `player` | object or null | Null before a character exists. |
 | `map` | object or null | Null unless `phase` is `"play"`, or if map output is disabled. |
 | `monsters` | array | Currently visible monsters. |
@@ -55,6 +56,24 @@ Sent whenever the game blocks for input.
 | `term` | object | The raw character grid. |
 
 Only read `map`, `monsters` and `objects` when `phase` is `"play"`.
+
+#### `ui`
+
+```json
+{"overlay": 3, "awaiting_command": false, "more": false}
+```
+
+| field | meaning |
+|---|---|
+| `overlay` | Angband's `screen_save_depth`. Non-zero means a screen has been pushed: a menu, store, character sheet or item prompt. |
+| `awaiting_command` | True when the game wants a normal game command. False when it is asking a question. |
+| `more` | A `-more-` message pause is waiting to be acknowledged. |
+
+**Clients should show the terminal channel whenever `overlay > 0`, `more` is
+true, or `awaiting_command` is false.** Those states exist only as text. A
+client that keeps rendering its own world view during them will swallow the
+player's keystrokes into an invisible menu, which is indistinguishable from a
+freeze.
 
 #### `player`
 

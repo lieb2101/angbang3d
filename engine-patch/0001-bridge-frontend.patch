@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..1558d5a1b
+index 000000000..f41ec56cd
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,675 @@
+@@ -0,0 +1,699 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -263,6 +263,8 @@ index 000000000..1558d5a1b
 +#include "player.h"
 +#include "ui-map.h"
 +#include "ui-game.h"
++#include "ui-input.h"
++#include "ui-output.h"
 +#include "ui-term.h"
 +#include "bridge-json.h"
 +
@@ -629,6 +631,24 @@ index 000000000..1558d5a1b
 +}
 +
 +
++/**
++ * Input state, so a client knows whether the game wants a normal command or is
++ * showing a menu, store or prompt that only exists on the terminal channel.
++ */
++static void emit_ui(FILE *fp)
++{
++	fputc('{', fp);
++	/* Non-zero when a screen has been pushed: menu, store, character sheet. */
++	bj_kv_int(fp, "overlay", screen_save_depth);
++	fputc(',', fp);
++	/* False when the game is asking a question rather than for a command. */
++	bj_kv_bool(fp, "awaiting_command", inkey_flag);
++	fputc(',', fp);
++	bj_kv_bool(fp, "more", msg_flag);
++	fputc('}', fp);
++}
++
++
 +static void emit_frame(void)
 +{
 +	FILE *fp = stdout;
@@ -639,6 +659,10 @@ index 000000000..1558d5a1b
 +	bj_kv_int(fp, "seq", (long)++frame_seq);
 +	fputc(',', fp);
 +	bj_kv_string(fp, "phase", bridge_in_play() ? "play" : "setup");
++	fputc(',', fp);
++
++	bj_key(fp, "ui");
++	emit_ui(fp);
 +	fputc(',', fp);
 +
 +	bj_key(fp, "player");

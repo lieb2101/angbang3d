@@ -156,16 +156,37 @@ class Bridge:
                 return
             self.key("enter")
 
-    def birth(self, limit: int = 12) -> dict[str, Any]:
-        """Roll a random character and enter the game."""
-        self.key("enter")
+    def birth(self, limit: int = 24) -> dict[str, Any]:
+        """Roll a random character and enter the game.
+
+        Handles the prompts that appear along the way: the splash screen,
+        -more- pauses, and the overwrite confirmation shown when a savefile of
+        the same name already exists.
+        """
         for _ in range(limit):
             if self.in_dungeon:
                 return self.frame
-            self.key("@")
+            if self.screen_contains("-more-"):
+                self.key("enter")
+            elif self.screen_contains("[y/n]") or self.screen_contains("are you sure"):
+                self.key("y")
+            elif self.screen_contains("press any key") or self.screen_contains("[press"):
+                self.key("enter")
+            else:
+                self.key("@")
         if not self.in_dungeon:
-            raise BridgeError("birth did not reach the dungeon")
+            raise BridgeError(
+                "birth did not reach the dungeon; last screen:\n" + self.screen()
+            )
         return self.frame
+
+    @property
+    def save_dir(self) -> Path | None:
+        d = self.hello.get("save_dir") if self.hello else None
+        if not d:
+            return None
+        p = Path(d)
+        return p if p.is_absolute() else (self.game_dir / p)
 
     def wizard_on(self, limit: int = 12) -> bool:
         """Enable wizard (god) mode, answering the confirmation prompts."""

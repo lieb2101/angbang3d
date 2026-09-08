@@ -1,0 +1,9 @@
+<Project Sdk="Godot.NET.Sdk/4.7.0">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Angband3D</RootNamespace>
+    <LangVersion>12</LangVersion>
+  </PropertyGroup>
+</Project>

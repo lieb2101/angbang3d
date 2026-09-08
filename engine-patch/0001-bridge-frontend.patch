@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..e2a0cb24d
+index 000000000..1558d5a1b
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,674 @@
+@@ -0,0 +1,675 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -356,12 +356,13 @@ index 000000000..e2a0cb24d
 +	bj_kv_int(fp, "light", player->state.cur_light);
 +	fputc(',', fp);
 +	/*
-+	 * Ambient light of the square the player stands on. The player may not
-+	 * be placed yet on a freshly generated level, so bounds-check first.
++	 * Ambient light of the square the player stands on. Every grid-relative
++	 * lookup must go through bridge_in_play(): during birth and level
++	 * generation `cave` can be stale or only partly built, and reading it
++	 * then kills the process mid-frame.
 +	 */
 +	bj_kv_int(fp, "grid_light",
-+		(cave && square_in_bounds(cave, player->grid))
-+			? square_light(cave, player->grid) : 0);
++		bridge_in_play() ? square_light(cave, player->grid) : 0);
 +	fputc(',', fp);
 +	bj_kv_int(fp, "speed", player->state.speed);
 +	fputc(',', fp);
@@ -393,7 +394,7 @@ index 000000000..e2a0cb24d
 +	mon_count = 0;
 +	obj_count = 0;
 +
-+	if (!cave || !player) {
++	if (!bridge_in_play()) {
 +		fputs("null", fp);
 +		return;
 +	}

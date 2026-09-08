@@ -19,6 +19,26 @@ TESTS: list = []
 SAVE_PREFIX = "smoke"
 
 
+def clean_saves() -> None:
+    """Remove savefiles from previous runs.
+
+    Without this the tests are not hermetic: starting a new character over an
+    existing savefile raises an overwrite prompt, which changes the key
+    sequence needed to get through character creation.
+    """
+    from bridge import DEFAULT_GAME_DIR
+
+    for base in (DEFAULT_GAME_DIR / "lib" / "save",
+                 DEFAULT_GAME_DIR / "lib" / "user" / "save"):
+        if not base.is_dir():
+            continue
+        for f in base.glob(f"*{SAVE_PREFIX}*"):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+
 def test(fn):
     TESTS.append(fn)
     return fn
@@ -181,6 +201,7 @@ def test_messages_channel():
 
 
 def main() -> int:
+    clean_saves()
     passed = failed = 0
     for fn in TESTS:
         label = fn.__name__.replace("test_", "").replace("_", " ")

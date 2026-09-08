@@ -69,6 +69,23 @@ gives you a playable text Angband in the same binary:
 cd engine/build/game && ./angband.exe -mgcu
 ```
 
+## Running the client
+
+Needs [Godot 4 (.NET build)](https://godotengine.org/download) and the .NET 8
+SDK.
+
+```powershell
+godot --path client
+```
+
+It launches the engine, rolls a random character and drops you into the town.
+Movement keys play the game; **Tab** switches between the map view and the raw
+terminal view, which is where prompts, menus and stores appear.
+
+Squares you can currently see are drawn lit; squares you remember but cannot see
+are dimmed. That distinction comes straight from Angband and is what becomes
+fog-of-memory rendering in 3D.
+
 ## Trying the bridge by hand
 
 ```powershell

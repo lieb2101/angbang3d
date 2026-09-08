@@ -46,45 +46,59 @@ the bridge with no special casing.
    ordinary Angband saves.
 3. **The protocol is versioned** so alternate clients stay possible.
 
-## Building
+## Playing
 
-Requires MSYS2 with the MinGW-w64 toolchain on Windows, or GCC/CMake elsewhere.
-
-```powershell
-# one-time toolchain setup
-./tools/bootstrap.ps1
-
-# build
-./tools/build.ps1
-
-# verify
-python tools/smoke_test.py
-```
-
-At least one graphical front end must be enabled or CMake selects the Windows
-front end, which disables the bridge. The build scripts enable GCU, which also
-gives you a playable text Angband in the same binary:
+Double-click **`play.cmd`**, or from a terminal:
 
 ```
-cd engine/build/game && ./angband.exe -mgcu
-```
-
-## Running the client
-
-Needs [Godot 4 (.NET build)](https://godotengine.org/download) and the .NET 8
-SDK.
-
-```powershell
-godot --path client
+C:\Dev\angband3d\play.cmd
 ```
 
 It launches the engine, rolls a random character and drops you into the town.
-Movement keys play the game; **Tab** switches between the map view and the raw
-terminal view, which is where prompts, menus and stores appear.
+
+| key | action |
+|---|---|
+| arrows / `hjkl` | move |
+| `>` | descend stairs |
+| `Tab` | toggle the raw terminal view |
+| `i` | inventory |
+| `Ctrl-S` | save |
+| `Ctrl-X` | save and quit |
+| `Ctrl-W` | wizard (god) mode |
+| `?` | help |
+
+Prompts, menus and stores appear in the **terminal view** (`Tab`) — those parts
+of Angband are inseparable from its game logic, so they are shown as text until
+native panels replace them.
 
 Squares you can currently see are drawn lit; squares you remember but cannot see
 are dimmed. That distinction comes straight from Angband and is what becomes
 fog-of-memory rendering in 3D.
+
+To play plain text Angband instead:
+
+```
+play.cmd -Classic
+```
+
+The `.cmd` wrappers exist because PowerShell refuses to run unsigned scripts by
+default; they bypass that for the one script rather than changing any
+system-wide policy. If you would rather run the `.ps1` files directly, use
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+
+## Building
+
+Requires MSYS2 with the MinGW-w64 toolchain on Windows, or GCC/CMake elsewhere.
+
+```
+tools\bootstrap.ps1   # one-time toolchain setup
+build.cmd             # build
+python tools\smoke_test.py
+```
+
+At least one graphical front end must be enabled or CMake selects the Windows
+front end, which disables the bridge. The build scripts enable GCU, which also
+gives you a playable text Angband in the same binary.
 
 ## Trying the bridge by hand
 

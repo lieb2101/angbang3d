@@ -27,3 +27,6 @@ Thumbs.db
 
 # Godot rewrites the csproj and leaves a backup
 *.csproj.old
+
+# Debug screenshots
+/shot*.png

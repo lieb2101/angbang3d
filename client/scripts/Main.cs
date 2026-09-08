@@ -4,27 +4,30 @@ using Godot;
 
 namespace Angband3D;
 
+public enum ViewMode { World, Map, Terminal }
 /// <summary>
-/// Phase 1 client: renders the bridge's structured map as a classic roguelike
-/// view, with the raw terminal channel available as an overlay.
+/// Owns the bridge, decides which view is showing, and routes input.
 /// </summary>
-public partial class Main : Node2D
+public partial class Main : Node
 {
-    private const int TermWidth = 80;
-    private const int TermHeight = 24;
-
+    private static readonly string[] Facings = { "N", "E", "S", "W" };
     private BridgeClient _bridge;
-    private Font _font;
-    private int _fontSize = 16;
-    private Vector2 _cell = new(10, 18);
+    private DungeonWorld _world;
+    private Overlay _overlay;
 
     private bool _forceTerminal;
-    private string _status = "starting...";
+    private bool _mapMode;
     private bool _autoBirth = true;
     private int _birthSteps;
     private double _waiting;
+
     private string[] _script;
     private int _scriptStep;
+    private string _shotPath;
+    private int _shotAfter = 120;
+    private int _frames;
+    private bool _shotTaken;
+    private string _saveName = "angband3d";
 
     public override void _Ready()
     {
@@ -34,150 +37,329 @@ public partial class Main : Node2D
             {
                 _script = arg["--keys=".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries);
             }
+            else if (arg.StartsWith("--screenshot="))
+            {
+                _shotPath = arg["--screenshot=".Length..];
+            }
+            else if (arg.StartsWith("--shot-after="))
+            {
+                int.TryParse(arg["--shot-after=".Length..], out _shotAfter);
+            }
+            else if (arg.StartsWith("--save="))
+            {
+                _saveName = arg["--save=".Length..];
+            }
         }
 
-        _font = ThemeDB.FallbackFont;
-        _cell = new Vector2(
-            _font.GetStringSize("#", HorizontalAlignment.Left, -1, _fontSize).X,
-            _font.GetHeight(_fontSize) + 2);
+        _world = new DungeonWorld();
+        AddChild(_world);
+
+        var layer = new CanvasLayer();
+        AddChild(layer);
+        _overlay = new Overlay();
+        layer.AddChild(_overlay);
 
         _bridge = new BridgeClient();
         AddChild(_bridge);
         _bridge.FrameReceived += OnFrame;
         _bridge.Disconnected += reason =>
         {
-            _status = $"disconnected: {reason}";
-            QueueRedraw();
+            _overlay.Status = $"disconnected: {reason}";
+            _overlay.QueueRedraw();
         };
 
         var exe = FindEngine();
         if (exe == null)
         {
-            _status = "angband.exe not found - build the engine first (tools/build.ps1)";
-            QueueRedraw();
+            _overlay.Status = "angband.exe not found - build the engine first (build.cmd)";
             return;
         }
-
-        _status = "connecting...";
-        _bridge.Start(exe);
+        _overlay.Status = "connecting...";
+        // Never pass -n: that would overwrite an existing character. Angband
+        // loads the save if there is one and starts birth if there is not.
+        _bridge.Start(exe, _saveName, newCharacter: false);
     }
 
-    /// <summary>Locate the built engine relative to the project directory.</summary>
     private static string FindEngine()
     {
         var root = ProjectSettings.GlobalizePath("res://").TrimEnd('/', '\\');
-        var repo = System.IO.Path.GetDirectoryName(root);
-        string[] candidates =
+        var repo = System.IO.Path.GetDirectoryName(root) ?? "";
+        foreach (var name in new[] { "angband.exe", "angband" })
         {
-            System.IO.Path.Combine(repo ?? "", "engine", "build", "game", "angband.exe"),
-            System.IO.Path.Combine(repo ?? "", "engine", "build", "game", "angband"),
-        };
-        foreach (var c in candidates)
-        {
-            if (System.IO.File.Exists(c))
+            var p = System.IO.Path.Combine(repo, "engine", "build", "game", name);
+            if (System.IO.File.Exists(p))
             {
-                return c;
+                return p;
             }
         }
         return null;
     }
 
-    public override void _Process(double delta)
-    {
-        // A key was sent but no frame came back; say so rather than looking frozen.
-        var wasStalled = _waiting > 1.0;
-        _waiting = _bridge is { Busy: true } ? _waiting + delta : 0.0;
-        if (wasStalled != _waiting > 1.0)
-        {
-            QueueRedraw();
-        }
-    }
-
     private void OnFrame()
     {
         var f = _bridge.Frame!.Value;
-
-        if (_status != null)
-        {
-            GD.Print($"bridge: first frame, phase={f.GetProperty("phase").GetString()}, " +
-                     $"term={f.GetProperty("term").GetProperty("w").GetInt32()}x" +
-                     $"{f.GetProperty("term").GetProperty("h").GetInt32()}");
-        }
-        _status = null;
+        _overlay.Status = null;
+        _overlay.Frame = f;
 
         AutoBirth(f);
         if (!_autoBirth)
         {
-            RunScript();
+            _world.OnFrame(f);
+            ScriptTick(f);
         }
-        QueueRedraw();
+
+        _overlay.Mode = EffectiveMode(f);
+        _overlay.FacingName = Facings[_world.Facing];
+        _overlay.QueueRedraw();
     }
 
     /// <summary>
-    /// Walk the splash and character-creation screens automatically so the
-    /// client starts in the dungeon. '@' completes birth with random choices.
+    /// Menus, stores and prompts exist only on the terminal channel. Rendering
+    /// the world during them would swallow the player's keystrokes invisibly.
     /// </summary>
+    private static bool NeedsTerminal(JsonElement frame)
+    {
+        if (!frame.TryGetProperty("ui", out var ui))
+        {
+            return false;
+        }
+        return ui.GetProperty("overlay").GetInt32() > 0
+               || ui.GetProperty("more").GetBoolean()
+               || !ui.GetProperty("awaiting_command").GetBoolean();
+    }
+
+    private ViewMode EffectiveMode(JsonElement frame)
+    {
+        if (_forceTerminal || NeedsTerminal(frame))
+        {
+            return ViewMode.Terminal;
+        }
+        return _mapMode ? ViewMode.Map : ViewMode.World;
+    }
+
+    /// <summary>
+    /// Answer whatever the screen is asking. Returns true if it handled it, in
+    /// which case the caller must not send anything else this frame.
+    /// </summary>
+    private bool TryAnswerPrompt(JsonElement frame)
+    {
+        var ui = frame.GetProperty("ui");
+        if (ui.GetProperty("awaiting_command").GetBoolean() && !ui.GetProperty("more").GetBoolean())
+        {
+            return false;
+        }
+
+        var screen = Screen(frame);
+        if (screen.Contains("-more-"))
+        {
+            _bridge.SendKey("enter");
+        }
+        else if (screen.Contains("'y': use as is"))
+        {
+            _bridge.SendKey("Y");
+        }
+        else if (screen.Contains("[y/n]") || screen.Contains("are you sure"))
+        {
+            _bridge.SendKey("y");
+        }
+        else if (screen.Contains("press any key"))
+        {
+            _bridge.SendKey("enter");
+        }
+        else
+        {
+            _bridge.SendKey("escape");
+        }
+        return true;
+    }
+
     private void AutoBirth(JsonElement frame)
     {
         if (!_autoBirth)
         {
             return;
         }
-
         if (frame.GetProperty("phase").GetString() == "play"
-            && frame.GetProperty("map").ValueKind == JsonValueKind.Object)
+            && frame.GetProperty("map").ValueKind == JsonValueKind.Object
+            && frame.GetProperty("ui").GetProperty("awaiting_command").GetBoolean())
         {
             _autoBirth = false;
+            _world.OnFrame(frame);
             var map = frame.GetProperty("map");
-            GD.Print($"bridge: in play - map {map.GetProperty("w").GetInt32()}x" +
-                     $"{map.GetProperty("h").GetInt32()}, " +
-                     $"{frame.GetProperty("monsters").GetArrayLength()} monster(s) visible");
+            GD.Print($"client: in play - map {map.GetProperty("w").GetInt32()}x" +
+                     $"{map.GetProperty("h").GetInt32()}");
             return;
         }
-
-        if (++_birthSteps > 24)
+        if (++_birthSteps > 40)
         {
             _autoBirth = false;
-            GD.PushWarning("bridge: gave up auto-completing character creation");
+            GD.PushWarning("client: gave up auto-completing character creation");
             return;
         }
 
-        _bridge.SendKey(_birthSteps == 1 ? "enter" : "@");
+        // Answer whatever the screen is asking rather than assuming a fixed key
+        // order: an existing savefile adds confirmation screens that a blind
+        // sequence walks straight past.
+        var screen = Screen(frame);
+        if (screen.Contains("-more-"))
+        {
+            _bridge.SendKey("enter");
+        }
+        else if (screen.Contains("'y': use as is"))
+        {
+            _bridge.SendKey("Y");
+        }
+        else if (screen.Contains("[y/n]") || screen.Contains("are you sure"))
+        {
+            _bridge.SendKey("y");
+        }
+        else if (screen.Contains("press any key"))
+        {
+            _bridge.SendKey("enter");
+        }
+        else
+        {
+            _bridge.SendKey("@");
+        }
     }
 
-    /// <summary>Replay a scripted key sequence, for automated client testing.</summary>
-    private void RunScript()
+    private void ScriptTick(JsonElement frame)
     {
-        if (_script == null || _scriptStep >= _script.Length)
+        if (TryAnswerPrompt(frame))
         {
             return;
         }
-        var frame = _bridge.Frame!.Value;
-        GD.Print($"script: view={(NeedsTerminal(frame) || _forceTerminal ? "TERMINAL" : "map")} " +
-                 $"ui={frame.GetProperty("ui")} row0=\"{TermRow(frame, 0).TrimEnd()}\"");
-        _bridge.SendKey(_script[_scriptStep++]);
+        RunScript(frame);
     }
 
-    private static string TermRow(JsonElement frame, int y)
+    private static string Screen(JsonElement frame)
     {
-        var rows = frame.GetProperty("term").GetProperty("rows");
-        return y < rows.GetArrayLength() ? rows[y].GetProperty("g").GetString() ?? "" : "";
+        if (frame.GetProperty("term").ValueKind != JsonValueKind.Object)
+        {
+            return "";
+        }
+        var sb = new System.Text.StringBuilder();
+        foreach (var row in frame.GetProperty("term").GetProperty("rows").EnumerateArray())
+        {
+            sb.Append(row.GetProperty("g").GetString()).Append('\n');
+        }
+        return sb.ToString().ToLowerInvariant();
+    }
+
+    private static string LastMessage(JsonElement frame)
+    {
+        var msgs = frame.GetProperty("messages");
+        return msgs.GetArrayLength() > 0
+            ? (msgs[msgs.GetArrayLength() - 1].GetProperty("text").GetString() ?? "").ToLowerInvariant()
+            : "";
+    }
+
+    private void RunScript(JsonElement frame)
+    {
+        // Turning and view toggles never reach the engine, so they produce no
+        // new frame; keep consuming steps until one actually sends a key.
+        while (_script != null && _scriptStep < _script.Length)
+        {
+            var spec = _script[_scriptStep++];
+            var pl = frame.GetProperty("player");
+            var facing = Facings[_world.Facing];
+            GD.Print($"script: {spec}  view={EffectiveMode(frame)}  facing={facing}  " +
+                     $"pos=({pl.GetProperty("x").GetInt32()},{pl.GetProperty("y").GetInt32()})  " +
+                     $"depth={pl.GetProperty("depth").GetInt32()}");
+
+            switch (spec)
+            {
+                case "turnleft": _world.Turn(-1); continue;
+                case "turnright": _world.Turn(1); continue;
+                case "map": _mapMode = !_mapMode; continue;
+                case "term": _forceTerminal = !_forceTerminal; continue;
+                case "forward": _bridge.SendKey(_world.MoveKey(true)); return;
+                case "back": _bridge.SendKey(_world.MoveKey(false)); return;
+                case "walk":
+                    // Scripted exploration: turn rather than butt into a wall.
+                    if (LastMessage(frame).Contains("wall in the way"))
+                    {
+                        _world.Turn(1);
+                    }
+                    _bridge.SendKey(_world.MoveKey(true));
+                    return;
+                default: _bridge.SendKey(spec); return;
+            }
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        var wasStalled = _waiting > 1.0;
+        _waiting = _bridge is { Busy: true } ? _waiting + delta : 0.0;
+        _overlay.Waiting = _waiting;
+        if (wasStalled != _waiting > 1.0)
+        {
+            _overlay.QueueRedraw();
+        }
+
+        if (_shotPath != null && !_shotTaken && ++_frames >= _shotAfter)
+        {
+            _shotTaken = true;
+            CallDeferred(nameof(Capture));
+        }
+    }
+
+    private void Capture()
+    {
+        if (_bridge.Frame is { } f && f.GetProperty("map").ValueKind == JsonValueKind.Object)
+        {
+            var pl = f.GetProperty("player");
+            GD.Print("around: " + _world.DescribeAround(f.GetProperty("map"),
+                pl.GetProperty("x").GetInt32(), pl.GetProperty("y").GetInt32()));
+        }
+        var img = GetViewport().GetTexture().GetImage();
+        var err = img.SavePng(_shotPath);
+        GD.Print($"screenshot: {_shotPath} ({img.GetWidth()}x{img.GetHeight()}) err={err}");
+        GetTree().Quit();
     }
 
     public override void _UnhandledKeyInput(InputEvent @event)
     {
-        if (@event is not InputEventKey { Pressed: true } key)
+        if (@event is not InputEventKey { Pressed: true } key || _bridge == null)
         {
             return;
         }
 
-        // Tab forces the terminal on; it is never sent to the game.
         if (key.Keycode == Key.Tab)
         {
             _forceTerminal = !_forceTerminal;
-            QueueRedraw();
-            GetViewport().SetInputAsHandled();
+            Refresh();
             return;
+        }
+
+        var frame = _bridge.Frame;
+        var inWorld = frame.HasValue && EffectiveMode(frame.Value) == ViewMode.World;
+
+        if (inWorld && key.Keycode == Key.M)
+        {
+            _mapMode = !_mapMode;
+            Refresh();
+            return;
+        }
+        if (_mapMode && key.Keycode == Key.M)
+        {
+            _mapMode = false;
+            Refresh();
+            return;
+        }
+
+        // Dungeon Master style controls, but only while walking around: turning
+        // is free because Angband has no facing, so it costs no game turn.
+        if (inWorld && !_bridge.Busy)
+        {
+            switch (key.Keycode)
+            {
+                case Key.Left: _world.Turn(-1); Refresh(); return;
+                case Key.Right: _world.Turn(1); Refresh(); return;
+                case Key.Up: _bridge.SendKey(_world.MoveKey(true)); return;
+                case Key.Down: _bridge.SendKey(_world.MoveKey(false)); return;
+            }
         }
 
         var spec = ToKeySpec(key);
@@ -186,6 +368,17 @@ public partial class Main : Node2D
             _bridge.SendKey(spec);
             GetViewport().SetInputAsHandled();
         }
+    }
+
+    private void Refresh()
+    {
+        if (_bridge.Frame is { } f)
+        {
+            _overlay.Mode = EffectiveMode(f);
+            _overlay.FacingName = Facings[_world.Facing];
+        }
+        _overlay.QueueRedraw();
+        GetViewport().SetInputAsHandled();
     }
 
     private static string ToKeySpec(InputEventKey key)
@@ -200,219 +393,14 @@ public partial class Main : Node2D
             case Key.Escape: return "escape";
             case Key.Space: return "space";
             case Key.Backspace: return "backspace";
-            case Key.Home: return "home";
-            case Key.End: return "end";
+        }
+
+        if (key.CtrlPressed && key.Keycode is >= Key.A and <= Key.Z)
+        {
+            return "C-" + (char)('a' + (key.Keycode - Key.A));
         }
 
         var ch = (char)key.Unicode;
-        if (key.CtrlPressed && key.Keycode is >= Key.A and <= Key.Z)
-        {
-            return "C-" + char.ToLowerInvariant((char)('a' + (key.Keycode - Key.A)));
-        }
-        if (ch >= ' ' && ch < 127)
-        {
-            return ch.ToString();
-        }
-        return null;
-    }
-
-    public override void _Draw()
-    {
-        var bg = new Color(0.04f, 0.04f, 0.05f);
-        DrawRect(new Rect2(Vector2.Zero, GetViewportRect().Size), bg);
-
-        if (_status != null)
-        {
-            DrawString(_font, new Vector2(20, 40), _status,
-                HorizontalAlignment.Left, -1, _fontSize, Colors.Orange);
-            return;
-        }
-
-        if (_bridge.Frame is not { } frame)
-        {
-            return;
-        }
-
-        if (_forceTerminal || NeedsTerminal(frame))
-        {
-            DrawTerminal(frame, Vector2.Zero);
-            DrawTerminalHint(frame);
-        }
-        else
-        {
-            DrawMap(frame);
-            DrawHud(frame);
-        }
-
-        if (_waiting > 1.0)
-        {
-            DrawString(_font, new Vector2(4, GetViewportRect().Size.Y - _cell.Y * 3),
-                $"waiting for the engine ({_waiting:F0}s)...",
-                HorizontalAlignment.Left, -1, _fontSize, Colors.Orange);
-        }
-    }
-
-    /// <summary>
-    /// Whether Angband is showing something that only exists on the terminal
-    /// channel: a menu, store, prompt or -more- pause. Without this the client
-    /// keeps drawing the map while keystrokes vanish into an invisible menu,
-    /// which looks exactly like a freeze.
-    /// </summary>
-    private static bool NeedsTerminal(JsonElement frame)
-    {
-        if (!frame.TryGetProperty("ui", out var ui))
-        {
-            return false;
-        }
-        return ui.GetProperty("overlay").GetInt32() > 0
-               || ui.GetProperty("more").GetBoolean()
-               || !ui.GetProperty("awaiting_command").GetBoolean();
-    }
-
-    private void DrawTerminalHint(JsonElement frame)
-    {
-        var forced = _forceTerminal && !NeedsTerminal(frame);
-        var text = forced
-            ? "terminal view - Tab to return to the map"
-            : "Angband is asking something - answer it, or press ESC to back out";
-        DrawString(_font, new Vector2(4, GetViewportRect().Size.Y - 6), text,
-            HorizontalAlignment.Left, -1, _fontSize, new Color(0.55f, 0.55f, 0.62f));
-    }
-
-    private void DrawMap(JsonElement frame)
-    {
-        if (frame.GetProperty("map").ValueKind != JsonValueKind.Object)
-        {
-            // Birth, menus and level generation have no map; show the terminal.
-            DrawTerminal(frame, Vector2.Zero);
-            return;
-        }
-
-        var map = frame.GetProperty("map");
-        var rows = map.GetProperty("rows");
-        var h = map.GetProperty("h").GetInt32();
-        var w = map.GetProperty("w").GetInt32();
-
-        // Centre the view on the player.
-        var player = frame.GetProperty("player");
-        var view = GetViewportRect().Size;
-        var cols = Mathf.FloorToInt(view.X / _cell.X);
-        var lines = Mathf.FloorToInt((view.Y - _cell.Y * 3) / _cell.Y);
-        var originX = Mathf.Clamp(player.GetProperty("x").GetInt32() - cols / 2, 0, Mathf.Max(0, w - cols));
-        var originY = Mathf.Clamp(player.GetProperty("y").GetInt32() - lines / 2, 0, Mathf.Max(0, h - lines));
-
-        var top = _cell.Y * 2;
-
-        for (var row = 0; row < lines && originY + row < h; row++)
-        {
-            var r = rows[originY + row];
-            var glyphs = r.GetProperty("g").GetString() ?? "";
-            var attrs = r.GetProperty("a").GetString() ?? "";
-            var flags = r.GetProperty("l").GetString() ?? "";
-
-            for (var col = 0; col < cols && originX + col < w; col++)
-            {
-                var cell = originX + col;
-                if (cell >= glyphs.Length)
-                {
-                    break;
-                }
-
-                var ch = glyphs[cell];
-                if (ch == ' ')
-                {
-                    continue;
-                }
-
-                var flag = cell < flags.Length ? AngbandColors.HexVal(flags[cell]) : 0;
-                var known = (flag & 0x1) != 0;
-                var inView = (flag & 0x2) != 0;
-                if (!known && !inView)
-                {
-                    continue;
-                }
-
-                var colour = AngbandColors.Get(AngbandColors.ParseAttr(attrs, cell));
-                // Remembered but unseen terrain is dimmed: the roguelike map
-                // memory that becomes fog-of-memory rendering in 3D.
-                if (!inView)
-                {
-                    colour = colour.Darkened(0.55f);
-                }
-
-                DrawString(_font,
-                    new Vector2(col * _cell.X, top + row * _cell.Y + _font.GetAscent(_fontSize)),
-                    ch.ToString(), HorizontalAlignment.Left, -1, _fontSize, colour);
-            }
-        }
-    }
-
-    private void DrawHud(JsonElement frame)
-    {
-        var p = frame.GetProperty("player");
-        if (p.ValueKind != JsonValueKind.Object)
-        {
-            return;
-        }
-
-        string Msg()
-        {
-            var msgs = frame.GetProperty("messages");
-            return msgs.GetArrayLength() > 0
-                ? msgs[msgs.GetArrayLength() - 1].GetProperty("text").GetString()
-                : "";
-        }
-
-        DrawString(_font, new Vector2(4, _font.GetAscent(_fontSize)), Msg(),
-            HorizontalAlignment.Left, -1, _fontSize, Colors.White);
-
-        var wizard = p.GetProperty("wizard").GetBoolean() ? "  [WIZARD]" : "";
-        var line =
-            $"{p.GetProperty("race").GetString()} {p.GetProperty("class").GetString()}  " +
-            $"L{p.GetProperty("level").GetInt32()}  " +
-            $"HP {p.GetProperty("hp").GetInt32()}/{p.GetProperty("hp_max").GetInt32()}  " +
-            $"SP {p.GetProperty("sp").GetInt32()}/{p.GetProperty("sp_max").GetInt32()}  " +
-            $"AU {p.GetProperty("gold").GetInt32()}  " +
-            $"Depth {p.GetProperty("depth").GetInt32() * 50}ft  " +
-            $"Light {p.GetProperty("light").GetInt32()}  " +
-            $"Mon {frame.GetProperty("monsters").GetArrayLength()}{wizard}";
-
-        var y = GetViewportRect().Size.Y - _cell.Y;
-        DrawString(_font, new Vector2(4, y), line,
-            HorizontalAlignment.Left, -1, _fontSize, new Color(0.7f, 0.85f, 1.0f));
-        DrawString(_font, new Vector2(4, y - _cell.Y), "Tab: terminal view    ?: help    >: descend",
-            HorizontalAlignment.Left, -1, _fontSize, new Color(0.45f, 0.45f, 0.5f));
-    }
-
-    private void DrawTerminal(JsonElement frame, Vector2 origin)
-    {
-        if (frame.GetProperty("term").ValueKind != JsonValueKind.Object)
-        {
-            return;
-        }
-
-        var term = frame.GetProperty("term");
-        var rows = term.GetProperty("rows");
-        var w = term.GetProperty("w").GetInt32();
-
-        for (var y = 0; y < rows.GetArrayLength() && y < TermHeight; y++)
-        {
-            var r = rows[y];
-            var glyphs = r.GetProperty("g").GetString() ?? "";
-            var attrs = r.GetProperty("a").GetString() ?? "";
-
-            for (var x = 0; x < w && x < glyphs.Length && x < TermWidth; x++)
-            {
-                var ch = glyphs[x];
-                if (ch == ' ')
-                {
-                    continue;
-                }
-                DrawString(_font,
-                    origin + new Vector2(x * _cell.X, y * _cell.Y + _font.GetAscent(_fontSize)),
-                    ch.ToString(), HorizontalAlignment.Left, -1, _fontSize,
-                    AngbandColors.Get(AngbandColors.ParseAttr(attrs, x)));
-            }
-        }
+        return ch >= ' ' && ch < 127 ? ch.ToString() : null;
     }
 }

@@ -98,13 +98,13 @@ public partial class DungeonWorld : Node3D
         // Realistic warm torch with soft shadows and ember particles
         _torch = new OmniLight3D
         {
-            LightColor = new Color(1.0f, 0.84f, 0.60f),
-            LightEnergy = 1.9f,
-            OmniRange = 6.0f,
-            OmniAttenuation = 1.15f,
+            LightColor = new Color(1.0f, 0.86f, 0.64f),
+            LightEnergy = 2.2f,
+            OmniRange = 9.0f,
+            OmniAttenuation = 0.85f,
             ShadowEnabled = true,
-            ShadowBlur = 1.5f,
-            ShadowBias = 0.03f,
+            ShadowBlur = 1.8f,
+            ShadowBias = 0.04f,
             Position = new Vector3(0, 0.25f, 0),
         };
         _camera.AddChild(_torch);
@@ -163,27 +163,27 @@ public partial class DungeonWorld : Node3D
     private static Godot.Environment BuildEnvironment() => new()
     {
         BackgroundMode = Godot.Environment.BGMode.Color,
-        BackgroundColor = Colors.Black,
+        BackgroundColor = new Color(0.015f, 0.018f, 0.025f),
         AmbientLightSource = Godot.Environment.AmbientSource.Color,
-        AmbientLightColor = new Color(0.12f, 0.13f, 0.16f),
-        AmbientLightEnergy = 0.35f,
+        AmbientLightColor = new Color(0.26f, 0.28f, 0.36f),
+        AmbientLightEnergy = 0.65f,
         FogEnabled = true,
-        FogLightColor = new Color(0.02f, 0.02f, 0.03f),
-        FogDensity = 0.08f,
+        FogLightColor = new Color(0.04f, 0.045f, 0.06f),
+        FogDensity = 0.016f,
         VolumetricFogEnabled = true,
-        VolumetricFogDensity = 0.025f,
-        VolumetricFogAlbedo = new Color(0.20f, 0.20f, 0.25f),
-        VolumetricFogEmission = new Color(0.015f, 0.015f, 0.02f),
-        VolumetricFogLength = 26.0f,
+        VolumetricFogDensity = 0.012f,
+        VolumetricFogAlbedo = new Color(0.28f, 0.30f, 0.38f),
+        VolumetricFogEmission = new Color(0.02f, 0.025f, 0.035f),
+        VolumetricFogLength = 32.0f,
         SsaoEnabled = true,
         SsaoRadius = 1.2f,
-        SsaoIntensity = 1.6f,
+        SsaoIntensity = 1.0f,
         GlowEnabled = true,
-        GlowIntensity = 0.60f,
-        GlowBloom = 0.10f,
+        GlowIntensity = 0.50f,
+        GlowBloom = 0.08f,
         GlowBlendMode = Godot.Environment.GlowBlendModeEnum.Softlight,
         TonemapMode = Godot.Environment.ToneMapper.Filmic,
-        TonemapExposure = 1.0f,
+        TonemapExposure = 1.12f,
     };
 
     #region Procedural Textures & Materials
@@ -774,79 +774,86 @@ public partial class DungeonWorld : Node3D
 
     private static void AddBox(SurfaceTool st, Vector3 center, Vector3 size)
     {
+        AddRotatedBox(st, center, size, 0f);
+    }
+
+    private static void AddRotatedBox(SurfaceTool st, Vector3 center, Vector3 size, float yawRadians)
+    {
         var h = size * 0.5f;
-        Vector3[] vertices =
+        Vector3[] localVertices =
         {
             // Front (+Z)
-            new(center.X - h.X, center.Y - h.Y, center.Z + h.Z),
-            new(center.X + h.X, center.Y - h.Y, center.Z + h.Z),
-            new(center.X + h.X, center.Y + h.Y, center.Z + h.Z),
-            new(center.X - h.X, center.Y + h.Y, center.Z + h.Z),
+            new(-h.X, -h.Y, +h.Z),
+            new(+h.X, -h.Y, +h.Z),
+            new(+h.X, +h.Y, +h.Z),
+            new(-h.X, +h.Y, +h.Z),
 
             // Back (-Z)
-            new(center.X + h.X, center.Y - h.Y, center.Z - h.Z),
-            new(center.X - h.X, center.Y - h.Y, center.Z - h.Z),
-            new(center.X - h.X, center.Y + h.Y, center.Z - h.Z),
-            new(center.X + h.X, center.Y + h.Y, center.Z - h.Z),
+            new(+h.X, -h.Y, -h.Z),
+            new(-h.X, -h.Y, -h.Z),
+            new(-h.X, +h.Y, -h.Z),
+            new(+h.X, +h.Y, -h.Z),
 
             // Right (+X)
-            new(center.X + h.X, center.Y - h.Y, center.Z + h.Z),
-            new(center.X + h.X, center.Y - h.Y, center.Z - h.Z),
-            new(center.X + h.X, center.Y + h.Y, center.Z - h.Z),
-            new(center.X + h.X, center.Y + h.Y, center.Z + h.Z),
+            new(+h.X, -h.Y, +h.Z),
+            new(+h.X, -h.Y, -h.Z),
+            new(+h.X, +h.Y, -h.Z),
+            new(+h.X, +h.Y, +h.Z),
 
             // Left (-X)
-            new(center.X - h.X, center.Y - h.Y, center.Z - h.Z),
-            new(center.X - h.X, center.Y - h.Y, center.Z + h.Z),
-            new(center.X - h.X, center.Y + h.Y, center.Z + h.Z),
-            new(center.X - h.X, center.Y + h.Y, center.Z - h.Z),
+            new(-h.X, -h.Y, -h.Z),
+            new(-h.X, -h.Y, +h.Z),
+            new(-h.X, +h.Y, +h.Z),
+            new(-h.X, +h.Y, -h.Z),
 
             // Top (+Y)
-            new(center.X - h.X, center.Y + h.Y, center.Z + h.Z),
-            new(center.X + h.X, center.Y + h.Y, center.Z + h.Z),
-            new(center.X + h.X, center.Y + h.Y, center.Z - h.Z),
-            new(center.X - h.X, center.Y + h.Y, center.Z - h.Z),
+            new(-h.X, +h.Y, +h.Z),
+            new(+h.X, +h.Y, +h.Z),
+            new(+h.X, +h.Y, -h.Z),
+            new(-h.X, +h.Y, -h.Z),
 
             // Bottom (-Y)
-            new(center.X - h.X, center.Y - h.Y, center.Z - h.Z),
-            new(center.X + h.X, center.Y - h.Y, center.Z - h.Z),
-            new(center.X + h.X, center.Y - h.Y, center.Z + h.Z),
-            new(center.X - h.X, center.Y - h.Y, center.Z + h.Z),
+            new(-h.X, -h.Y, -h.Z),
+            new(+h.X, -h.Y, -h.Z),
+            new(+h.X, -h.Y, +h.Z),
+            new(-h.X, -h.Y, +h.Z),
         };
 
-        Vector3[] normals =
+        Vector3[] localNormals =
         {
             Vector3.Back, Vector3.Forward, Vector3.Right, Vector3.Left, Vector3.Up, Vector3.Down
         };
 
+        var xf = new Transform3D(Basis.Identity.Rotated(Vector3.Up, yawRadians), center);
+
         for (var f = 0; f < 6; f++)
         {
-            var norm = normals[f];
+            var norm = xf.Basis * localNormals[f];
             var i = f * 4;
 
             st.SetNormal(norm);
             st.SetUV(new Vector2(0, 1));
-            st.AddVertex(vertices[i]);
+            st.AddVertex(xf * localVertices[i]);
 
             st.SetNormal(norm);
             st.SetUV(new Vector2(1, 0));
-            st.AddVertex(vertices[i + 2]);
+            st.AddVertex(xf * localVertices[i + 2]);
 
             st.SetNormal(norm);
             st.SetUV(new Vector2(1, 1));
-            st.AddVertex(vertices[i + 1]);
+            st.AddVertex(xf * localVertices[i + 1]);
 
             st.SetNormal(norm);
             st.SetUV(new Vector2(0, 1));
-            st.AddVertex(vertices[i]);
+            st.AddVertex(xf * localVertices[i]);
 
             st.SetNormal(norm);
             st.SetUV(new Vector2(0, 0));
-            st.AddVertex(vertices[i + 3]);
+            st.AddVertex(xf * localVertices[i + 3]);
 
             st.SetNormal(norm);
             st.SetUV(new Vector2(1, 0));
-            st.AddVertex(vertices[i + 2]);
+            st.AddVertex(xf * localVertices[i + 2]);
         }
     }
 
@@ -865,6 +872,10 @@ public partial class DungeonWorld : Node3D
         // Threshold step
         AddBox(stFrame, new Vector3(0, 0.04f, 0), new Vector3(1.40f, 0.08f, 0.40f));
 
+        // Heavy iron hinge brackets on left jamb post
+        AddBox(stFrame, new Vector3(-0.72f, 1.75f, 0.04f), new Vector3(0.10f, 0.14f, 0.16f));
+        AddBox(stFrame, new Vector3(-0.72f, 0.55f, 0.04f), new Vector3(0.10f, 0.14f, 0.16f));
+
         stFrame.GenerateNormals();
         stFrame.GenerateTangents();
         var mesh = stFrame.Commit();
@@ -875,29 +886,65 @@ public partial class DungeonWorld : Node3D
 
         if (state == DoorState.Closed)
         {
-            // Sturdy wooden door panel
+            // Sturdy wooden door panel fully closing the doorway
             AddBox(stDoor, new Vector3(0, 1.15f, 0), new Vector3(1.40f, 2.20f, 0.12f));
             // Top iron strap
             AddBox(stDoor, new Vector3(0, 1.75f, 0), new Vector3(1.36f, 0.12f, 0.16f));
             // Bottom iron strap
             AddBox(stDoor, new Vector3(0, 0.55f, 0), new Vector3(1.36f, 0.12f, 0.16f));
-            // Iron handle ring / latch
+            // Iron handle ring / latch (front)
             AddBox(stDoor, new Vector3(0.45f, 1.10f, 0.08f), new Vector3(0.10f, 0.16f, 0.06f));
+            // Iron handle ring / latch (back)
+            AddBox(stDoor, new Vector3(0.45f, 1.10f, -0.08f), new Vector3(0.10f, 0.16f, 0.06f));
         }
         else if (state == DoorState.Open)
         {
-            // Swung-open door leaf resting against the left jamb
-            AddBox(stDoor, new Vector3(-0.62f, 1.15f, 0.65f), new Vector3(0.12f, 2.20f, 1.35f));
-            // Iron straps along swung door
-            AddBox(stDoor, new Vector3(-0.62f, 1.75f, 0.65f), new Vector3(0.16f, 0.12f, 1.30f));
-            AddBox(stDoor, new Vector3(-0.62f, 0.55f, 0.65f), new Vector3(0.16f, 0.12f, 1.30f));
+            // Swung-open door leaf angled ajar into the room (~70 degrees)
+            const float openAngleDeg = 70.0f;
+            var openYaw = openAngleDeg * Mathf.Pi / 180.0f;
+            const float doorWidth = 1.28f;
+            const float doorThick = 0.10f;
+            const float doorHeight = 2.18f;
+
+            // Hinge anchor point at left doorpost
+            const float hingeX = -0.68f;
+            const float hingeZ = 0.0f;
+            var halfW = doorWidth * 0.5f;
+
+            var panelCenter = new Vector3(
+                hingeX + halfW * Mathf.Cos(openYaw),
+                1.15f,
+                hingeZ + halfW * Mathf.Sin(openYaw));
+
+            // Angled wooden door panel
+            AddRotatedBox(stDoor, panelCenter, new Vector3(doorWidth, doorHeight, doorThick), -openYaw);
+
+            // Top iron reinforcement strap along the angled door
+            var topStrapCenter = new Vector3(panelCenter.X, 1.75f, panelCenter.Z);
+            AddRotatedBox(stDoor, topStrapCenter, new Vector3(doorWidth * 0.96f, 0.12f, doorThick + 0.04f), -openYaw);
+
+            // Bottom iron reinforcement strap along the angled door
+            var btmStrapCenter = new Vector3(panelCenter.X, 0.55f, panelCenter.Z);
+            AddRotatedBox(stDoor, btmStrapCenter, new Vector3(doorWidth * 0.96f, 0.12f, doorThick + 0.04f), -openYaw);
+
+            // Iron handle ring near free edge
+            const float handleDist = 1.05f;
+            var handleCenter = new Vector3(
+                hingeX + handleDist * Mathf.Cos(openYaw),
+                1.10f,
+                hingeZ + handleDist * Mathf.Sin(openYaw));
+            AddRotatedBox(stDoor, handleCenter, new Vector3(0.10f, 0.16f, doorThick + 0.05f), -openYaw);
         }
         else if (state == DoorState.Broken)
         {
-            // Splintered wooden planks lying on the floor
-            AddBox(stDoor, new Vector3(-0.25f, 0.06f, 0.10f), new Vector3(0.75f, 0.06f, 0.22f));
-            AddBox(stDoor, new Vector3(0.30f, 0.05f, -0.12f), new Vector3(0.65f, 0.05f, 0.18f));
-            AddBox(stDoor, new Vector3(0.05f, 0.08f, 0.25f), new Vector3(0.50f, 0.05f, 0.14f));
+            // Shattered wooden planks and iron straps lying splintered on the floor
+            AddBox(stDoor, new Vector3(-0.35f, 0.06f, 0.15f), new Vector3(0.85f, 0.06f, 0.26f));
+            AddBox(stDoor, new Vector3(0.35f, 0.05f, -0.15f), new Vector3(0.75f, 0.05f, 0.22f));
+            AddBox(stDoor, new Vector3(0.10f, 0.09f, 0.30f), new Vector3(0.60f, 0.06f, 0.18f));
+            AddBox(stDoor, new Vector3(-0.15f, 0.08f, -0.25f), new Vector3(0.50f, 0.05f, 0.20f));
+
+            // Broken wooden door remnant still clinging to upper hinge
+            AddRotatedBox(stDoor, new Vector3(-0.62f, 1.70f, 0.08f), new Vector3(0.26f, 0.48f, 0.08f), -0.35f);
         }
 
         stDoor.GenerateNormals();
@@ -1060,14 +1107,14 @@ public partial class DungeonWorld : Node3D
             _outdoors = player.GetProperty("depth").GetInt32() == 0;
             // The town is an open street under sky, not a lightless dungeon.
             _env.BackgroundColor = _outdoors
-                ? new Color(0.06f, 0.08f, 0.15f)
-                : Colors.Black;
-            _env.AmbientLightEnergy = _outdoors ? 1.6f : 0.35f;
+                ? new Color(0.08f, 0.12f, 0.22f)
+                : new Color(0.015f, 0.018f, 0.025f);
+            _env.AmbientLightEnergy = _outdoors ? 1.8f : 0.65f;
             _env.AmbientLightColor = _outdoors
-                ? new Color(0.42f, 0.45f, 0.55f)
-                : new Color(0.12f, 0.13f, 0.16f);
-            _env.FogDensity = _outdoors ? 0.008f : 0.08f;
-            _env.VolumetricFogDensity = _outdoors ? 0.006f : 0.025f;
+                ? new Color(0.50f, 0.54f, 0.66f)
+                : new Color(0.26f, 0.28f, 0.36f);
+            _env.FogDensity = _outdoors ? 0.004f : 0.016f;
+            _env.VolumetricFogDensity = _outdoors ? 0.003f : 0.012f;
             foreach (var m in _activeMonsters.Values) m.RootNode.QueueFree();
             _activeMonsters.Clear();
             foreach (var item in _activeItems.Values) item.QueueFree();
@@ -1284,7 +1331,7 @@ public partial class DungeonWorld : Node3D
                     continue;
                 }
 
-                var shade = inView ? BaseColour(kind) : new Color(0.28f, 0.32f, 0.45f);
+                var shade = inView ? BaseColour(kind) : new Color(0.44f, 0.48f, 0.60f);
 
                 if (kind is Kind.Wall or Kind.Magma or Kind.Quartz or Kind.Store)
                 {
@@ -1303,7 +1350,7 @@ public partial class DungeonWorld : Node3D
                 {
                     // Floor underneath door
                     xf[Kind.Floor].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, -0.05f, y * Cell)));
-                    col[Kind.Floor].Add(inView ? Colors.White : new Color(0.28f, 0.32f, 0.45f));
+                    col[Kind.Floor].Add(inView ? Colors.White : new Color(0.44f, 0.48f, 0.60f));
 
                     // Orientation: align door frame across the corridor
                     var wallN = IsWallOrVoid(map, x, y - 1, w, h);
@@ -1325,7 +1372,7 @@ public partial class DungeonWorld : Node3D
                 {
                     // Floor underneath stairs
                     xf[Kind.Floor].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, -0.05f, y * Cell)));
-                    col[Kind.Floor].Add(inView ? Colors.White : new Color(0.28f, 0.32f, 0.45f));
+                    col[Kind.Floor].Add(inView ? Colors.White : new Color(0.44f, 0.48f, 0.60f));
 
                     xf[kind].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, 0, y * Cell)));
                     col[kind].Add(shade);
@@ -1333,7 +1380,7 @@ public partial class DungeonWorld : Node3D
                 else if (kind == Kind.Rubble)
                 {
                     xf[Kind.Floor].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, -0.05f, y * Cell)));
-                    col[Kind.Floor].Add(inView ? Colors.White : new Color(0.28f, 0.32f, 0.45f));
+                    col[Kind.Floor].Add(inView ? Colors.White : new Color(0.44f, 0.48f, 0.60f));
 
                     xf[Kind.Rubble].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, 0, y * Cell)));
                     col[Kind.Rubble].Add(shade);
@@ -1350,7 +1397,7 @@ public partial class DungeonWorld : Node3D
                 {
                     xf[Kind.Ceiling].Add(new Transform3D(Basis.Identity,
                         new Vector3(x * Cell, WallHeight + 0.05f, y * Cell)));
-                    var cc = inView ? BaseColour(Kind.Ceiling) : new Color(0.22f, 0.25f, 0.35f);
+                    var cc = inView ? BaseColour(Kind.Ceiling) : new Color(0.35f, 0.38f, 0.50f);
                     col[Kind.Ceiling].Add(cc);
                 }
             }
@@ -1646,9 +1693,9 @@ public partial class DungeonWorld : Node3D
         _camera.Rotation = new Vector3(0, _yaw, roll);
 
         _flicker += delta;
-        var f = 1.0f + 0.06f * Mathf.Sin((float)_flicker * 11f) + 0.04f * Mathf.Sin((float)_flicker * 23f);
-        _torch.OmniRange = _torchRadius * Cell + 1.8f;
-        _torch.LightEnergy = 1.9f * f;
+        var f = 1.0f + 0.05f * Mathf.Sin((float)_flicker * 11f) + 0.03f * Mathf.Sin((float)_flicker * 23f);
+        _torch.OmniRange = (_torchRadius + 2.5f) * Cell + 2.0f;
+        _torch.LightEnergy = 2.2f * f;
 
         // Process smooth monster movement, facing, and hover/animations
         var moveT = (float)Math.Min(1.0, delta / 0.16);

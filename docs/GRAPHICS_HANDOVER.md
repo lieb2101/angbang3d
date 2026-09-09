@@ -17,21 +17,29 @@
   - Overhead 3D nameplates and color-coded health brackets dynamically positioned above character heads with bottom vertical alignment and priority depth-testing to prevent mesh clipping.
 
 ### B. Accurate 3D Model Mappings & Creature Resolvers (`client/scripts/MonsterModelResolver.cs`)
-- **Spectral Undead & Transparency**:
-  - Spectral material pass for incorporeal creatures (ghosts, spectres, wraiths, shadows, phantoms) with translucent alpha blend and spectral emissive glow.
+- **Glyph-First Monster Archetype Taxonomy**:
+  - Primary resolution is strictly categorized by Angband monster glyph (`glyph`) first, eliminating false substring matches (e.g. non-humanoid creatures with "giant" in their name like "giant white mouse" or "giant red ant" previously triggering the Giant Barbarian humanoid model).
+  - Rodents (`r` - mice, rats, giant white mouse), Bats/Birds (`b`, `B`), Insects/Arachnids (`a`, `c`, `S`, `K`, `I`, `F`), Reptiles/Canines/Felines/Quadrupeds (`R`, `J`, `C`, `f`, `q`, `Z`), and Slimes/Worms (`j`, `w`, `i`) resolve to dedicated procedural 3D tokens with accurate scale and feature anatomy.
+  - Giant humanoid models (`P` - Hill, Frost, Fire, Stone, Cloud, Storm giants, Titan, Cyclops, Morgoth) exclusively map to the imposing `Barbarian.glb` ($1.75\text{--}2.0\times$).
+- **Character Skin Tinting & Spectral Material Preservation**:
+  - Preserves base albedo diffuse textures across all character GLBs (`Knight`, `Barbarian`, `Mage`, `Rogue`, `Rogue_Hooded`, `Skeleton_*`) while modulating skin, cloth, and armor tones based on the creature's Angband color (`attr` / `Color`).
+  - Ethereal entities (`G`, `W`) preserve underlying character texture maps with translucent alpha shaders and spectral colored emission glow.
+  - Demons (`U`, `u`) and Maiar/Ainur (`A`) feature fiery or radiant celestial emission maps.
 - **Humanoid & Archetype Model Distribution**:
   - Skeletons, Liches, Vampires, and Zombies map to distinct class gear: `Skeleton_Warrior`, `Skeleton_Mage`, `Skeleton_Rogue`, `Skeleton_Minion`.
   - Townspeople (`t`), adventurers, warriors, paladins, rogues, rangers, mages, clerics, barbarians, and mercenaries mapped with scale adjustments (e.g. Halflings/Dwarves $0.65\times$ vs Elves/Humans $0.98\text{--}1.05\times$).
   - Giants, Balrogs, and Trolls scaled with imposing proportions ($1.3\text{--}1.75\times$).
 - **Specialized 3D Procedural Creature Tokens**:
+  - **Rodents (`r`)**: Compact rodent torso ($0.5\times$ scale), snout, ear meshes, fur modulated to creature color (e.g. white for giant white mouse), and glowing albino red/creature eyes.
+  - **Bats & Birds (`b`, `B`)**: Airborne hovering tokens with angled wing spans and glowing eyes.
   - **Floating Eye (`e`)**: 3D sclera sphere with illuminated colored iris and dark pupil.
   - **Slimes, Jellies & Worms (`j`, `i`, `w`)**: Translucent gelatinous dome with glowing pulsating inner nucleus.
   - **Molds & Mushrooms (`m`, `,`)**: Procedural mushroom clusters with glowing spore caps.
-  - **Arachnids, Centipedes, Insects (`S`, `K`, `a`, `c`, `I`)**: Multi-segment body shell with glowing multi-eyes.
-  - **Canines & Beasts (`C`, `f`, `q`, `r`, `Z`)**: Four-legged beast geometry with snout and glowing eye slots.
+  - **Arachnids, Centipedes, Insects (`S`, `K`, `a`, `c`, `I`, `F`)**: Multi-segment body shell with glowing multi-eyes.
+  - **Canines & Beasts (`C`, `f`, `q`, `Z`, `R`, `J`)**: Four-legged beast geometry with snout and glowing eye slots.
   - **Dragons & Hydras (`d`, `D`, `M`)**: Draconic spire with curved horn crests and blazing eyes.
   - **Elementals & Vortices (`E`, `v`)**: Faceted crystal prism with spinning orbital rings.
-  - **Golems (`g`, `X`)**: Monolithic stone column with glowing runic visor slit.
+  - **Golems (`g`, `X`, `x`)**: Monolithic stone column with glowing runic visor slit.
   - **Quylthulgs (`Q`)**: Pulsating otherworldly hovering orb.
 
 ### C. Solid Stone Block Masonry & Architectural Geometry (`client/scripts/DungeonWorld.cs`)
@@ -54,9 +62,9 @@
 - **Portal Structure**: Composite procedural meshes consisting of stone jamb posts (`X = \pm 0.85\text{ m}`), top stone lintel spanning to the $3.0\text{ m}$ ceiling, and threshold step.
 - **Corridor Alignment**: Dynamic orientation detection evaluating adjacent orthogonal squares to orient doorways across corridor paths (North-South vs East-West).
 - **Door States**:
-  - **Closed**: Sturdy oak plank door leaf with forged iron straps, round rivets, and latch ring.
-  - **Open**: Swung-open door leaf resting against the corridor wall jamb.
-  - **Broken**: Splintered planks scattered across the floor.
+  - **Closed**: Sturdy oak plank door panel sealing the doorway, reinforced with top and bottom forged iron straps and handle rings.
+  - **Open**: Open doorway archway with an angled ($70^\circ$) swung-open wooden door leaf on heavy iron hinge brackets, making open corridors clearly passable at a glance in 3D.
+  - **Broken**: Splintered wooden debris and planks scattered across the floor with a broken remnant clinging to the top hinge.
   - **Floor Underlay**: Automatic floor tile placed beneath all doorway and stair cells.
 
 ### E. Items (`ItemModelResolver.cs`) & Atmosphere

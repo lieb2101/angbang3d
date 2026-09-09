@@ -161,6 +161,10 @@ public static class MonsterModelResolver
                     ApplyEtherealMaterial(instance, color);
                     entity.IsEthereal = true;
                 }
+                else
+                {
+                    ApplyCharacterSkinAndTint(instance, glyph, lowerName, color);
+                }
 
                 entity.IsFloating = isFloating;
                 entity.BaseY = isFloating ? 0.35f : 0.0f;
@@ -204,176 +208,209 @@ public static class MonsterModelResolver
     private static (string ModelPath, float Scale, bool IsEthereal, bool IsFloating, float Speed) ResolveModelConfig(
         char glyph, string raceName, string lowerName)
     {
-        // 1. Ghosts, Spectres, Wraiths, Phantoms, Shadows (G, W)
-        if (glyph == 'G' || lowerName.Contains("ghost") || lowerName.Contains("spectre") ||
-            lowerName.Contains("wraith") || lowerName.Contains("phantom") || lowerName.Contains("shade") ||
-            lowerName.Contains("poltergeist") || lowerName.Contains("shadow"))
+        switch (glyph)
         {
-            return ("res://assets/models/characters/Rogue_Hooded.glb", 0.90f, true, true, 0.8f);
-        }
+            // 1. Ghosts, Spectres, Poltergeists (G)
+            case 'G':
+                return ("res://assets/models/characters/Rogue_Hooded.glb", 0.90f, true, true, 0.8f);
 
-        // 2. Liches and Undead Spellcasters (L, W)
-        if (glyph == 'L' || lowerName.Contains("lich") || lowerName.Contains("arch-lich") ||
-            lowerName.Contains("wight") || lowerName.Contains("necromancer"))
-        {
-            return ("res://assets/models/characters/Skeleton_Mage.glb", 1.05f, false, false, 0.9f);
-        }
+            // 2. Wights, Wraiths, Nazgul, Ringwraiths (W)
+            case 'W':
+                if (lowerName.Contains("wight"))
+                    return ("res://assets/models/characters/Skeleton_Warrior.glb", 0.95f, true, false, 0.85f);
+                return ("res://assets/models/characters/Rogue_Hooded.glb", 0.95f, true, true, 0.85f);
 
-        // 3. Skeletons (s)
-        if (glyph == 's' || lowerName.Contains("skeleton"))
-        {
-            if (lowerName.Contains("archer") || lowerName.Contains("scout") || lowerName.Contains("sniper"))
-                return ("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, false, false, 1.0f);
-            if (lowerName.Contains("mage") || lowerName.Contains("sorcerer") || lowerName.Contains("druj"))
-                return ("res://assets/models/characters/Skeleton_Mage.glb", 0.90f, false, false, 0.9f);
-            if (lowerName.Contains("minion") || lowerName.Contains("decayed") || lowerName.Contains("small") ||
-                lowerName.Contains("crawler") || lowerName.Contains("broken"))
-                return ("res://assets/models/characters/Skeleton_Minion.glb", 0.70f, false, false, 1.1f);
-            if (lowerName.Contains("lord") || lowerName.Contains("king") || lowerName.Contains("knight") ||
-                lowerName.Contains("champion"))
-                return ("res://assets/models/characters/Skeleton_Warrior.glb", 1.20f, false, false, 1.0f);
+            // 3. Liches and Arch-Liches (L)
+            case 'L':
+                return ("res://assets/models/characters/Skeleton_Mage.glb", 1.10f, false, false, 0.9f);
 
-            return ("res://assets/models/characters/Skeleton_Warrior.glb", 0.95f, false, false, 1.0f);
-        }
+            // 4. Skeletons (s)
+            case 's':
+                if (lowerName.Contains("archer") || lowerName.Contains("scout") || lowerName.Contains("sniper"))
+                    return ("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, false, false, 1.0f);
+                if (lowerName.Contains("mage") || lowerName.Contains("sorcerer") || lowerName.Contains("druj"))
+                    return ("res://assets/models/characters/Skeleton_Mage.glb", 0.90f, false, false, 0.9f);
+                if (lowerName.Contains("minion") || lowerName.Contains("decayed") || lowerName.Contains("small") ||
+                    lowerName.Contains("crawler") || lowerName.Contains("broken"))
+                    return ("res://assets/models/characters/Skeleton_Minion.glb", 0.70f, false, false, 1.1f);
+                if (lowerName.Contains("lord") || lowerName.Contains("king") || lowerName.Contains("knight") ||
+                    lowerName.Contains("champion"))
+                    return ("res://assets/models/characters/Skeleton_Warrior.glb", 1.20f, false, false, 1.0f);
+                return ("res://assets/models/characters/Skeleton_Warrior.glb", 0.95f, false, false, 1.0f);
 
-        // 4. Zombies, Mummies, Ghouls (z)
-        if (glyph == 'z' || lowerName.Contains("zombie") || lowerName.Contains("mummy") ||
-            lowerName.Contains("ghoul") || lowerName.Contains("flesh golem"))
-        {
-            if (lowerName.Contains("mummy") || lowerName.Contains("greater"))
-                return ("res://assets/models/characters/Skeleton_Warrior.glb", 1.05f, false, false, 0.75f);
-            return ("res://assets/models/characters/Skeleton_Minion.glb", 0.85f, false, false, 0.70f);
-        }
+            // 5. Zombies, Mummies, Ghouls (z)
+            case 'z':
+                if (lowerName.Contains("mummy") || lowerName.Contains("greater") || lowerName.Contains("pharaoh"))
+                    return ("res://assets/models/characters/Skeleton_Warrior.glb", 1.05f, false, false, 0.75f);
+                return ("res://assets/models/characters/Skeleton_Minion.glb", 0.85f, false, false, 0.70f);
 
-        // 5. Vampires (V)
-        if (glyph == 'V' || lowerName.Contains("vampire"))
-        {
-            return ("res://assets/models/characters/Rogue_Hooded.glb", 1.0f, false, false, 1.05f);
-        }
+            // 6. Vampires (V)
+            case 'V':
+                return ("res://assets/models/characters/Rogue_Hooded.glb", 1.0f, false, false, 1.05f);
 
-        // 6. Ents & Trees (l)
-        if (glyph == 'l' || lowerName.Contains("tree") || lowerName.Contains("ent") || lowerName.Contains("huorn"))
-        {
-            return ("res://assets/models/props/tree_dead_large.gltf", 1.10f, false, false, 0.5f);
-        }
+            // 7. Ainur, Maiar (A)
+            case 'A':
+                return ("res://assets/models/characters/Mage.glb", 1.15f, false, false, 1.0f);
 
-        // 7. Mimics & Creeping Coins (?, $)
-        if (glyph == '?' || lowerName.Contains("mimic"))
-        {
-            return ("res://assets/models/dungeon/chest.glb", 0.85f, false, false, 1.0f);
-        }
-        if (glyph == '$' || lowerName.Contains("creeping coins") || lowerName.Contains("copper coins") ||
-            lowerName.Contains("silver coins") || lowerName.Contains("gold coins") || lowerName.Contains("mithril coins"))
-        {
-            return ("res://assets/models/dungeon/coin_stack_large.gltf.glb", 0.90f, false, false, 1.0f);
-        }
+            // 8. Major Demons, Balrogs, Pit Fiends (U)
+            case 'U':
+                return ("res://assets/models/characters/Barbarian.glb", 1.65f, false, false, 1.0f);
 
-        // 8. Demons (u, U)
-        if (glyph == 'u' || lowerName.Contains("minor demon") || lowerName.Contains("imp") ||
-            lowerName.Contains("quasit") || lowerName.Contains("lemure") || lowerName.Contains("homunculus"))
-        {
-            return ("res://assets/models/characters/Skeleton_Minion.glb", 0.65f, false, false, 1.2f);
-        }
-        if (glyph == 'U' || lowerName.Contains("major demon") || lowerName.Contains("balrog") ||
-            lowerName.Contains("pit fiend") || lowerName.Contains("demon lord") || lowerName.Contains("marilith") ||
-            lowerName.Contains("vrock") || lowerName.Contains("hezrou") || lowerName.Contains("glabrezu"))
-        {
-            return ("res://assets/models/characters/Barbarian.glb", 1.65f, false, false, 1.0f);
-        }
+            // 9. Minor Demons, Imps, Quasits, Lemures (u)
+            case 'u':
+                return ("res://assets/models/characters/Skeleton_Minion.glb", 0.65f, false, false, 1.2f);
 
-        // 9. Giants (P)
-        if (glyph == 'P' || lowerName.Contains("giant") || lowerName.Contains("titan") || lowerName.Contains("cyclops"))
-        {
-            return ("res://assets/models/characters/Barbarian.glb", 1.75f, false, false, 0.85f);
-        }
+            // 10. Giants, Titans, Cyclops, Morgoth (P)
+            case 'P':
+                if (lowerName.Contains("morgoth"))
+                    return ("res://assets/models/characters/Barbarian.glb", 2.0f, false, false, 0.85f);
+                return ("res://assets/models/characters/Barbarian.glb", 1.75f, false, false, 0.85f);
 
-        // 10. Trolls (T)
-        if (glyph == 'T' || lowerName.Contains("troll"))
-        {
-            return ("res://assets/models/characters/Barbarian.glb", 1.45f, false, false, 0.90f);
-        }
+            // 11. Trolls (T)
+            case 'T':
+                return ("res://assets/models/characters/Barbarian.glb", 1.45f, false, false, 0.90f);
 
-        // 11. Ogres (O)
-        if (glyph == 'O' || lowerName.Contains("ogre"))
-        {
-            return ("res://assets/models/characters/Barbarian.glb", 1.30f, false, false, 0.95f);
-        }
+            // 12. Ogres (O)
+            case 'O':
+                return ("res://assets/models/characters/Barbarian.glb", 1.30f, false, false, 0.95f);
 
-        // 12. Orcs (o)
-        if (glyph == 'o' || lowerName.Contains("orc") || lowerName.Contains("uruk") || lowerName.Contains("snaga"))
-        {
-            if (lowerName.Contains("shaman") || lowerName.Contains("mage") || lowerName.Contains("curse"))
-                return ("res://assets/models/characters/Skeleton_Mage.glb", 0.85f, false, false, 1.0f);
-            if (lowerName.Contains("archer") || lowerName.Contains("scout") || lowerName.Contains("tracker"))
-                return ("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, false, false, 1.05f);
-            return ("res://assets/models/characters/Barbarian.glb", 0.90f, false, false, 1.0f);
-        }
+            // 13. Yetis (Y)
+            case 'Y':
+                return ("res://assets/models/characters/Barbarian.glb", 1.30f, false, false, 0.90f);
 
-        // 13. Kobolds (k) and Yeeks (y)
-        if (glyph == 'k' || glyph == 'y' || lowerName.Contains("kobold") || lowerName.Contains("yeek"))
-        {
-            return ("res://assets/models/characters/Skeleton_Minion.glb", 0.60f, false, false, 1.15f);
-        }
+            // 14. Orcs, Goblins, Snagas, Uruks (o)
+            case 'o':
+                if (lowerName.Contains("shaman") || lowerName.Contains("mage") || lowerName.Contains("curse"))
+                    return ("res://assets/models/characters/Skeleton_Mage.glb", 0.85f, false, false, 1.0f);
+                if (lowerName.Contains("archer") || lowerName.Contains("scout") || lowerName.Contains("tracker") || lowerName.Contains("sniper"))
+                    return ("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, false, false, 1.05f);
+                return ("res://assets/models/characters/Barbarian.glb", 0.88f, false, false, 1.0f);
 
-        // 14. Humanoids, Adventurers, Warriors, Townspeople (p, h, t)
-        if (glyph is 'p' or 'h' or 't' || lowerName.Contains("human") || lowerName.Contains("person") ||
-            lowerName.Contains("elf") || lowerName.Contains("dwarf") || lowerName.Contains("hobbit") ||
-            lowerName.Contains("gnome") || lowerName.Contains("halfling"))
-        {
-            float scale = 0.90f;
-            if (lowerName.Contains("dwarf") || lowerName.Contains("hobbit") || lowerName.Contains("gnome") ||
-                lowerName.Contains("halfling") || lowerName.Contains("leprechaun"))
+            // 15. Kobolds (k) and Yeeks (y)
+            case 'k':
+            case 'y':
+                return ("res://assets/models/characters/Skeleton_Minion.glb", 0.60f, false, false, 1.15f);
+
+            // 16. Ents & Trees (l)
+            case 'l':
+                return ("res://assets/models/props/tree_dead_large.gltf", 1.10f, false, false, 0.5f);
+
+            // 17. Mimics (?) and Creeping Coins ($)
+            case '?':
+                return ("res://assets/models/dungeon/chest.glb", 0.85f, false, false, 1.0f);
+            case '$':
+                return ("res://assets/models/dungeon/coin_stack_large.gltf.glb", 0.90f, false, false, 1.0f);
+
+            // 18. Humanoids, Elves, Dwarves, Hobbits, Gnomes (h)
+            case 'h':
             {
-                scale = 0.65f;
-            }
-            else if (lowerName.Contains("elf") || lowerName.Contains("ranger") || lowerName.Contains("dunedain"))
-            {
-                scale = 0.98f;
-            }
+                float scale = 0.90f;
+                if (lowerName.Contains("dwarf") || lowerName.Contains("hobbit") || lowerName.Contains("gnome") ||
+                    lowerName.Contains("halfling") || lowerName.Contains("leprechaun"))
+                {
+                    scale = 0.65f;
+                }
+                else if (lowerName.Contains("elf") || lowerName.Contains("ranger") || lowerName.Contains("dunedain"))
+                {
+                    scale = 0.98f;
+                }
 
-            if (lowerName.Contains("knight") || lowerName.Contains("paladin") || lowerName.Contains("veteran") ||
-                lowerName.Contains("warrior") || lowerName.Contains("soldier") || lowerName.Contains("guard") ||
-                lowerName.Contains("captain") || lowerName.Contains("fighter") || lowerName.Contains("champion") ||
-                lowerName.Contains("swordsman") || lowerName.Contains("centurion"))
-            {
-                return ("res://assets/models/characters/Knight.glb", scale * 1.05f, false, false, 1.0f);
-            }
+                if (lowerName.Contains("knight") || lowerName.Contains("paladin") || lowerName.Contains("veteran") ||
+                    lowerName.Contains("warrior") || lowerName.Contains("soldier") || lowerName.Contains("guard") ||
+                    lowerName.Contains("captain") || lowerName.Contains("fighter") || lowerName.Contains("champion") ||
+                    lowerName.Contains("swordsman") || lowerName.Contains("centurion"))
+                {
+                    return ("res://assets/models/characters/Knight.glb", scale * 1.05f, false, false, 1.0f);
+                }
 
-            if (lowerName.Contains("barbarian") || lowerName.Contains("mercenary") || lowerName.Contains("gladiator") ||
-                lowerName.Contains("berserker") || lowerName.Contains("bouncer") || lowerName.Contains("ruffian") ||
-                lowerName.Contains("beastman"))
-            {
-                return ("res://assets/models/characters/Barbarian.glb", scale * 1.10f, false, false, 1.0f);
-            }
+                if (lowerName.Contains("barbarian") || lowerName.Contains("mercenary") || lowerName.Contains("gladiator") ||
+                    lowerName.Contains("berserker") || lowerName.Contains("bouncer") || lowerName.Contains("ruffian") ||
+                    lowerName.Contains("beastman"))
+                {
+                    return ("res://assets/models/characters/Barbarian.glb", scale * 1.10f, false, false, 1.0f);
+                }
 
-            if (lowerName.Contains("mage") || lowerName.Contains("wizard") || lowerName.Contains("warlock") ||
-                lowerName.Contains("sorcerer") || lowerName.Contains("alchemist") || lowerName.Contains("scholar") ||
-                lowerName.Contains("priest") || lowerName.Contains("cleric") || lowerName.Contains("sage") ||
-                lowerName.Contains("acolyte") || lowerName.Contains("cultist") || lowerName.Contains("druid") ||
-                lowerName.Contains("seer") || lowerName.Contains("shaman") || lowerName.Contains("enchanter"))
-            {
-                return ("res://assets/models/characters/Mage.glb", scale * 0.95f, false, false, 0.95f);
+                if (lowerName.Contains("mage") || lowerName.Contains("wizard") || lowerName.Contains("warlock") ||
+                    lowerName.Contains("sorcerer") || lowerName.Contains("alchemist") || lowerName.Contains("scholar") ||
+                    lowerName.Contains("priest") || lowerName.Contains("cleric") || lowerName.Contains("sage") ||
+                    lowerName.Contains("acolyte") || lowerName.Contains("cultist") || lowerName.Contains("druid") ||
+                    lowerName.Contains("seer") || lowerName.Contains("shaman") || lowerName.Contains("enchanter"))
+                {
+                    return ("res://assets/models/characters/Mage.glb", scale * 0.95f, false, false, 0.95f);
+                }
+
+                if (lowerName.Contains("thief") || lowerName.Contains("rogue") || lowerName.Contains("burglar") ||
+                    lowerName.Contains("assassin") || lowerName.Contains("cutpurse") || lowerName.Contains("beggar") ||
+                    lowerName.Contains("scoundrel") || lowerName.Contains("bandit") || lowerName.Contains("brigand") ||
+                    lowerName.Contains("ninja") || lowerName.Contains("scout") || lowerName.Contains("stalker"))
+                {
+                    return ("res://assets/models/characters/Rogue_Hooded.glb", scale * 0.95f, false, false, 1.05f);
+                }
+
+                return ("res://assets/models/characters/Rogue.glb", scale, false, false, 1.0f);
             }
 
-            if (lowerName.Contains("thief") || lowerName.Contains("rogue") || lowerName.Contains("burglar") ||
-                lowerName.Contains("assassin") || lowerName.Contains("cutpurse") || lowerName.Contains("beggar") ||
-                lowerName.Contains("scoundrel") || lowerName.Contains("bandit") || lowerName.Contains("brigand") ||
-                lowerName.Contains("ninja") || lowerName.Contains("scout") || lowerName.Contains("stalker"))
+            // 19. People, Adventurers, Mercenaries, Warriors, Mages (p)
+            case 'p':
             {
-                return ("res://assets/models/characters/Rogue_Hooded.glb", scale * 0.95f, false, false, 1.05f);
+                float scale = 0.95f;
+                if (lowerName.Contains("knight") || lowerName.Contains("paladin") || lowerName.Contains("veteran") ||
+                    lowerName.Contains("warrior") || lowerName.Contains("soldier") || lowerName.Contains("guard") ||
+                    lowerName.Contains("captain") || lowerName.Contains("fighter") || lowerName.Contains("champion") ||
+                    lowerName.Contains("swordsman") || lowerName.Contains("centurion"))
+                {
+                    return ("res://assets/models/characters/Knight.glb", scale * 1.05f, false, false, 1.0f);
+                }
+
+                if (lowerName.Contains("barbarian") || lowerName.Contains("mercenary") || lowerName.Contains("gladiator") ||
+                    lowerName.Contains("berserker") || lowerName.Contains("bouncer") || lowerName.Contains("ruffian") ||
+                    lowerName.Contains("beastman"))
+                {
+                    return ("res://assets/models/characters/Barbarian.glb", scale * 1.10f, false, false, 1.0f);
+                }
+
+                if (lowerName.Contains("mage") || lowerName.Contains("wizard") || lowerName.Contains("warlock") ||
+                    lowerName.Contains("sorcerer") || lowerName.Contains("alchemist") || lowerName.Contains("scholar") ||
+                    lowerName.Contains("priest") || lowerName.Contains("cleric") || lowerName.Contains("sage") ||
+                    lowerName.Contains("acolyte") || lowerName.Contains("cultist") || lowerName.Contains("druid") ||
+                    lowerName.Contains("seer") || lowerName.Contains("shaman") || lowerName.Contains("enchanter") ||
+                    lowerName.Contains("necromancer"))
+                {
+                    return ("res://assets/models/characters/Mage.glb", scale * 0.95f, false, false, 0.95f);
+                }
+
+                if (lowerName.Contains("thief") || lowerName.Contains("rogue") || lowerName.Contains("burglar") ||
+                    lowerName.Contains("assassin") || lowerName.Contains("cutpurse") || lowerName.Contains("beggar") ||
+                    lowerName.Contains("scoundrel") || lowerName.Contains("bandit") || lowerName.Contains("brigand") ||
+                    lowerName.Contains("ninja") || lowerName.Contains("scout") || lowerName.Contains("stalker"))
+                {
+                    return ("res://assets/models/characters/Rogue_Hooded.glb", scale * 0.95f, false, false, 1.05f);
+                }
+
+                return ("res://assets/models/characters/Rogue.glb", scale, false, false, 1.0f);
             }
 
-            if (glyph == 't')
+            // 20. Townsfolk (t)
+            case 't':
             {
+                float scale = 0.85f;
+                if (lowerName.Contains("dwarf") || lowerName.Contains("hobbit") || lowerName.Contains("gnome") ||
+                    lowerName.Contains("halfling"))
+                {
+                    scale = 0.65f;
+                }
                 var townModel = SelectTownspersonModel(raceName);
                 return (townModel, scale, false, false, 1.0f);
             }
 
-            return ("res://assets/models/characters/Rogue.glb", scale, false, false, 1.0f);
-        }
+            // 21. Nagas (n)
+            case 'n':
+                return ("res://assets/models/characters/Mage.glb", 0.90f, false, false, 0.95f);
 
-        // Non-humanoids will use procedural 3D tokens
-        return (null, 1.0f, false, false, 1.0f);
+            // All non-humanoid glyphs (r, C, f, q, Z, R, J, a, c, S, K, I, F, b, B, d, D, M, e, E, v, g, X, x, Q, j, w, i, m, ,, etc.)
+            default:
+                return (null, 1.0f, false, false, 1.0f);
+        }
     }
 
     private static string SelectTownspersonModel(string raceName)
@@ -417,15 +454,28 @@ public static class MonsterModelResolver
                 height = 0.80f;
                 break;
 
-            case 'S' or 'K' or 'a' or 'c' or 'I': // Spider, Scorpion, Killer Beetle, Ant, Centipede, Insect
-                var archScale = glyph == 'K' ? 1.3f : 0.9f;
+            case 'S' or 'K' or 'a' or 'c' or 'I' or 'F': // Spider, Scorpion, Killer Beetle, Ant, Centipede, Insect, Dragonfly
+                var archScale = glyph == 'K' ? 1.3f : (glyph == 'a' || glyph == 'I') ? 0.75f : 0.95f;
                 tokenBody = CreateArachnidToken(color, archScale);
                 height = 0.55f + 0.50f * archScale;
+                if (glyph == 'F') isFloating = true;
                 break;
 
-            case 'C' or 'f' or 'q' or 'r' or 'Z': // Canine, Wolf, Feline, Quadruped, Rodent, Zephyr Hound
-                var beastScale = glyph == 'r' ? 0.65f : 1.0f;
-                tokenBody = CreateBeastToken(color, beastScale);
+            case 'b' or 'B': // Bat, Bird, Crow, Raven, Eagle
+                var isBird = glyph == 'B';
+                tokenBody = CreateBatToken(color, isBird);
+                height = 1.05f;
+                isFloating = true;
+                break;
+
+            case 'r': // Rodent (Giant white mouse, rat, cave rat)
+                tokenBody = CreateBeastToken(color, 0.50f, isRodent: true);
+                height = 0.45f;
+                break;
+
+            case 'C' or 'f' or 'q' or 'Z' or 'R' or 'J' or 'H': // Canine, Feline, Quadruped, Zephyr Hound, Reptile, Snake, Hybrid
+                var beastScale = (glyph == 'R' || glyph == 'J') ? 0.80f : 1.0f;
+                tokenBody = CreateBeastToken(color, beastScale, isRodent: false);
                 height = 0.50f + 0.45f * beastScale;
                 break;
 
@@ -465,6 +515,48 @@ public static class MonsterModelResolver
         entity.ModelHeight = height;
 
         entity.CharacterNode.AddChild(tokenBody);
+    }
+
+    private static Node3D CreateBatToken(Color glowColor, bool isBird)
+    {
+        var container = new Node3D { Position = new Vector3(0, 0.65f, 0) };
+
+        // Body
+        var bodyMesh = new BoxMesh { Size = isBird ? new Vector3(0.22f, 0.20f, 0.35f) : new Vector3(0.18f, 0.18f, 0.28f) };
+        var bodyColor = isBird
+            ? new Color(0.25f, 0.22f, 0.20f).Lerp(glowColor, 0.4f)
+            : new Color(0.15f, 0.12f, 0.14f).Lerp(glowColor, 0.3f);
+        var bodyMat = new StandardMaterial3D { AlbedoColor = bodyColor, Roughness = 0.6f };
+        container.AddChild(new MeshInstance3D { Mesh = bodyMesh, MaterialOverride = bodyMat, Position = new Vector3(0, 0.10f, 0) });
+
+        // Left & Right Wings (angled)
+        var wingMesh = new BoxMesh { Size = new Vector3(0.35f, 0.02f, 0.22f) };
+        var wingMat = new StandardMaterial3D { AlbedoColor = bodyColor * 0.9f, Roughness = 0.7f };
+
+        var wingL = new MeshInstance3D
+        {
+            Mesh = wingMesh,
+            MaterialOverride = wingMat,
+            Position = new Vector3(0.24f, 0.14f, 0),
+            Rotation = new Vector3(0, 0, Mathf.DegToRad(15)),
+        };
+        var wingR = new MeshInstance3D
+        {
+            Mesh = wingMesh,
+            MaterialOverride = wingMat,
+            Position = new Vector3(-0.24f, 0.14f, 0),
+            Rotation = new Vector3(0, 0, Mathf.DegToRad(-15)),
+        };
+        container.AddChild(wingL);
+        container.AddChild(wingR);
+
+        // Glowing Eyes
+        var eyeMesh = new SphereMesh { Radius = 0.035f, Height = 0.07f, RadialSegments = 8, Rings = 4 };
+        var eyeMat = new StandardMaterial3D { AlbedoColor = glowColor, EmissionEnabled = true, Emission = glowColor, EmissionEnergyMultiplier = 1.6f };
+        container.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(0.06f, 0.14f, 0.16f) });
+        container.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-0.06f, 0.14f, 0.16f) });
+
+        return container;
     }
 
     private static Node3D CreateEyeToken(Color glowColor)
@@ -588,7 +680,8 @@ public static class MonsterModelResolver
 
         // Abdomen
         var bodyMesh = new SphereMesh { Radius = 0.28f, Height = 0.38f, RadialSegments = 12, Rings = 6 };
-        var bodyMat = new StandardMaterial3D { AlbedoColor = new Color(0.15f, 0.14f, 0.16f), Roughness = 0.4f, Metallic = 0.3f };
+        var bodyColor = new Color(0.15f, 0.14f, 0.16f).Lerp(glowColor, 0.25f);
+        var bodyMat = new StandardMaterial3D { AlbedoColor = bodyColor, Roughness = 0.4f, Metallic = 0.3f };
         container.AddChild(new MeshInstance3D { Mesh = bodyMesh, MaterialOverride = bodyMat, Position = new Vector3(0, 0.18f, -0.12f) });
 
         // Cephalothorax (head)
@@ -604,24 +697,38 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateBeastToken(Color glowColor, float scale)
+    private static Node3D CreateBeastToken(Color glowColor, float scale, bool isRodent = false)
     {
-        var container = new Node3D { Position = new Vector3(0, 0.15f, 0), Scale = new Vector3(scale, scale, scale) };
+        var container = new Node3D { Position = new Vector3(0, 0.10f, 0), Scale = new Vector3(scale, scale, scale) };
+
+        var furColor = new Color(0.20f, 0.18f, 0.16f).Lerp(glowColor, isRodent ? 0.65f : 0.40f);
+        var bodyMat = new StandardMaterial3D { AlbedoColor = furColor, Roughness = 0.7f };
 
         // Beast body block
-        var bodyMesh = new BoxMesh { Size = new Vector3(0.35f, 0.35f, 0.65f) };
-        var bodyMat = new StandardMaterial3D { AlbedoColor = new Color(0.22f, 0.18f, 0.15f), Roughness = 0.7f };
-        container.AddChild(new MeshInstance3D { Mesh = bodyMesh, MaterialOverride = bodyMat, Position = new Vector3(0, 0.24f, 0) });
+        var bodySize = isRodent ? new Vector3(0.25f, 0.20f, 0.45f) : new Vector3(0.35f, 0.35f, 0.65f);
+        var bodyMesh = new BoxMesh { Size = bodySize };
+        container.AddChild(new MeshInstance3D { Mesh = bodyMesh, MaterialOverride = bodyMat, Position = new Vector3(0, bodySize.Y * 0.5f, 0) });
 
-        // Head with muzzle
-        var headMesh = new BoxMesh { Size = new Vector3(0.28f, 0.25f, 0.32f) };
-        container.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = bodyMat, Position = new Vector3(0, 0.38f, 0.38f) });
+        // Head with muzzle / snout
+        var headSize = isRodent ? new Vector3(0.18f, 0.15f, 0.22f) : new Vector3(0.28f, 0.25f, 0.32f);
+        var headMesh = new BoxMesh { Size = headSize };
+        container.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = bodyMat, Position = new Vector3(0, bodySize.Y * 0.5f + headSize.Y * 0.3f, bodySize.Z * 0.45f) });
+
+        // Ears for rodents
+        if (isRodent)
+        {
+            var earMesh = new BoxMesh { Size = new Vector3(0.06f, 0.08f, 0.03f) };
+            container.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = bodyMat, Position = new Vector3(0.08f, bodySize.Y * 0.5f + headSize.Y * 0.8f, bodySize.Z * 0.40f) });
+            container.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = bodyMat, Position = new Vector3(-0.08f, bodySize.Y * 0.5f + headSize.Y * 0.8f, bodySize.Z * 0.40f) });
+        }
 
         // Glowing eyes
-        var eyeMesh = new BoxMesh { Size = new Vector3(0.05f, 0.05f, 0.05f) };
-        var eyeMat = new StandardMaterial3D { AlbedoColor = glowColor, EmissionEnabled = true, Emission = glowColor, EmissionEnergyMultiplier = 1.6f };
-        container.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(0.09f, 0.42f, 0.52f) });
-        container.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-0.09f, 0.42f, 0.52f) });
+        var eyeSize = isRodent ? 0.035f : 0.05f;
+        var eyeMesh = new BoxMesh { Size = new Vector3(eyeSize, eyeSize, eyeSize) };
+        var eyeColor = isRodent && (glowColor == Colors.White || glowColor.V > 0.9f) ? new Color(0.95f, 0.25f, 0.30f) : glowColor;
+        var eyeMat = new StandardMaterial3D { AlbedoColor = eyeColor, EmissionEnabled = true, Emission = eyeColor, EmissionEnergyMultiplier = 1.6f };
+        container.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(headSize.X * 0.35f, bodySize.Y * 0.5f + headSize.Y * 0.4f, bodySize.Z * 0.45f + headSize.Z * 0.45f) });
+        container.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-headSize.X * 0.35f, bodySize.Y * 0.5f + headSize.Y * 0.4f, bodySize.Z * 0.45f + headSize.Z * 0.45f) });
 
         return container;
     }
@@ -838,19 +945,86 @@ public static class MonsterModelResolver
         }
     }
 
+    private static void ApplyCharacterSkinAndTint(Node node, char glyph, string lowerName, Color tintColor)
+    {
+        bool isDemon = glyph == 'U' || glyph == 'u';
+        bool isAinu = glyph == 'A';
+        bool isUndead = glyph == 's' || glyph == 'z' || glyph == 'L' || glyph == 'V';
+
+        ApplySkinRecursive(node, tintColor, isDemon, isAinu, isUndead);
+    }
+
+    private static void ApplySkinRecursive(Node node, Color tintColor, bool isDemon, bool isAinu, bool isUndead)
+    {
+        if (node is MeshInstance3D mi)
+        {
+            Texture2D origTex = null;
+            if (mi.GetActiveMaterial(0) is StandardMaterial3D existingMat)
+            {
+                origTex = existingMat.AlbedoTexture;
+            }
+
+            var mat = new StandardMaterial3D
+            {
+                AlbedoTexture = origTex,
+                Roughness = 0.55f,
+            };
+
+            if (isDemon)
+            {
+                mat.AlbedoColor = Colors.White.Lerp(new Color(0.95f, 0.35f, 0.20f), 0.55f);
+                mat.EmissionEnabled = true;
+                mat.Emission = new Color(0.95f, 0.30f, 0.10f);
+                mat.EmissionEnergyMultiplier = 0.85f;
+            }
+            else if (isAinu)
+            {
+                mat.AlbedoColor = Colors.White.Lerp(tintColor, 0.35f);
+                mat.EmissionEnabled = true;
+                mat.Emission = tintColor;
+                mat.EmissionEnergyMultiplier = 0.65f;
+            }
+            else if (isUndead)
+            {
+                // Subtle bone/cold tint for undead
+                mat.AlbedoColor = Colors.White.Lerp(tintColor, 0.30f);
+            }
+            else
+            {
+                // Natural character skin tint modulated with creature color
+                mat.AlbedoColor = Colors.White.Lerp(tintColor, 0.40f);
+            }
+
+            mi.MaterialOverride = mat;
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            ApplySkinRecursive(child, tintColor, isDemon, isAinu, isUndead);
+        }
+    }
+
     private static void ApplyEtherealMaterial(Node node, Color spectralColor)
     {
         if (node is MeshInstance3D mi)
         {
+            Texture2D origTex = null;
+            if (mi.GetActiveMaterial(0) is StandardMaterial3D existingMat)
+            {
+                origTex = existingMat.AlbedoTexture;
+            }
+
             var mat = new StandardMaterial3D
             {
-                AlbedoColor = new Color(spectralColor.R, spectralColor.G, spectralColor.B, 0.45f),
+                AlbedoTexture = origTex,
+                AlbedoColor = new Color(spectralColor.R, spectralColor.G, spectralColor.B, 0.55f),
                 Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                Roughness = 0.2f,
+                Roughness = 0.25f,
                 Metallic = 0.1f,
                 EmissionEnabled = true,
-                Emission = spectralColor,
-                EmissionEnergyMultiplier = 1.25f,
+                Emission = spectralColor * 0.6f,
+                EmissionEnergyMultiplier = 0.9f,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             };
             mi.MaterialOverride = mat;
         }

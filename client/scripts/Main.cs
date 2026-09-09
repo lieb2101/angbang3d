@@ -362,6 +362,24 @@ public partial class Main : Node
                && !ui.GetProperty("more").GetBoolean();
     }
 
+    private static bool IsInContextMenu(JsonElement frame)
+    {
+        if (frame.GetProperty("phase").GetString() != "play")
+        {
+            return true;
+        }
+        if (!frame.TryGetProperty("ui", out var ui))
+        {
+            return false;
+        }
+        if (ui.GetProperty("overlay").GetInt32() > 0)
+        {
+            return true;
+        }
+        return !ui.GetProperty("awaiting_command").GetBoolean()
+               || ui.GetProperty("more").GetBoolean();
+    }
+
     /// <summary>The pending prompt, if the game is waiting on something small.</summary>
     private static string PromptOf(JsonElement frame)
     {
@@ -493,26 +511,28 @@ public partial class Main : Node
         }
 
         var screen = Screen(frame);
-        if (screen.Contains("['esc' to step back, 's' to start over"))
+        if (screen.Contains("to start over", StringComparison.OrdinalIgnoreCase))
         {
             // Character summary review screen reached: stop auto-advancing so player can review / re-roll
             _randomRequested = false;
             return;
         }
 
-        if (screen.Contains("press any key to continue") || screen.Contains("[press any key"))
+        if (screen.Contains("press any key to continue", StringComparison.OrdinalIgnoreCase)
+            || screen.Contains("[press any key", StringComparison.OrdinalIgnoreCase))
         {
             _bridge.SendKey("enter");
         }
-        else if (screen.Contains("select your character traits"))
+        else if (screen.Contains("select your character traits", StringComparison.OrdinalIgnoreCase))
         {
             _bridge.SendKey("@");
         }
-        else if (screen.Contains("-more-"))
+        else if (screen.Contains("-more-", StringComparison.OrdinalIgnoreCase))
         {
             _bridge.SendKey("enter");
         }
-        else if (screen.Contains("[y/n]") || screen.Contains("are you sure"))
+        else if (screen.Contains("[y/n]", StringComparison.OrdinalIgnoreCase)
+            || screen.Contains("are you sure", StringComparison.OrdinalIgnoreCase))
         {
             _bridge.SendKey("y");
         }
@@ -640,7 +660,18 @@ public partial class Main : Node
                     }
                     return;
                 case Key.Escape:
-                    if (_inPauseMenu)
+                    if (_overlay.MenuTitle == "LOAD GAME")
+                    {
+                        if (_inPauseMenu)
+                        {
+                            OpenPauseMenu();
+                        }
+                        else
+                        {
+                            OpenMenu();
+                        }
+                    }
+                    else if (_inPauseMenu)
                     {
                         _inMenu = false;
                         _inPauseMenu = false;
@@ -670,8 +701,35 @@ public partial class Main : Node
             return;
         }
 
+        var frame = _bridge.Frame;
+
+        if (frame.HasValue && frame.Value.GetProperty("phase").GetString() == "setup")
+        {
+            var screen = Screen(frame.Value);
+            if (screen.Contains("to start over", StringComparison.OrdinalIgnoreCase))
+            {
+                if (key.Keycode == Key.S)
+                {
+                    _randomRequested = true;
+                    _bridge.SendKey("s");
+                    GetViewport().SetInputAsHandled();
+                    return;
+                }
+            }
+        }
+
         if (key.Keycode == Key.Escape)
         {
+            if (frame.HasValue && IsInContextMenu(frame.Value))
+            {
+                if (!_bridge.Busy)
+                {
+                    _bridge.SendKey("escape");
+                    GetViewport().SetInputAsHandled();
+                }
+                return;
+            }
+
             OpenPauseMenu();
             GetViewport().SetInputAsHandled();
             return;
@@ -684,7 +742,6 @@ public partial class Main : Node
             return;
         }
 
-        var frame = _bridge.Frame;
         var inWorld = frame.HasValue && EffectiveMode(frame.Value) == ViewMode.World;
 
         // Capital M only: lowercase m is Angband's cast command.

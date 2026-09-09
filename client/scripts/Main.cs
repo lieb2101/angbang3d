@@ -30,9 +30,10 @@ public partial class Main : Node
     private string _saveName = "angband3d";
     private bool _manualRequested;
     private bool _inMenu;
+    private bool _inPauseMenu;
     private int _menuIndex;
     private int _autoMenuChoice;
-    private readonly System.Collections.Generic.List<(string Label, string Action)> _menu = new();
+    private readonly System.Collections.Generic.List<(string Label, Action Execute)> _menuItems = new();
 
     public override void _Ready()
     {
@@ -112,6 +113,19 @@ public partial class Main : Node
         return System.IO.Path.Combine(repo, "engine", "build", "game", "lib", "save");
     }
 
+    private static System.IO.FileInfo[] GetSaveFiles()
+    {
+        var dir = SaveDir();
+        if (!System.IO.Directory.Exists(dir))
+        {
+            return Array.Empty<System.IO.FileInfo>();
+        }
+        var di = new System.IO.DirectoryInfo(dir);
+        var files = di.GetFiles();
+        Array.Sort(files, (a, b) => b.LastWriteTime.CompareTo(a.LastWriteTime));
+        return files;
+    }
+
     private static bool SaveExists(string name) =>
         System.IO.File.Exists(System.IO.Path.Combine(SaveDir(), name));
 
@@ -135,49 +149,135 @@ public partial class Main : Node
     private void OpenMenu()
     {
         _inMenu = true;
+        _inPauseMenu = false;
         _menuIndex = 0;
-        _menu.Clear();
-        if (SaveExists(_saveName))
+        _menuItems.Clear();
+
+        var saves = GetSaveFiles();
+        if (saves.Length > 0)
         {
-            _menu.Add(($"Continue  -  {_saveName}", "continue"));
+            _menuItems.Add(($"Continue Last Played ({saves[0].Name})", () =>
+            {
+                _saveName = saves[0].Name;
+                _inMenu = false;
+                StartGame();
+            }));
+            _menuItems.Add(("Load Saved Game...", OpenLoadMenu));
         }
-        _menu.Add(("New character  -  choose race, class and stats", "manual"));
-        _menu.Add(("New character  -  roll one at random", "random"));
-        _menu.Add(("Quit", "quit"));
 
-        _overlay.Status = null;
-        _overlay.Mode = ViewMode.Menu;
-        _overlay.MenuItems = _menu.ConvertAll(m => m.Label).ToArray();
-        _overlay.MenuIndex = _menuIndex;
-        _overlay.QueueRedraw();
+        _menuItems.Add(("New Character (Custom - Race/Class/Stats)", () =>
+        {
+            _saveName = FreeSlot(_saveName);
+            _inMenu = false;
+            StartGame();
+        }));
+        _menuItems.Add(("New Character (Random)", () =>
+        {
+            _saveName = FreeSlot(_saveName);
+            _autoBirth = true;
+            _inMenu = false;
+            StartGame();
+        }));
+        _menuItems.Add(("Quit", () => GetTree().Quit()));
 
-        if (_autoMenuChoice > 0 && _autoMenuChoice <= _menu.Count)
+        RefreshMenuDisplay("A N G B A N D 3 D", "first person Angband 4.2.6");
+
+        if (_autoMenuChoice > 0 && _autoMenuChoice <= _menuItems.Count)
         {
             _menuIndex = _autoMenuChoice - 1;
-            GD.Print($"menu: auto-selecting {_menu[_menuIndex].Label}");
-            ChooseMenu();
+            GD.Print($"menu: auto-selecting {_menuItems[_menuIndex].Label}");
+            _menuItems[_menuIndex].Execute();
         }
     }
 
-    private void ChooseMenu()
+    private void OpenLoadMenu()
     {
-        switch (_menu[_menuIndex].Action)
+        _inMenu = true;
+        _menuIndex = 0;
+        _menuItems.Clear();
+
+        var saves = GetSaveFiles();
+        foreach (var file in saves)
         {
-            case "continue":
-                break;
-            case "manual":
-                _saveName = FreeSlot(_saveName);
-                break;
-            case "random":
-                _saveName = FreeSlot(_saveName);
-                _autoBirth = true;
-                break;
-            case "quit":
-                GetTree().Quit();
-                return;
+            var saveFile = file;
+            var label = $"{saveFile.Name}  ({saveFile.LastWriteTime:yyyy-MM-dd HH:mm})";
+            _menuItems.Add((label, () =>
+            {
+                _saveName = saveFile.Name;
+                _inMenu = false;
+                _inPauseMenu = false;
+                if (_bridge.Connected)
+                {
+                    _bridge.Stop();
+                }
+                StartGame();
+            }));
         }
-        _inMenu = false;
-        StartGame();
+
+        _menuItems.Add(("Back", _inPauseMenu ? OpenPauseMenu : OpenMenu));
+        RefreshMenuDisplay("LOAD GAME", "Select a character to load");
+    }
+
+    private void OpenPauseMenu()
+    {
+        _inMenu = true;
+        _inPauseMenu = true;
+        _menuIndex = 0;
+        _menuItems.Clear();
+
+        _menuItems.Add(("Resume Game", () =>
+        {
+            _inMenu = false;
+            _inPauseMenu = false;
+            if (_bridge.Frame is { } f)
+            {
+                _overlay.Mode = EffectiveMode(f);
+            }
+            _overlay.QueueRedraw();
+        }));
+
+        _menuItems.Add(("Save Game Now (Ctrl-S)", () =>
+        {
+            _bridge.SendKey("C-s");
+            _inMenu = false;
+            _inPauseMenu = false;
+            if (_bridge.Frame is { } f)
+            {
+                _overlay.Mode = EffectiveMode(f);
+            }
+            _overlay.QueueRedraw();
+        }));
+
+        _menuItems.Add(("Load Other Character...", OpenLoadMenu));
+
+        _menuItems.Add(("Save and Quit (Ctrl-X)", () =>
+        {
+            _bridge.SendKey("C-x");
+            _inMenu = false;
+            _inPauseMenu = false;
+            OpenMenu();
+        }));
+
+        _menuItems.Add(("Quit to Main Menu", () =>
+        {
+            _bridge.Stop();
+            _inMenu = false;
+            _inPauseMenu = false;
+            OpenMenu();
+        }));
+
+        RefreshMenuDisplay("GAME MENU", $"Current Character: {_saveName}");
+    }
+
+    private void RefreshMenuDisplay(string title, string subtitle)
+    {
+        _overlay.Status = null;
+        _overlay.Mode = ViewMode.Menu;
+        _overlay.MenuTitle = title;
+        _overlay.MenuSubtitle = subtitle;
+        _overlay.MenuItems = _menuItems.ConvertAll(m => m.Label).ToArray();
+        _overlay.MenuIndex = _menuIndex;
+        _overlay.QueueRedraw();
     }
 
     private void StartGame()
@@ -483,21 +583,48 @@ public partial class Main : Node
         {
             switch (key.Keycode)
             {
-                case Key.Up: _menuIndex = Mathf.PosMod(_menuIndex - 1, _menu.Count); break;
-                case Key.Down: _menuIndex = Mathf.PosMod(_menuIndex + 1, _menu.Count); break;
-                case Key.Enter or Key.KpEnter or Key.Space: ChooseMenu(); return;
-                case Key.Escape: GetTree().Quit(); return;
+                case Key.Up: _menuIndex = Mathf.PosMod(_menuIndex - 1, _menuItems.Count); break;
+                case Key.Down: _menuIndex = Mathf.PosMod(_menuIndex + 1, _menuItems.Count); break;
+                case Key.Enter or Key.KpEnter or Key.Space:
+                    if (_menuIndex >= 0 && _menuIndex < _menuItems.Count)
+                    {
+                        _menuItems[_menuIndex].Execute();
+                    }
+                    return;
+                case Key.Escape:
+                    if (_inPauseMenu)
+                    {
+                        _inMenu = false;
+                        _inPauseMenu = false;
+                        if (_bridge.Frame is { } f)
+                        {
+                            _overlay.Mode = EffectiveMode(f);
+                        }
+                        _overlay.QueueRedraw();
+                    }
+                    else
+                    {
+                        GetTree().Quit();
+                    }
+                    return;
                 default:
                     var n = key.Keycode - Key.Key1;
-                    if (n >= 0 && n < _menu.Count)
+                    if (n >= 0 && n < _menuItems.Count)
                     {
                         _menuIndex = (int)n;
-                        ChooseMenu();
+                        _menuItems[_menuIndex].Execute();
                     }
                     return;
             }
             _overlay.MenuIndex = _menuIndex;
             _overlay.QueueRedraw();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (key.Keycode == Key.Escape)
+        {
+            OpenPauseMenu();
             GetViewport().SetInputAsHandled();
             return;
         }

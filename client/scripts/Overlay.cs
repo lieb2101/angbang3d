@@ -19,6 +19,8 @@ public partial class Overlay : Control
     public string FacingName { get; set; } = "N";
     public string PromptLine { get; set; }
     public string StairsHint { get; set; }
+    public string MenuTitle { get; set; } = "A N G B A N D 3 D";
+    public string MenuSubtitle { get; set; } = "first person Angband 4.2.6";
     public string[] MenuItems { get; set; } = System.Array.Empty<string>();
     public int MenuIndex { get; set; }
 
@@ -85,30 +87,30 @@ public partial class Overlay : Control
         DrawRect(new Rect2(Vector2.Zero, View), new Color(0.03f, 0.03f, 0.045f));
 
         var cx = View.X / 2f;
-        var top = View.Y * 0.28f;
+        var top = View.Y * 0.22f;
 
-        DrawString(_font, new Vector2(cx - 150, top), "A N G B A N D 3 D",
-            HorizontalAlignment.Left, -1, 40, new Color(1.0f, 0.82f, 0.45f));
-        DrawString(_font, new Vector2(cx - 150, top + 34), "first person Angband 4.2.6",
+        DrawString(_font, new Vector2(cx - 180, top), MenuTitle,
+            HorizontalAlignment.Left, -1, 36, new Color(1.0f, 0.82f, 0.45f));
+        DrawString(_font, new Vector2(cx - 180, top + 32), MenuSubtitle,
             HorizontalAlignment.Left, -1, 16, new Color(0.5f, 0.5f, 0.58f));
 
         for (var i = 0; i < MenuItems.Length; i++)
         {
-            var y = top + 90 + i * 38;
+            var y = top + 80 + i * 36;
             var selected = i == MenuIndex;
             if (selected)
             {
-                DrawRect(new Rect2(cx - 170, y - 22, 620, 32), new Color(0.16f, 0.13f, 0.05f));
+                DrawRect(new Rect2(cx - 200, y - 22, 680, 30), new Color(0.18f, 0.14f, 0.06f));
             }
-            DrawString(_font, new Vector2(cx - 160, y),
+            DrawString(_font, new Vector2(cx - 190, y),
                 (selected ? "> " : "  ") + $"{i + 1}. " + MenuItems[i],
-                HorizontalAlignment.Left, -1, 20,
+                HorizontalAlignment.Left, -1, 18,
                 selected ? new Color(1.0f, 0.9f, 0.6f) : new Color(0.72f, 0.72f, 0.78f));
         }
 
-        DrawString(_font, new Vector2(cx - 160, top + 110 + MenuItems.Length * 38),
-            "up/down to choose, Enter to start, or press its number",
-            HorizontalAlignment.Left, -1, 15, new Color(0.45f, 0.45f, 0.52f));
+        DrawString(_font, new Vector2(cx - 190, top + 95 + MenuItems.Length * 36),
+            "up/down to choose, Enter to select, Esc to back/close",
+            HorizontalAlignment.Left, -1, 14, new Color(0.45f, 0.45f, 0.52f));
     }
 
     private void DrawMap(JsonElement frame)

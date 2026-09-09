@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..8c66b714e
+index 000000000..edb80b722
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,757 @@
+@@ -0,0 +1,759 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -500,6 +500,8 @@ index 000000000..8c66b714e
 +
 +		if (i) fputc(',', fp);
 +		fputc('{', fp);
++		bj_kv_int(fp, "id", mon_buf[i].idx);
++		fputc(',', fp);
 +		bj_kv_int(fp, "y", mon_buf[i].y);
 +		fputc(',', fp);
 +		bj_kv_int(fp, "x", mon_buf[i].x);

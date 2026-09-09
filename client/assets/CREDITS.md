@@ -7,7 +7,11 @@ Art assets carry their own licences, independent of the project's GPL v2.
 
 | Asset | Source | Licence | Used for |
 |---|---|---|---|
-| _(none yet — Phase 2)_ | | | |
+| KayKit Dungeon Remastered 1.0 | https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0 | CC0 (Public Domain) | Dungeon walls, floors, doors, stairs, chests, pillars |
+| KayKit Skeletons 1.0 | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0 | CC0 (Public Domain) | Undead, skeleton, necromancer monsters |
+| KayKit Adventures 1.0 | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 | CC0 (Public Domain) | Humanoid, knight, rogue, mage monsters |
+| KayKit Halloween Bits 1.0 | https://github.com/KayKit-Game-Assets/KayKit-Halloween-Bits-1.0 | CC0 (Public Domain) | Crypts, coffins, shrines, skulls, dungeon props |
+| KayKit City Builder Bits 1.0 | https://github.com/KayKit-Game-Assets/KayKit-City-Builder-Bits-1.0 | CC0 (Public Domain) | Town buildings, market stalls, houses |
 
 ## Planned sources
 

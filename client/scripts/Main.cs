@@ -164,6 +164,7 @@ public partial class Main : Node
                 StartGame();
             }));
             _menuItems.Add(("Load Saved Game...", OpenLoadMenu));
+            _menuItems.Add(("Delete Saved Game...", OpenDeleteMenu));
         }
 
         _menuItems.Add(("New Character (Custom - Race/Class/Stats)", () =>
@@ -215,8 +216,78 @@ public partial class Main : Node
             }));
         }
 
+        if (saves.Length > 0)
+        {
+            _menuItems.Add(("Delete a Saved Game...", OpenDeleteMenu));
+        }
         _menuItems.Add(("Back", _inPauseMenu ? OpenPauseMenu : OpenMenu));
         RefreshMenuDisplay("LOAD GAME", "Select a character to load");
+    }
+
+    private void OpenDeleteMenu()
+    {
+        _inMenu = true;
+        _menuIndex = 0;
+        _menuItems.Clear();
+
+        var saves = GetSaveFiles();
+        if (saves.Length == 0)
+        {
+            _menuItems.Add(("Back", _inPauseMenu ? OpenPauseMenu : OpenMenu));
+            RefreshMenuDisplay("DELETE SAVE", "No saved games found");
+            return;
+        }
+
+        foreach (var file in saves)
+        {
+            var saveFile = file;
+            var label = $"{saveFile.Name}  ({saveFile.LastWriteTime:yyyy-MM-dd HH:mm})";
+            _menuItems.Add((label, () => ConfirmDeleteMenu(saveFile)));
+        }
+
+        _menuItems.Add(("Back", _inPauseMenu ? OpenPauseMenu : OpenMenu));
+        RefreshMenuDisplay("DELETE SAVE", "Select a saved game to delete");
+    }
+
+    private void ConfirmDeleteMenu(System.IO.FileInfo file)
+    {
+        _inMenu = true;
+        _menuIndex = 0;
+        _menuItems.Clear();
+
+        _menuItems.Add(($"Yes, Delete '{file.Name}' permanently", () =>
+        {
+            try
+            {
+                if (System.IO.File.Exists(file.FullName))
+                {
+                    System.IO.File.Delete(file.FullName);
+                    GD.Print($"client: deleted save {file.FullName}");
+                }
+            }
+            catch (Exception ex)
+            {
+                GD.PushError($"client: failed to delete save {file.FullName}: {ex.Message}");
+            }
+
+            var remaining = GetSaveFiles();
+            if (remaining.Length > 0)
+            {
+                OpenDeleteMenu();
+            }
+            else if (_inPauseMenu)
+            {
+                OpenPauseMenu();
+            }
+            else
+            {
+                OpenMenu();
+            }
+        }));
+
+        _menuItems.Add(("Cancel (Keep Save)", OpenDeleteMenu));
+
+        RefreshMenuDisplay("CONFIRM DELETE", $"Are you sure you want to permanently delete '{file.Name}'?");
     }
 
     private void OpenPauseMenu()
@@ -250,6 +321,12 @@ public partial class Main : Node
         }));
 
         _menuItems.Add(("Load Other Character...", OpenLoadMenu));
+
+        var saves = GetSaveFiles();
+        if (saves.Length > 0)
+        {
+            _menuItems.Add(("Delete Saved Game...", OpenDeleteMenu));
+        }
 
         _menuItems.Add(("Save and Quit (Ctrl-X)", () =>
         {
@@ -590,6 +667,8 @@ public partial class Main : Node
             {
                 case "turnleft": _world.Turn(-1); continue;
                 case "turnright": _world.Turn(1); continue;
+                case "strafeleft": _bridge.SendKey(_world.RelativeMoveKey(4)); return;
+                case "straferight": _bridge.SendKey(_world.RelativeMoveKey(6)); return;
                 case "map": _mapMode = !_mapMode; continue;
                 case "term": _forceTerminal = !_forceTerminal; continue;
                 case "forward": _bridge.SendKey(_world.MoveKey(true)); return;
@@ -649,10 +728,15 @@ public partial class Main : Node
 
         if (_inMenu)
         {
+            if (_menuItems.Count == 0)
+            {
+                return;
+            }
+
             switch (key.Keycode)
             {
-                case Key.Up: _menuIndex = Mathf.PosMod(_menuIndex - 1, _menuItems.Count); break;
-                case Key.Down: _menuIndex = Mathf.PosMod(_menuIndex + 1, _menuItems.Count); break;
+                case Key.Up or Key.Kp8: _menuIndex = Mathf.PosMod(_menuIndex - 1, _menuItems.Count); break;
+                case Key.Down or Key.Kp2: _menuIndex = Mathf.PosMod(_menuIndex + 1, _menuItems.Count); break;
                 case Key.Enter or Key.KpEnter or Key.Space:
                     if (_menuIndex >= 0 && _menuIndex < _menuItems.Count)
                     {
@@ -660,7 +744,11 @@ public partial class Main : Node
                     }
                     return;
                 case Key.Escape:
-                    if (_overlay.MenuTitle == "LOAD GAME")
+                    if (_overlay.MenuTitle == "CONFIRM DELETE")
+                    {
+                        OpenDeleteMenu();
+                    }
+                    else if (_overlay.MenuTitle is "DELETE SAVE" or "LOAD GAME")
                     {
                         if (_inPauseMenu)
                         {
@@ -687,10 +775,12 @@ public partial class Main : Node
                     }
                     return;
                 default:
-                    var n = key.Keycode - Key.Key1;
+                    var n = (key.Keycode >= Key.Kp1 && key.Keycode <= Key.Kp9)
+                        ? (int)(key.Keycode - Key.Kp1)
+                        : (int)(key.Keycode - Key.Key1);
                     if (n >= 0 && n < _menuItems.Count)
                     {
-                        _menuIndex = (int)n;
+                        _menuIndex = n;
                         _menuItems[_menuIndex].Execute();
                     }
                     return;
@@ -752,6 +842,23 @@ public partial class Main : Node
             return;
         }
 
+        // Relative directional movement via number pad (or top-row numbers in world view).
+        // 8 = forward, 2 = back, 4 = strafe left, 6 = strafe right, diagonals 7,9,1,3, 5 = stay.
+        var dir = GetDirectionKey(key);
+        if (inWorld && dir >= 1 && dir <= 9)
+        {
+            if (!_bridge.Busy)
+            {
+                var moveKey = _world.RelativeMoveKey(dir);
+                if (moveKey != null)
+                {
+                    _bridge.SendKey(moveKey);
+                }
+            }
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         if (inWorld && key.Keycode == Key.Pageup)
         {
             _overlay.ChangeMinimapScale(0.15f);
@@ -768,6 +875,7 @@ public partial class Main : Node
 
         // Turning is a camera change, not a game action: it must always be
         // instant, and must never wait on the engine or cost a game turn.
+        // Arrow Left / Right turn orientation; number pad 4 / 6 strafes instead (handled above).
         if (inWorld && key.Keycode is Key.Left or Key.Right)
         {
             _world.Turn(key.Keycode == Key.Left ? -1 : 1);
@@ -775,13 +883,14 @@ public partial class Main : Node
             return;
         }
 
-        if (inWorld && !_bridge.Busy)
+        if (inWorld && key.Keycode is Key.Up or Key.Down)
         {
-            switch (key.Keycode)
+            if (!_bridge.Busy)
             {
-                case Key.Up: _bridge.SendKey(_world.MoveKey(true)); return;
-                case Key.Down: _bridge.SendKey(_world.MoveKey(false)); return;
+                _bridge.SendKey(_world.MoveKey(key.Keycode == Key.Up));
             }
+            GetViewport().SetInputAsHandled();
+            return;
         }
 
         var spec = ToKeySpec(key);
@@ -790,6 +899,26 @@ public partial class Main : Node
             _bridge.SendKey(spec);
             GetViewport().SetInputAsHandled();
         }
+    }
+
+    private static int GetDirectionKey(InputEventKey key)
+    {
+        if (key.Keycode is >= Key.Kp1 and <= Key.Kp9)
+        {
+            return (int)(key.Keycode - Key.Kp1) + 1;
+        }
+
+        if (key.PhysicalKeycode is >= Key.Kp1 and <= Key.Kp9)
+        {
+            return (int)(key.PhysicalKeycode - Key.Kp1) + 1;
+        }
+
+        if (key.Keycode is >= Key.Key1 and <= Key.Key9)
+        {
+            return (int)(key.Keycode - Key.Key1) + 1;
+        }
+
+        return 0;
     }
 
     private void Refresh()
@@ -815,7 +944,22 @@ public partial class Main : Node
             case Key.Escape: return "escape";
             case Key.Space: return "space";
             case Key.Backspace: return "backspace";
+            case Key.Tab: return "tab";
+            case Key.Delete: return "delete";
+            case Key.Home: return "home";
+            case Key.End: return "end";
         }
+
+        if (key.Keycode is >= Key.Kp0 and <= Key.Kp9)
+        {
+            return ((char)('0' + (key.Keycode - Key.Kp0))).ToString();
+        }
+
+        if (key.Keycode is Key.KpPeriod) return ".";
+        if (key.Keycode is Key.KpAdd) return "+";
+        if (key.Keycode is Key.KpSubtract) return "-";
+        if (key.Keycode is Key.KpMultiply) return "*";
+        if (key.Keycode is Key.KpDivide) return "/";
 
         if (key.CtrlPressed && key.Keycode is >= Key.A and <= Key.Z)
         {

@@ -1741,12 +1741,42 @@ public partial class DungeonWorld : Node3D
         _targetYaw = -Mathf.Pi / 2f * _facing;
     }
 
+    /// <summary>
+    /// Angband movement key for a local direction (numpad 1-9) relative to the current facing.
+    /// 8 = Forward, 2 = Backward, 4 = Strafe Left, 6 = Strafe Right,
+    /// 7 = Forward-Left, 9 = Forward-Right, 1 = Backward-Left, 3 = Backward-Right, 5 = Stay.
+    /// </summary>
+    public string RelativeMoveKey(int numpadDir)
+    {
+        if (numpadDir == 5)
+        {
+            return "5";
+        }
+        int localIndex = numpadDir switch
+        {
+            8 => 0,
+            9 => 1,
+            6 => 2,
+            3 => 3,
+            2 => 4,
+            1 => 5,
+            4 => 6,
+            7 => 7,
+            _ => -1
+        };
+        if (localIndex < 0)
+        {
+            return null;
+        }
+        string[] dirKeys = { "8", "9", "6", "3", "2", "1", "4", "7" };
+        var worldIndex = (localIndex + _facing * 2) % 8;
+        return dirKeys[worldIndex];
+    }
+
     /// <summary>Angband movement key for a direction relative to the current facing.</summary>
     public string MoveKey(bool forward)
     {
-        string[] dirs = { "up", "right", "down", "left" };
-        var index = forward ? _facing : (_facing + 2) % 4;
-        return dirs[index];
+        return RelativeMoveKey(forward ? 8 : 2);
     }
 
     /// <summary>Add kinetic screen trauma/shake on taking damage or heavy impacts.</summary>

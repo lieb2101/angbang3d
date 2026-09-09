@@ -121,9 +121,24 @@ public partial class Overlay : Control
         DrawString(_font, new Vector2(cx - 180, top + 32), MenuSubtitle,
             HorizontalAlignment.Left, -1, 16, new Color(0.5f, 0.5f, 0.58f));
 
-        for (var i = 0; i < MenuItems.Length; i++)
+        const int maxVisible = 12;
+        var startIdx = 0;
+        if (MenuItems.Length > maxVisible)
         {
-            var y = top + 80 + i * 36;
+            startIdx = Mathf.Clamp(MenuIndex - maxVisible / 2, 0, MenuItems.Length - maxVisible);
+        }
+        var endIdx = Mathf.Min(MenuItems.Length, startIdx + maxVisible);
+
+        if (startIdx > 0)
+        {
+            DrawString(_font, new Vector2(cx - 190, top + 62),
+                "^ (more items above)", HorizontalAlignment.Left, -1, 13, new Color(0.6f, 0.6f, 0.68f));
+        }
+
+        for (var i = startIdx; i < endIdx; i++)
+        {
+            var visualIndex = i - startIdx;
+            var y = top + 80 + visualIndex * 36;
             var selected = i == MenuIndex;
             if (selected)
             {
@@ -135,7 +150,15 @@ public partial class Overlay : Control
                 selected ? new Color(1.0f, 0.9f, 0.6f) : new Color(0.72f, 0.72f, 0.78f));
         }
 
-        DrawString(_font, new Vector2(cx - 190, top + 95 + MenuItems.Length * 36),
+        var visibleCount = endIdx - startIdx;
+        if (endIdx < MenuItems.Length)
+        {
+            DrawString(_font, new Vector2(cx - 190, top + 80 + visibleCount * 36 + 4),
+                "v (more items below)", HorizontalAlignment.Left, -1, 13, new Color(0.6f, 0.6f, 0.68f));
+        }
+
+        var footerY = top + 95 + visibleCount * 36 + (endIdx < MenuItems.Length ? 22 : 0);
+        DrawString(_font, new Vector2(cx - 190, footerY),
             "up/down to choose, Enter to select, Esc to back/close",
             HorizontalAlignment.Left, -1, 14, new Color(0.45f, 0.45f, 0.52f));
     }

@@ -74,12 +74,63 @@ public class MonsterEntity
 }
 
 /// <summary>
+/// Rule defining how a monster race or glyph maps to a 3D character model.
+/// </summary>
+public class MonsterModelRule
+{
+    public string ModelPath { get; set; }
+    public float Scale { get; set; } = 1.0f;
+    public bool IsEthereal { get; set; }
+    public bool IsFloating { get; set; }
+    public float Speed { get; set; } = 1.0f;
+    public Func<string, bool> Matcher { get; set; }
+
+    public MonsterModelRule(string modelPath, float scale = 1.0f, bool isEthereal = false, bool isFloating = false, float speed = 1.0f, Func<string, bool> matcher = null)
+    {
+        ModelPath = modelPath;
+        Scale = scale;
+        IsEthereal = isEthereal;
+        IsFloating = isFloating;
+        Speed = speed;
+        Matcher = matcher;
+    }
+}
+
+/// <summary>
 /// Resolves Angband monsters to rich, accurate CC0 3D character models or
 /// specialized 3D procedural creature tokens with smooth animations and dynamic lighting.
 /// </summary>
 public static class MonsterModelResolver
 {
     private static readonly Dictionary<string, PackedScene> _modelCache = new();
+    private static readonly Dictionary<char, List<MonsterModelRule>> _modelRules = new();
+
+    static MonsterModelResolver()
+    {
+        InitModelRules();
+    }
+
+    /// <summary>
+    /// Register a custom 3D model mapping rule for a specific monster glyph.
+    /// Rules registered first take precedence over subsequent rules.
+    /// </summary>
+    public static void RegisterModelRule(char glyph, MonsterModelRule rule)
+    {
+        if (!_modelRules.TryGetValue(glyph, out var list))
+        {
+            list = new List<MonsterModelRule>();
+            _modelRules[glyph] = list;
+        }
+        list.Insert(0, rule);
+    }
+
+    /// <summary>
+    /// Helper to register a model rule with fluent parameters.
+    /// </summary>
+    public static void RegisterModelRule(char glyph, string modelPath, float scale = 1.0f, bool isEthereal = false, bool isFloating = false, float speed = 1.0f, Func<string, bool> matcher = null)
+    {
+        RegisterModelRule(glyph, new MonsterModelRule(modelPath, scale, isEthereal, isFloating, speed, matcher));
+    }
 
     public static MonsterEntity CreateMonsterEntity(JsonElement monster, Vector3 worldPos, Vector3 playerPos, string entityId)
     {
@@ -242,212 +293,156 @@ public static class MonsterModelResolver
         BuildCreatureToken(entity, glyph, lowerName, color);
     }
 
+    private static void AddModelRule(char glyph, MonsterModelRule rule)
+    {
+        if (!_modelRules.TryGetValue(glyph, out var list))
+        {
+            list = new List<MonsterModelRule>();
+            _modelRules[glyph] = list;
+        }
+        list.Add(rule);
+    }
+
+    private static void InitModelRules()
+    {
+        // 1. Ghosts, Spectres, Poltergeists (G)
+        AddModelRule('G', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 0.90f, isEthereal: true, isFloating: true, speed: 0.8f));
+
+        // 2. Wights, Wraiths, Nazgul, Ringwraiths (W)
+        AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Skeleton_Warrior.glb", 0.95f, isEthereal: true, isFloating: false, speed: 0.85f, matcher: n => n.Contains("wight")));
+        AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 0.95f, isEthereal: true, isFloating: true, speed: 0.85f));
+
+        // 3. Liches and Arch-Liches (L)
+        AddModelRule('L', new MonsterModelRule("res://assets/models/characters/Skeleton_Mage.glb", 1.10f, speed: 0.9f));
+
+        // 4. Skeletons (s)
+        AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, speed: 1.0f, matcher: n => n.Contains("archer") || n.Contains("scout") || n.Contains("sniper")));
+        AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Mage.glb", 0.90f, speed: 0.9f, matcher: n => n.Contains("mage") || n.Contains("sorcerer") || n.Contains("druj")));
+        AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.70f, speed: 1.1f, matcher: n => n.Contains("minion") || n.Contains("decayed") || n.Contains("small") || n.Contains("crawler") || n.Contains("broken")));
+        AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Warrior.glb", 1.20f, speed: 1.0f, matcher: n => n.Contains("lord") || n.Contains("king") || n.Contains("knight") || n.Contains("champion")));
+        AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Warrior.glb", 0.95f, speed: 1.0f));
+
+        // 5. Zombies, Mummies, Ghouls (z)
+        AddModelRule('z', new MonsterModelRule("res://assets/models/characters/Skeleton_Warrior.glb", 1.05f, speed: 0.75f, matcher: n => n.Contains("mummy") || n.Contains("greater") || n.Contains("pharaoh")));
+        AddModelRule('z', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.85f, speed: 0.70f));
+
+        // 6. Vampires (V)
+        AddModelRule('V', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 1.0f, speed: 1.05f));
+
+        // 7. Ainur, Maiar (A)
+        AddModelRule('A', new MonsterModelRule("res://assets/models/characters/Mage.glb", 1.15f, speed: 1.0f));
+
+        // 8. Major Demons, Balrogs, Pit Fiends (U)
+        AddModelRule('U', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.65f, speed: 1.0f));
+
+        // 9. Minor Demons, Imps, Quasits, Lemures (u)
+        AddModelRule('u', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.65f, speed: 1.2f));
+
+        // 10. Giants, Titans, Cyclops, Morgoth (P)
+        AddModelRule('P', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 2.0f, speed: 0.85f, matcher: n => n.Contains("morgoth")));
+        AddModelRule('P', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.75f, speed: 0.85f));
+
+        // 11. Trolls (T)
+        AddModelRule('T', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.45f, speed: 0.90f));
+
+        // 12. Ogres (O)
+        AddModelRule('O', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.30f, speed: 0.95f));
+
+        // 13. Yetis (Y)
+        AddModelRule('Y', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.30f, speed: 0.90f));
+
+        // 14. Orcs, Goblins, Snagas, Uruks (o)
+        AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Skeleton_Mage.glb", 0.85f, speed: 1.0f, matcher: n => n.Contains("shaman") || n.Contains("mage") || n.Contains("curse")));
+        AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, speed: 1.05f, matcher: n => n.Contains("archer") || n.Contains("scout") || n.Contains("tracker") || n.Contains("sniper")));
+        AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 0.88f, speed: 1.0f));
+
+        // 15. Kobolds (k) and Yeeks (y)
+        AddModelRule('k', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.60f, speed: 1.15f));
+        AddModelRule('y', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.60f, speed: 1.15f));
+
+        // 16. Ents & Trees (l)
+        AddModelRule('l', new MonsterModelRule("res://assets/models/props/tree_dead_large.gltf", 1.10f, speed: 0.5f));
+
+        // 17. Mimics (?) and Creeping Coins ($)
+        AddModelRule('?', new MonsterModelRule("res://assets/models/dungeon/chest.glb", 0.85f, speed: 1.0f));
+        AddModelRule('$', new MonsterModelRule("res://assets/models/dungeon/coin_stack_large.gltf.glb", 0.90f, speed: 1.0f));
+
+        // 18. Humanoids (h) and People / Adventurers (p)
+        Func<string, bool> isKnight = n => n.Contains("knight") || n.Contains("paladin") || n.Contains("veteran") ||
+            n.Contains("warrior") || n.Contains("soldier") || n.Contains("guard") || n.Contains("captain") ||
+            n.Contains("fighter") || n.Contains("champion") || n.Contains("swordsman") || n.Contains("centurion");
+
+        Func<string, bool> isBarb = n => n.Contains("barbarian") || n.Contains("mercenary") || n.Contains("gladiator") ||
+            n.Contains("berserker") || n.Contains("bouncer") || n.Contains("ruffian") || n.Contains("beastman");
+
+        Func<string, bool> isMage = n => n.Contains("mage") || n.Contains("wizard") || n.Contains("warlock") ||
+            n.Contains("sorcerer") || n.Contains("alchemist") || n.Contains("scholar") || n.Contains("priest") ||
+            n.Contains("cleric") || n.Contains("sage") || n.Contains("acolyte") || n.Contains("cultist") ||
+            n.Contains("druid") || n.Contains("seer") || n.Contains("shaman") || n.Contains("enchanter") || n.Contains("necromancer");
+
+        Func<string, bool> isThief = n => n.Contains("thief") || n.Contains("rogue") || n.Contains("burglar") ||
+            n.Contains("assassin") || n.Contains("cutpurse") || n.Contains("beggar") || n.Contains("scoundrel") ||
+            n.Contains("bandit") || n.Contains("brigand") || n.Contains("ninja") || n.Contains("scout") || n.Contains("stalker");
+
+        // Rules for 'h'
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Knight.glb", 0.90f * 1.05f, matcher: isKnight));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 0.90f * 1.10f, matcher: isBarb));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Mage.glb", 0.90f * 0.95f, speed: 0.95f, matcher: isMage));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 0.90f * 0.95f, speed: 1.05f, matcher: isThief));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Rogue.glb", 0.90f));
+
+        // Rules for 'p'
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Knight.glb", 0.95f * 1.05f, matcher: isKnight));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 0.95f * 1.10f, matcher: isBarb));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Mage.glb", 0.95f * 0.95f, speed: 0.95f, matcher: isMage));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 0.95f * 0.95f, speed: 1.05f, matcher: isThief));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Rogue.glb", 0.95f));
+
+        // 21. Nagas (n)
+        AddModelRule('n', new MonsterModelRule("res://assets/models/characters/Mage.glb", 0.90f, speed: 0.95f));
+    }
+
     private static (string ModelPath, float Scale, bool IsEthereal, bool IsFloating, float Speed) ResolveModelConfig(
         char glyph, string raceName, string lowerName)
     {
-        switch (glyph)
+        // 20. Townsfolk (t)
+        if (glyph == 't')
         {
-            // 1. Ghosts, Spectres, Poltergeists (G)
-            case 'G':
-                return ("res://assets/models/characters/Rogue_Hooded.glb", 0.90f, true, true, 0.8f);
-
-            // 2. Wights, Wraiths, Nazgul, Ringwraiths (W)
-            case 'W':
-                if (lowerName.Contains("wight"))
-                    return ("res://assets/models/characters/Skeleton_Warrior.glb", 0.95f, true, false, 0.85f);
-                return ("res://assets/models/characters/Rogue_Hooded.glb", 0.95f, true, true, 0.85f);
-
-            // 3. Liches and Arch-Liches (L)
-            case 'L':
-                return ("res://assets/models/characters/Skeleton_Mage.glb", 1.10f, false, false, 0.9f);
-
-            // 4. Skeletons (s)
-            case 's':
-                if (lowerName.Contains("archer") || lowerName.Contains("scout") || lowerName.Contains("sniper"))
-                    return ("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, false, false, 1.0f);
-                if (lowerName.Contains("mage") || lowerName.Contains("sorcerer") || lowerName.Contains("druj"))
-                    return ("res://assets/models/characters/Skeleton_Mage.glb", 0.90f, false, false, 0.9f);
-                if (lowerName.Contains("minion") || lowerName.Contains("decayed") || lowerName.Contains("small") ||
-                    lowerName.Contains("crawler") || lowerName.Contains("broken"))
-                    return ("res://assets/models/characters/Skeleton_Minion.glb", 0.70f, false, false, 1.1f);
-                if (lowerName.Contains("lord") || lowerName.Contains("king") || lowerName.Contains("knight") ||
-                    lowerName.Contains("champion"))
-                    return ("res://assets/models/characters/Skeleton_Warrior.glb", 1.20f, false, false, 1.0f);
-                return ("res://assets/models/characters/Skeleton_Warrior.glb", 0.95f, false, false, 1.0f);
-
-            // 5. Zombies, Mummies, Ghouls (z)
-            case 'z':
-                if (lowerName.Contains("mummy") || lowerName.Contains("greater") || lowerName.Contains("pharaoh"))
-                    return ("res://assets/models/characters/Skeleton_Warrior.glb", 1.05f, false, false, 0.75f);
-                return ("res://assets/models/characters/Skeleton_Minion.glb", 0.85f, false, false, 0.70f);
-
-            // 6. Vampires (V)
-            case 'V':
-                return ("res://assets/models/characters/Rogue_Hooded.glb", 1.0f, false, false, 1.05f);
-
-            // 7. Ainur, Maiar (A)
-            case 'A':
-                return ("res://assets/models/characters/Mage.glb", 1.15f, false, false, 1.0f);
-
-            // 8. Major Demons, Balrogs, Pit Fiends (U)
-            case 'U':
-                return ("res://assets/models/characters/Barbarian.glb", 1.65f, false, false, 1.0f);
-
-            // 9. Minor Demons, Imps, Quasits, Lemures (u)
-            case 'u':
-                return ("res://assets/models/characters/Skeleton_Minion.glb", 0.65f, false, false, 1.2f);
-
-            // 10. Giants, Titans, Cyclops, Morgoth (P)
-            case 'P':
-                if (lowerName.Contains("morgoth"))
-                    return ("res://assets/models/characters/Barbarian.glb", 2.0f, false, false, 0.85f);
-                return ("res://assets/models/characters/Barbarian.glb", 1.75f, false, false, 0.85f);
-
-            // 11. Trolls (T)
-            case 'T':
-                return ("res://assets/models/characters/Barbarian.glb", 1.45f, false, false, 0.90f);
-
-            // 12. Ogres (O)
-            case 'O':
-                return ("res://assets/models/characters/Barbarian.glb", 1.30f, false, false, 0.95f);
-
-            // 13. Yetis (Y)
-            case 'Y':
-                return ("res://assets/models/characters/Barbarian.glb", 1.30f, false, false, 0.90f);
-
-            // 14. Orcs, Goblins, Snagas, Uruks (o)
-            case 'o':
-                if (lowerName.Contains("shaman") || lowerName.Contains("mage") || lowerName.Contains("curse"))
-                    return ("res://assets/models/characters/Skeleton_Mage.glb", 0.85f, false, false, 1.0f);
-                if (lowerName.Contains("archer") || lowerName.Contains("scout") || lowerName.Contains("tracker") || lowerName.Contains("sniper"))
-                    return ("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, false, false, 1.05f);
-                return ("res://assets/models/characters/Barbarian.glb", 0.88f, false, false, 1.0f);
-
-            // 15. Kobolds (k) and Yeeks (y)
-            case 'k':
-            case 'y':
-                return ("res://assets/models/characters/Skeleton_Minion.glb", 0.60f, false, false, 1.15f);
-
-            // 16. Ents & Trees (l)
-            case 'l':
-                return ("res://assets/models/props/tree_dead_large.gltf", 1.10f, false, false, 0.5f);
-
-            // 17. Mimics (?) and Creeping Coins ($)
-            case '?':
-                return ("res://assets/models/dungeon/chest.glb", 0.85f, false, false, 1.0f);
-            case '$':
-                return ("res://assets/models/dungeon/coin_stack_large.gltf.glb", 0.90f, false, false, 1.0f);
-
-            // 18. Humanoids, Elves, Dwarves, Hobbits, Gnomes (h)
-            case 'h':
+            float scale = 0.85f;
+            if (lowerName.Contains("dwarf") || lowerName.Contains("hobbit") || lowerName.Contains("gnome") ||
+                lowerName.Contains("halfling"))
             {
-                float scale = 0.90f;
-                if (lowerName.Contains("dwarf") || lowerName.Contains("hobbit") || lowerName.Contains("gnome") ||
-                    lowerName.Contains("halfling") || lowerName.Contains("leprechaun"))
-                {
-                    scale = 0.65f;
-                }
-                else if (lowerName.Contains("elf") || lowerName.Contains("ranger") || lowerName.Contains("dunedain"))
-                {
-                    scale = 0.98f;
-                }
-
-                if (lowerName.Contains("knight") || lowerName.Contains("paladin") || lowerName.Contains("veteran") ||
-                    lowerName.Contains("warrior") || lowerName.Contains("soldier") || lowerName.Contains("guard") ||
-                    lowerName.Contains("captain") || lowerName.Contains("fighter") || lowerName.Contains("champion") ||
-                    lowerName.Contains("swordsman") || lowerName.Contains("centurion"))
-                {
-                    return ("res://assets/models/characters/Knight.glb", scale * 1.05f, false, false, 1.0f);
-                }
-
-                if (lowerName.Contains("barbarian") || lowerName.Contains("mercenary") || lowerName.Contains("gladiator") ||
-                    lowerName.Contains("berserker") || lowerName.Contains("bouncer") || lowerName.Contains("ruffian") ||
-                    lowerName.Contains("beastman"))
-                {
-                    return ("res://assets/models/characters/Barbarian.glb", scale * 1.10f, false, false, 1.0f);
-                }
-
-                if (lowerName.Contains("mage") || lowerName.Contains("wizard") || lowerName.Contains("warlock") ||
-                    lowerName.Contains("sorcerer") || lowerName.Contains("alchemist") || lowerName.Contains("scholar") ||
-                    lowerName.Contains("priest") || lowerName.Contains("cleric") || lowerName.Contains("sage") ||
-                    lowerName.Contains("acolyte") || lowerName.Contains("cultist") || lowerName.Contains("druid") ||
-                    lowerName.Contains("seer") || lowerName.Contains("shaman") || lowerName.Contains("enchanter"))
-                {
-                    return ("res://assets/models/characters/Mage.glb", scale * 0.95f, false, false, 0.95f);
-                }
-
-                if (lowerName.Contains("thief") || lowerName.Contains("rogue") || lowerName.Contains("burglar") ||
-                    lowerName.Contains("assassin") || lowerName.Contains("cutpurse") || lowerName.Contains("beggar") ||
-                    lowerName.Contains("scoundrel") || lowerName.Contains("bandit") || lowerName.Contains("brigand") ||
-                    lowerName.Contains("ninja") || lowerName.Contains("scout") || lowerName.Contains("stalker"))
-                {
-                    return ("res://assets/models/characters/Rogue_Hooded.glb", scale * 0.95f, false, false, 1.05f);
-                }
-
-                return ("res://assets/models/characters/Rogue.glb", scale, false, false, 1.0f);
+                scale = 0.65f;
             }
-
-            // 19. People, Adventurers, Mercenaries, Warriors, Mages (p)
-            case 'p':
-            {
-                float scale = 0.95f;
-                if (lowerName.Contains("knight") || lowerName.Contains("paladin") || lowerName.Contains("veteran") ||
-                    lowerName.Contains("warrior") || lowerName.Contains("soldier") || lowerName.Contains("guard") ||
-                    lowerName.Contains("captain") || lowerName.Contains("fighter") || lowerName.Contains("champion") ||
-                    lowerName.Contains("swordsman") || lowerName.Contains("centurion"))
-                {
-                    return ("res://assets/models/characters/Knight.glb", scale * 1.05f, false, false, 1.0f);
-                }
-
-                if (lowerName.Contains("barbarian") || lowerName.Contains("mercenary") || lowerName.Contains("gladiator") ||
-                    lowerName.Contains("berserker") || lowerName.Contains("bouncer") || lowerName.Contains("ruffian") ||
-                    lowerName.Contains("beastman"))
-                {
-                    return ("res://assets/models/characters/Barbarian.glb", scale * 1.10f, false, false, 1.0f);
-                }
-
-                if (lowerName.Contains("mage") || lowerName.Contains("wizard") || lowerName.Contains("warlock") ||
-                    lowerName.Contains("sorcerer") || lowerName.Contains("alchemist") || lowerName.Contains("scholar") ||
-                    lowerName.Contains("priest") || lowerName.Contains("cleric") || lowerName.Contains("sage") ||
-                    lowerName.Contains("acolyte") || lowerName.Contains("cultist") || lowerName.Contains("druid") ||
-                    lowerName.Contains("seer") || lowerName.Contains("shaman") || lowerName.Contains("enchanter") ||
-                    lowerName.Contains("necromancer"))
-                {
-                    return ("res://assets/models/characters/Mage.glb", scale * 0.95f, false, false, 0.95f);
-                }
-
-                if (lowerName.Contains("thief") || lowerName.Contains("rogue") || lowerName.Contains("burglar") ||
-                    lowerName.Contains("assassin") || lowerName.Contains("cutpurse") || lowerName.Contains("beggar") ||
-                    lowerName.Contains("scoundrel") || lowerName.Contains("bandit") || lowerName.Contains("brigand") ||
-                    lowerName.Contains("ninja") || lowerName.Contains("scout") || lowerName.Contains("stalker"))
-                {
-                    return ("res://assets/models/characters/Rogue_Hooded.glb", scale * 0.95f, false, false, 1.05f);
-                }
-
-                return ("res://assets/models/characters/Rogue.glb", scale, false, false, 1.0f);
-            }
-
-            // 20. Townsfolk (t)
-            case 't':
-            {
-                float scale = 0.85f;
-                if (lowerName.Contains("dwarf") || lowerName.Contains("hobbit") || lowerName.Contains("gnome") ||
-                    lowerName.Contains("halfling"))
-                {
-                    scale = 0.65f;
-                }
-                var townModel = SelectTownspersonModel(raceName);
-                return (townModel, scale, false, false, 1.0f);
-            }
-
-            // 21. Nagas (n)
-            case 'n':
-                return ("res://assets/models/characters/Mage.glb", 0.90f, false, false, 0.95f);
-
-            // All non-humanoid glyphs (r, C, f, q, Z, R, J, a, c, S, K, I, F, b, B, d, D, M, e, E, v, g, X, x, Q, j, w, i, m, ,, etc.)
-            default:
-                return (null, 1.0f, false, false, 1.0f);
+            var townModel = SelectTownspersonModel(raceName);
+            return (townModel, scale, false, false, 1.0f);
         }
+
+        if (_modelRules.TryGetValue(glyph, out var rules))
+        {
+            foreach (var rule in rules)
+            {
+                if (rule.Matcher == null || rule.Matcher(lowerName))
+                {
+                    var scale = rule.Scale;
+                    if (glyph is 'h' or 'p')
+                    {
+                        if (lowerName.Contains("dwarf") || lowerName.Contains("hobbit") || lowerName.Contains("gnome") ||
+                            lowerName.Contains("halfling") || lowerName.Contains("leprechaun"))
+                        {
+                            scale *= (0.65f / 0.90f);
+                        }
+                        else if (lowerName.Contains("elf") || lowerName.Contains("ranger") || lowerName.Contains("dunedain"))
+                        {
+                            scale *= (0.98f / 0.90f);
+                        }
+                    }
+                    return (rule.ModelPath, scale, rule.IsEthereal, rule.IsFloating, rule.Speed);
+                }
+            }
+        }
+
+        return (null, 1.0f, false, false, 1.0f);
     }
 
     private static string SelectTownspersonModel(string raceName)

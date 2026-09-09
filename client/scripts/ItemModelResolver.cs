@@ -13,6 +13,36 @@ public static class ItemModelResolver
 {
     private static readonly Dictionary<string, PackedScene> _modelCache = new();
     private static readonly Dictionary<char, Mesh> _meshCache = new();
+    private static readonly Dictionary<(char Glyph, Color Color), StandardMaterial3D> _materialCache = new();
+
+    /// <summary>
+    /// Declarative mapping of item glyphs to CC0 3D mesh assets and scaling factors.
+    /// Contributors can add new 3D item models here or via RegisterItemModel.
+    /// </summary>
+    public static readonly Dictionary<char, (string ModelPath, float Scale)> ModelMappings = new()
+    {
+        { '$', ("res://assets/models/dungeon/chest_gold.glb", 0.40f) },
+        { '!', ("res://assets/models/dungeon/bottle_A_green.gltf.glb", 0.60f) },
+        { '?', ("res://assets/models/characters/spellbook_closed.gltf", 0.60f) },
+        { ')', ("res://assets/models/characters/sword_1handed.gltf", 0.65f) },
+        { '[', ("res://assets/models/characters/shield_badge.gltf", 0.65f) },
+        { ']', ("res://assets/models/characters/shield_badge.gltf", 0.65f) },
+        { '(', ("res://assets/models/characters/shield_badge.gltf", 0.65f) },
+        { '/', ("res://assets/models/characters/wand.gltf", 0.60f) },
+        { '_', ("res://assets/models/characters/wand.gltf", 0.60f) },
+        { '|', ("res://assets/models/characters/wand.gltf", 0.60f) },
+        { ',', ("res://assets/models/dungeon/plate_food_A.gltf.glb", 0.50f) },
+        { '"', ("res://assets/models/dungeon/key.gltf.glb", 0.50f) },
+        { '=', ("res://assets/models/dungeon/key.gltf.glb", 0.50f) },
+    };
+
+    /// <summary>
+    /// Register or override a 3D model mapping for an item glyph.
+    /// </summary>
+    public static void RegisterItemModel(char glyph, string modelPath, float scale = 0.50f)
+    {
+        ModelMappings[glyph] = (modelPath, scale);
+    }
 
     public static Node3D CreateItemNode(JsonElement item, Vector3 worldPos)
     {
@@ -47,44 +77,37 @@ public static class ItemModelResolver
 
     private static Node3D CreateVisual(char glyph, Color color)
     {
-        string modelPath = glyph switch
+        if (ModelMappings.TryGetValue(glyph, out var config) && config.ModelPath != null)
         {
-            '$' => "res://assets/models/dungeon/chest_gold.glb",
-            '!' => "res://assets/models/dungeon/bottle_A_green.gltf.glb",
-            '?' => "res://assets/models/characters/spellbook_closed.gltf",
-            ')' => "res://assets/models/characters/sword_1handed.gltf",
-            '[' or ']' or '(' => "res://assets/models/characters/shield_badge.gltf",
-            '/' or '_' or '|' => "res://assets/models/characters/wand.gltf",
-            ',' => "res://assets/models/dungeon/plate_food_A.gltf.glb",
-            '"' or '=' => "res://assets/models/dungeon/key.gltf.glb",
-            _ => null
-        };
-
-        if (modelPath != null)
-        {
-            var scene = GetModel(modelPath);
+            var scene = GetModel(config.ModelPath);
             if (scene != null)
             {
                 var inst = scene.Instantiate<Node3D>();
-                var sc = glyph switch
-                {
-                    '$' => 0.40f,
-                    '!' => 0.60f,
-                    '?' => 0.60f,
-                    ')' => 0.65f,
-                    '[' or ']' or '(' => 0.65f,
-                    '/' or '_' or '|' => 0.60f,
-                    ',' => 0.50f,
-                    _ => 0.50f
-                };
-                inst.Scale = new Vector3(sc, sc, sc);
+                inst.Scale = new Vector3(config.Scale, config.Scale, config.Scale);
                 return inst;
             }
         }
 
         // Procedural stylized 3D pickups fallback
         var mesh = GetPickupMesh(glyph);
-        var mat = new StandardMaterial3D
+        var mat = GetPickupMaterial(glyph, color);
+
+        return new MeshInstance3D
+        {
+            Mesh = mesh,
+            MaterialOverride = mat,
+        };
+    }
+
+    private static StandardMaterial3D GetPickupMaterial(char glyph, Color color)
+    {
+        var key = (glyph, color);
+        if (_materialCache.TryGetValue(key, out var mat))
+        {
+            return mat;
+        }
+
+        mat = new StandardMaterial3D
         {
             AlbedoColor = color,
             Roughness = 0.35f,
@@ -93,12 +116,8 @@ public static class ItemModelResolver
             Emission = color,
             EmissionEnergyMultiplier = 0.65f,
         };
-
-        return new MeshInstance3D
-        {
-            Mesh = mesh,
-            MaterialOverride = mat,
-        };
+        _materialCache[key] = mat;
+        return mat;
     }
 
     private static Mesh GetPickupMesh(char glyph)

@@ -58,6 +58,20 @@ public partial class DungeonWorld : Node3D
     private readonly Dictionary<string, Node3D> _activeItems = new();
     private int _frameSeq;
 
+    private class CombatFloater
+    {
+        public Label3D Node { get; set; }
+        public Vector3 StartPos { get; set; }
+        public float Elapsed { get; set; }
+        public float Lifetime { get; set; } = 0.70f;
+        public Color BaseColor { get; set; }
+    }
+
+    private readonly List<CombatFloater> _activeFloaters = new();
+    private float _trauma = 0f;
+    private string _lastProcessedMessage = "";
+    private string _lastTerrainLabelsSignature = "";
+
     private Vector3 _targetPos;
     private float _targetYaw;
     private float _yaw;
@@ -602,6 +616,11 @@ public partial class DungeonWorld : Node3D
 
     private static void InitMaterials()
     {
+        if (_wallMaterial != null)
+        {
+            return;
+        }
+
         var wallTex = CreateStoneWallTexture();
         var wallNormal = CreateStoneWallNormal();
         var floorTex = CreateFloorTexture();
@@ -1138,6 +1157,7 @@ public partial class DungeonWorld : Node3D
         _torchRadius = Math.Max(1, player.GetProperty("light").GetInt32());
         UpdateStairsHint(map, px, py);
         RebuildEntities(frame);
+        ProcessCombatEvents(frame);
     }
 
     private static readonly string[] Compass = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
@@ -1454,11 +1474,6 @@ public partial class DungeonWorld : Node3D
     /// <summary>Stairs and shopfronts are captioned; placed cleanly without duplicates.</summary>
     private void RebuildTerrainLabels(JsonElement map, int h, int w, int px, int py)
     {
-        foreach (var child in _terrainLabels.GetChildren())
-        {
-            child.QueueFree();
-        }
-
         var rows = map.GetProperty("rows");
         var storePositions = new Dictionary<int, List<Vector2>>();
         var stairsList = new List<(Vector3 Pos, string Name)>();
@@ -1507,6 +1522,28 @@ public partial class DungeonWorld : Node3D
                     }
                 }
             }
+        }
+
+        // Check if the label set has changed to avoid redundant node churn
+        var sigBuilder = new System.Text.StringBuilder();
+        foreach (var (feat, pts) in storePositions)
+        {
+            sigBuilder.Append(feat).Append(':').Append(pts.Count).Append(';');
+        }
+        foreach (var (pos, name) in stairsList)
+        {
+            sigBuilder.Append(name).Append(':').Append(pos.X).Append(',').Append(pos.Z).Append(';');
+        }
+        var sig = sigBuilder.ToString();
+        if (sig == _lastTerrainLabelsSignature)
+        {
+            return;
+        }
+        _lastTerrainLabelsSignature = sig;
+
+        foreach (var child in _terrainLabels.GetChildren())
+        {
+            child.QueueFree();
         }
 
         // Add exactly 1 label per store cluster at its centroid
@@ -1712,6 +1749,95 @@ public partial class DungeonWorld : Node3D
         return dirs[index];
     }
 
+    /// <summary>Add kinetic screen trauma/shake on taking damage or heavy impacts.</summary>
+    public void AddTrauma(float amount)
+    {
+        _trauma = Mathf.Clamp(_trauma + amount, 0f, 1.0f);
+    }
+
+    /// <summary>Spawn 3D billboarded floating combat text at a world position.</summary>
+    public void SpawnFloatingText(string text, Vector3 worldPos, Color color, float scale = 1.0f)
+    {
+        var label = new Label3D
+        {
+            Text = text,
+            Modulate = color,
+            OutlineModulate = new Color(0, 0, 0, 0.95f),
+            OutlineSize = 6,
+            FontSize = (int)(28 * scale),
+            PixelSize = 0.0040f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Shaded = false,
+            NoDepthTest = true,
+            RenderPriority = 15,
+            Position = worldPos,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        AddChild(label);
+        _activeFloaters.Add(new CombatFloater
+        {
+            Node = label,
+            StartPos = worldPos,
+            Elapsed = 0f,
+            Lifetime = 0.70f,
+            BaseColor = color,
+        });
+    }
+
+    private void ProcessCombatEvents(JsonElement frame)
+    {
+        if (!frame.TryGetProperty("messages", out var msgs) || msgs.ValueKind != JsonValueKind.Array || msgs.GetArrayLength() == 0)
+        {
+            return;
+        }
+
+        var lastMsg = msgs[msgs.GetArrayLength() - 1];
+        var text = lastMsg.TryGetProperty("text", out var tProp) ? tProp.GetString() ?? "" : "";
+        if (string.IsNullOrEmpty(text) || text == _lastProcessedMessage)
+        {
+            return;
+        }
+        _lastProcessedMessage = text;
+
+        var lower = text.ToLowerInvariant();
+        var forward = _camera != null ? -_camera.Transform.Basis.Z : Vector3.Forward;
+        var right = _camera != null ? _camera.Transform.Basis.X : Vector3.Right;
+        var spawnInFront = _targetPos + forward * 1.6f + new Vector3(0, 0.2f, 0);
+
+        // Player taking damage
+        if (lower.Contains("hits you") || lower.Contains("bites you") || lower.Contains("touches you") ||
+            lower.Contains("claws you") || lower.Contains("crushes you") || lower.Contains("burns you") ||
+            lower.Contains("shoots you") || lower.Contains("stings you") || lower.Contains("casts a spell"))
+        {
+            AddTrauma(0.40f);
+            var hitPos = _targetPos + forward * 0.8f + (GD.Randf() > 0.5f ? right * 0.3f : -right * 0.3f);
+            SpawnFloatingText("OUCH!", hitPos, new Color(1.0f, 0.30f, 0.30f), 1.1f);
+        }
+        // Critical / heavy hit
+        else if (lower.Contains("critical hit") || lower.Contains("great force") || lower.Contains("superb"))
+        {
+            AddTrauma(0.15f);
+            SpawnFloatingText("CRITICAL!", spawnInFront + new Vector3(0, 0.3f, 0), new Color(1.0f, 0.90f, 0.25f), 1.35f);
+        }
+        // Player hitting monster
+        else if (lower.Contains("you hit") || lower.Contains("you strike") || lower.Contains("you slash") ||
+                 lower.Contains("you shoot") || lower.Contains("you smite") || lower.Contains("you crush"))
+        {
+            SpawnFloatingText("HIT", spawnInFront, new Color(1.0f, 0.75f, 0.20f), 1.0f);
+        }
+        // Misses
+        else if (lower.Contains("you miss") || lower.Contains("misses you"))
+        {
+            SpawnFloatingText("MISS", spawnInFront, new Color(0.70f, 0.72f, 0.78f), 0.9f);
+        }
+        // Monster slain / destroyed
+        else if (lower.Contains("you have slain") || lower.Contains("is destroyed") || lower.Contains("dies."))
+        {
+            SpawnFloatingText("SLAIN!", spawnInFront + new Vector3(0, 0.25f, 0), new Color(0.95f, 0.40f, 0.95f), 1.25f);
+        }
+    }
+
     public override void _Process(double delta)
     {
         if (_camera == null)
@@ -1738,6 +1864,35 @@ public partial class DungeonWorld : Node3D
         var yawDelta = Mathf.Wrap(_targetYaw - _yaw, -Mathf.Pi, Mathf.Pi);
         var roll = Mathf.Clamp(-yawDelta * 0.08f, -0.04f, 0.04f);
         _camera.Rotation = new Vector3(0, _yaw, roll);
+
+        // Update floating combat text
+        for (var i = _activeFloaters.Count - 1; i >= 0; i--)
+        {
+            var fText = _activeFloaters[i];
+            fText.Elapsed += (float)delta;
+            var progress = Mathf.Clamp(fText.Elapsed / fText.Lifetime, 0f, 1f);
+
+            fText.Node.Position = fText.StartPos + new Vector3(0, progress * 0.75f, 0);
+            var alpha = 1.0f - progress * progress;
+            fText.Node.Modulate = new Color(fText.BaseColor.R, fText.BaseColor.G, fText.BaseColor.B, alpha);
+
+            if (fText.Elapsed >= fText.Lifetime)
+            {
+                fText.Node.QueueFree();
+                _activeFloaters.RemoveAt(i);
+            }
+        }
+
+        // Camera trauma / kinetic impact shake
+        if (_trauma > 0.001f)
+        {
+            _trauma = Mathf.Max(0f, _trauma - (float)delta * 1.6f);
+            var shake = _trauma * _trauma;
+            var shakePitch = (GD.Randf() * 2f - 1f) * 0.035f * shake;
+            var shakeYaw = (GD.Randf() * 2f - 1f) * 0.035f * shake;
+            var shakeRoll = (GD.Randf() * 2f - 1f) * 0.045f * shake;
+            _camera.Rotation += new Vector3(shakePitch, shakeYaw, shakeRoll);
+        }
 
         _flicker += delta;
         var f = 1.0f + 0.05f * Mathf.Sin((float)_flicker * 11f) + 0.03f * Mathf.Sin((float)_flicker * 23f);

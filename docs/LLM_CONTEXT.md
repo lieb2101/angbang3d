@@ -59,6 +59,19 @@ Rather than rewriting Angband rules in C#, Angband runs as a headless child proc
 - `docs/ARCHITECTURE.md`: Technical trade-offs and rationale.
 - `engine-patch/0001-bridge-frontend.patch`: Git patch against Angband 4.2.6.
 
+## Declarative Registries & Extension Points
+- **Monster Models (`MonsterModelResolver.cs`)**:
+  - `MonsterModelRule`: Record defining model path, scale, ethereal/floating flags, animation speed, and optional name matcher function.
+  - `MonsterModelResolver.RegisterModelRule(char glyph, ...)`: Add custom humanoid or mesh models with 1 line of code.
+- **Item Models (`ItemModelResolver.cs`)**:
+  - `ModelMappings`: Dictionary mapping item glyphs to 3D models and scaling.
+  - `ItemModelResolver.RegisterItemModel(char glyph, string path, float scale)`: Register new item pickups.
+  - Procedural materials and meshes are cached to prevent allocation churn.
+- **Combat Juice & Visual Feedback (`DungeonWorld.cs`)**:
+  - `SpawnFloatingText(string text, Vector3 worldPos, Color color, float scale)`: 3D billboarding floating combat numbers.
+  - `AddTrauma(float amount)`: Smoothly decaying screen trauma shake on impacts.
+  - `ProcessCombatEvents(JsonElement frame)`: Central hook parsing combat messages.
+
 ## Known Gotchas & Lessons Learned
 1. **Frame sync off-by-one**: The bridge emits an initial frame when waiting for input before any command is sent. Clients must consume this and check `seq > last_seq`.
 2. **`create_needed_dirs()`**: On Windows, `main.c` skipped creating `lib/save`. `main-bridge.c` calls `create_needed_dirs()` during init.

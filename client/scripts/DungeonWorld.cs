@@ -52,6 +52,8 @@ public partial class DungeonWorld : Node3D
     private Node3D _entities;
     private Node3D _terrainLabels;
     private readonly Dictionary<Kind, MultiMeshInstance3D> _buckets = new();
+    private readonly Dictionary<Kind, List<Transform3D>> _xf = new();
+    private readonly Dictionary<Kind, List<Color>> _col = new();
     private readonly Dictionary<string, MonsterEntity> _activeMonsters = new();
     private readonly Dictionary<string, Node3D> _activeItems = new();
     private int _frameSeq;
@@ -99,11 +101,11 @@ public partial class DungeonWorld : Node3D
         _torch = new OmniLight3D
         {
             LightColor = new Color(1.0f, 0.86f, 0.64f),
-            LightEnergy = 2.2f,
+            LightEnergy = 2.4f,
             OmniRange = 9.0f,
             OmniAttenuation = 0.85f,
             ShadowEnabled = true,
-            ShadowBlur = 1.8f,
+            ShadowBlur = 1.6f,
             ShadowBias = 0.04f,
             Position = new Vector3(0, 0.25f, 0),
         };
@@ -145,6 +147,8 @@ public partial class DungeonWorld : Node3D
             {
                 continue;
             }
+            _xf[k] = new List<Transform3D>(256);
+            _col[k] = new List<Color>(256);
             var mmi = new MultiMeshInstance3D
             {
                 Multimesh = new MultiMesh
@@ -163,18 +167,18 @@ public partial class DungeonWorld : Node3D
     private static Godot.Environment BuildEnvironment() => new()
     {
         BackgroundMode = Godot.Environment.BGMode.Color,
-        BackgroundColor = new Color(0.015f, 0.018f, 0.025f),
+        BackgroundColor = new Color(0.005f, 0.006f, 0.010f),
         AmbientLightSource = Godot.Environment.AmbientSource.Color,
-        AmbientLightColor = new Color(0.26f, 0.28f, 0.36f),
-        AmbientLightEnergy = 0.65f,
+        AmbientLightColor = new Color(0.18f, 0.20f, 0.26f),
+        AmbientLightEnergy = 0.08f,
         FogEnabled = true,
-        FogLightColor = new Color(0.04f, 0.045f, 0.06f),
-        FogDensity = 0.016f,
+        FogLightColor = new Color(0.005f, 0.006f, 0.010f),
+        FogDensity = 0.024f,
         VolumetricFogEnabled = true,
-        VolumetricFogDensity = 0.012f,
-        VolumetricFogAlbedo = new Color(0.28f, 0.30f, 0.38f),
-        VolumetricFogEmission = new Color(0.02f, 0.025f, 0.035f),
-        VolumetricFogLength = 32.0f,
+        VolumetricFogDensity = 0.014f,
+        VolumetricFogAlbedo = new Color(0.14f, 0.16f, 0.22f),
+        VolumetricFogEmission = Colors.Black,
+        VolumetricFogLength = 28.0f,
         SsaoEnabled = true,
         SsaoRadius = 1.2f,
         SsaoIntensity = 1.0f,
@@ -1095,45 +1099,44 @@ public partial class DungeonWorld : Node3D
 
         var map = frame.GetProperty("map");
         var player = frame.GetProperty("player");
+        var px = player.GetProperty("x").GetInt32();
+        var py = player.GetProperty("y").GetInt32();
+        var depth = player.GetProperty("depth").GetInt32();
 
-        // Rebuilding every frame would be wasteful, but the known area grows as
-        // the player explores, so key on depth plus how much is known.
-        var key = $"{player.GetProperty("depth").GetInt32()}:{map.GetProperty("w").GetInt32()}" +
-                  $"x{map.GetProperty("h").GetInt32()}:{KnownCount(map)}";
-        if (key != _levelKey)
+        var depthKey = $"{depth}:{map.GetProperty("w").GetInt32()}x{map.GetProperty("h").GetInt32()}";
+        if (depthKey != _levelKey)
         {
-            var firstOnLevel = !_levelKey.StartsWith($"{player.GetProperty("depth").GetInt32()}:");
-            _levelKey = key;
-            _outdoors = player.GetProperty("depth").GetInt32() == 0;
+            _levelKey = depthKey;
+            _outdoors = depth == 0;
             // The town is an open street under sky, not a lightless dungeon.
             _env.BackgroundColor = _outdoors
                 ? new Color(0.08f, 0.12f, 0.22f)
-                : new Color(0.015f, 0.018f, 0.025f);
-            _env.AmbientLightEnergy = _outdoors ? 1.8f : 0.65f;
+                : new Color(0.005f, 0.006f, 0.010f);
+            _env.AmbientLightEnergy = _outdoors ? 1.6f : 0.08f;
             _env.AmbientLightColor = _outdoors
                 ? new Color(0.50f, 0.54f, 0.66f)
-                : new Color(0.26f, 0.28f, 0.36f);
-            _env.FogDensity = _outdoors ? 0.004f : 0.016f;
-            _env.VolumetricFogDensity = _outdoors ? 0.003f : 0.012f;
+                : new Color(0.18f, 0.20f, 0.26f);
+            _env.FogLightColor = _outdoors
+                ? new Color(0.08f, 0.12f, 0.22f)
+                : new Color(0.005f, 0.006f, 0.010f);
+            _env.FogDensity = _outdoors ? 0.004f : 0.024f;
+            _env.VolumetricFogDensity = _outdoors ? 0.003f : 0.014f;
+
             foreach (var m in _activeMonsters.Values) m.RootNode.QueueFree();
             _activeMonsters.Clear();
             foreach (var item in _activeItems.Values) item.QueueFree();
             _activeItems.Clear();
-            Rebuild(map);
-            if (firstOnLevel)
-            {
-                FaceSomethingOpen(map, player.GetProperty("x").GetInt32(),
-                    player.GetProperty("y").GetInt32());
-            }
+
+            FaceSomethingOpen(map, px, py);
+            _targetPos = new Vector3(px * Cell, EyeHeight, py * Cell);
+            _camera.Position = _targetPos;
         }
 
-        _targetPos = new Vector3(
-            player.GetProperty("x").GetInt32() * Cell,
-            EyeHeight,
-            player.GetProperty("y").GetInt32() * Cell);
+        Rebuild(map, px, py);
 
+        _targetPos = new Vector3(px * Cell, EyeHeight, py * Cell);
         _torchRadius = Math.Max(1, player.GetProperty("light").GetInt32());
-        UpdateStairsHint(map, player.GetProperty("x").GetInt32(), player.GetProperty("y").GetInt32());
+        UpdateStairsHint(map, px, py);
         RebuildEntities(frame);
     }
 
@@ -1289,27 +1292,32 @@ public partial class DungeonWorld : Node3D
         return sb.ToString();
     }
 
-    private void Rebuild(JsonElement map)
+    private void Rebuild(JsonElement map, int px, int py)
     {
         var h = map.GetProperty("h").GetInt32();
         var w = map.GetProperty("w").GetInt32();
         var rows = map.GetProperty("rows");
 
-        var xf = new Dictionary<Kind, List<Transform3D>>();
-        var col = new Dictionary<Kind, List<Color>>();
         foreach (var k in _buckets.Keys)
         {
-            xf[k] = new List<Transform3D>();
-            col[k] = new List<Color>();
+            _xf[k].Clear();
+            _col[k].Clear();
         }
 
-        for (var y = 0; y < h; y++)
+        // Bounding box around player for active sightline (MAX_SIGHT in Angband is 20)
+        const int sightRange = 24;
+        var minX = _outdoors ? 0 : Math.Max(0, px - sightRange);
+        var maxX = _outdoors ? w - 1 : Math.Min(w - 1, px + sightRange);
+        var minY = _outdoors ? 0 : Math.Max(0, py - sightRange);
+        var maxY = _outdoors ? h - 1 : Math.Min(h - 1, py + sightRange);
+
+        for (var y = minY; y <= maxY; y++)
         {
             var row = rows[y];
             var feats = row.GetProperty("f").GetString() ?? "";
             var flags = row.GetProperty("l").GetString() ?? "";
 
-            for (var x = 0; x < w; x++)
+            for (var x = minX; x <= maxX; x++)
             {
                 if (x >= flags.Length || x * 2 + 1 >= feats.Length)
                 {
@@ -1319,7 +1327,15 @@ public partial class DungeonWorld : Node3D
                 var flag = AngbandColors.HexVal(flags[x]);
                 var known = (flag & 0x1) != 0;
                 var inView = (flag & 0x2) != 0;
-                if (!known && !inView)
+
+                // In dungeon, only geometry currently in direct line-of-sight is rendered in 3D.
+                // Out-of-LOS solid rock and distant unmapped rooms remain black void and do not
+                // reveal floating walls through solid earth.
+                if (!_outdoors && !inView)
+                {
+                    continue;
+                }
+                if (_outdoors && !known && !inView)
                 {
                     continue;
                 }
@@ -1331,26 +1347,41 @@ public partial class DungeonWorld : Node3D
                     continue;
                 }
 
-                var shade = inView ? BaseColour(kind) : new Color(0.44f, 0.48f, 0.60f);
+                // Determine lighting level: 0=LOS, 1=torch, 2=lit room/feature, 3=dark
+                var lighting = (flag >> 2) & 0x3;
+                Color shade;
+                if (_outdoors || lighting == 2)
+                {
+                    shade = BaseColour(kind);
+                }
+                else if (lighting is 0 or 1)
+                {
+                    shade = BaseColour(kind);
+                }
+                else
+                {
+                    // Dark / unlit space in line of sight (recedes smoothly into pitch blackness)
+                    shade = BaseColour(kind) * new Color(0.24f, 0.26f, 0.32f);
+                }
 
                 if (kind is Kind.Wall or Kind.Magma or Kind.Quartz or Kind.Store)
                 {
                     // Solid stone blocks spanning from Y=0 to Y=WallHeight=3.0m
                     var pos = new Vector3(x * Cell, WallHeight / 2.0f, y * Cell);
-                    xf[kind].Add(new Transform3D(Basis.Identity, pos));
-                    col[kind].Add(shade);
+                    _xf[kind].Add(new Transform3D(Basis.Identity, pos));
+                    _col[kind].Add(shade);
                 }
                 else if (kind == Kind.Floor)
                 {
                     var pos = new Vector3(x * Cell, -0.05f, y * Cell);
-                    xf[Kind.Floor].Add(new Transform3D(Basis.Identity, pos));
-                    col[Kind.Floor].Add(shade);
+                    _xf[Kind.Floor].Add(new Transform3D(Basis.Identity, pos));
+                    _col[Kind.Floor].Add(shade);
                 }
                 else if (kind is Kind.DoorClosed or Kind.DoorOpen or Kind.DoorBroken)
                 {
                     // Floor underneath door
-                    xf[Kind.Floor].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, -0.05f, y * Cell)));
-                    col[Kind.Floor].Add(inView ? Colors.White : new Color(0.44f, 0.48f, 0.60f));
+                    _xf[Kind.Floor].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, -0.05f, y * Cell)));
+                    _col[Kind.Floor].Add(shade);
 
                     // Orientation: align door frame across the corridor
                     var wallN = IsWallOrVoid(map, x, y - 1, w, h);
@@ -1365,61 +1396,63 @@ public partial class DungeonWorld : Node3D
                     }
 
                     var basis = Basis.Identity.Rotated(Vector3.Up, doorYaw);
-                    xf[kind].Add(new Transform3D(basis, new Vector3(x * Cell, 0, y * Cell)));
-                    col[kind].Add(shade);
+                    _xf[kind].Add(new Transform3D(basis, new Vector3(x * Cell, 0, y * Cell)));
+                    _col[kind].Add(shade);
                 }
                 else if (kind is Kind.StairsDown or Kind.StairsUp)
                 {
                     // Floor underneath stairs
-                    xf[Kind.Floor].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, -0.05f, y * Cell)));
-                    col[Kind.Floor].Add(inView ? Colors.White : new Color(0.44f, 0.48f, 0.60f));
+                    _xf[Kind.Floor].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, -0.05f, y * Cell)));
+                    _col[Kind.Floor].Add(shade);
 
-                    xf[kind].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, 0, y * Cell)));
-                    col[kind].Add(shade);
+                    _xf[kind].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, 0, y * Cell)));
+                    _col[kind].Add(shade);
                 }
                 else if (kind == Kind.Rubble)
                 {
-                    xf[Kind.Floor].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, -0.05f, y * Cell)));
-                    col[Kind.Floor].Add(inView ? Colors.White : new Color(0.44f, 0.48f, 0.60f));
+                    _xf[Kind.Floor].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, -0.05f, y * Cell)));
+                    _col[Kind.Floor].Add(shade);
 
-                    xf[Kind.Rubble].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, 0, y * Cell)));
-                    col[Kind.Rubble].Add(shade);
+                    _xf[Kind.Rubble].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, 0, y * Cell)));
+                    _col[Kind.Rubble].Add(shade);
                 }
                 else if (kind == Kind.Lava)
                 {
-                    xf[Kind.Lava].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, 0.06f, y * Cell)));
-                    col[Kind.Lava].Add(shade);
+                    _xf[Kind.Lava].Add(new Transform3D(Basis.Identity, new Vector3(x * Cell, 0.06f, y * Cell)));
+                    _col[Kind.Lava].Add(shade);
                 }
 
                 // Ceiling over walkable areas and doorways in the dungeon
                 if (!_outdoors && kind is Kind.Floor or Kind.StairsDown or Kind.StairsUp or Kind.Store
                     or Kind.DoorClosed or Kind.DoorOpen or Kind.DoorBroken or Kind.Rubble)
                 {
-                    xf[Kind.Ceiling].Add(new Transform3D(Basis.Identity,
+                    _xf[Kind.Ceiling].Add(new Transform3D(Basis.Identity,
                         new Vector3(x * Cell, WallHeight + 0.05f, y * Cell)));
-                    var cc = inView ? BaseColour(Kind.Ceiling) : new Color(0.35f, 0.38f, 0.50f);
-                    col[Kind.Ceiling].Add(cc);
+                    var cc = (lighting == 3)
+                        ? BaseColour(Kind.Ceiling) * new Color(0.20f, 0.22f, 0.28f)
+                        : BaseColour(Kind.Ceiling);
+                    _col[Kind.Ceiling].Add(cc);
                 }
             }
         }
 
         foreach (var (kind, mmi) in _buckets)
         {
-            var list = xf[kind];
+            var list = _xf[kind];
             var mm = mmi.Multimesh;
             mm.InstanceCount = list.Count;
             for (var i = 0; i < list.Count; i++)
             {
                 mm.SetInstanceTransform(i, list[i]);
-                mm.SetInstanceColor(i, col[kind][i]);
+                mm.SetInstanceColor(i, _col[kind][i]);
             }
         }
 
-        RebuildTerrainLabels(map, h, w);
+        RebuildTerrainLabels(map, h, w, px, py);
     }
 
     /// <summary>Stairs and shopfronts are captioned; placed cleanly without duplicates.</summary>
-    private void RebuildTerrainLabels(JsonElement map, int h, int w)
+    private void RebuildTerrainLabels(JsonElement map, int h, int w, int px, int py)
     {
         foreach (var child in _terrainLabels.GetChildren())
         {
@@ -1430,16 +1463,30 @@ public partial class DungeonWorld : Node3D
         var storePositions = new Dictionary<int, List<Vector2>>();
         var stairsList = new List<(Vector3 Pos, string Name)>();
 
-        for (var y = 0; y < h; y++)
+        const int labelRange = 24;
+        var minX = _outdoors ? 0 : Math.Max(0, px - labelRange);
+        var maxX = _outdoors ? w - 1 : Math.Min(w - 1, px + labelRange);
+        var minY = _outdoors ? 0 : Math.Max(0, py - labelRange);
+        var maxY = _outdoors ? h - 1 : Math.Min(h - 1, py + labelRange);
+
+        for (var y = minY; y <= maxY; y++)
         {
             var flags = rows[y].GetProperty("l").GetString() ?? "";
             var feats = rows[y].GetProperty("f").GetString() ?? "";
-            for (var x = 0; x < w && x < flags.Length && x * 2 + 1 < feats.Length; x++)
+            for (var x = minX; x <= maxX && x < flags.Length && x * 2 + 1 < feats.Length; x++)
             {
-                if ((AngbandColors.HexVal(flags[x]) & 0x3) == 0)
+                var flag = AngbandColors.HexVal(flags[x]);
+                var inView = (flag & 0x2) != 0;
+                var known = (flag & 0x1) != 0;
+                if (!_outdoors && !inView)
                 {
                     continue;
                 }
+                if (_outdoors && !known && !inView)
+                {
+                    continue;
+                }
+
                 var feat = (AngbandColors.HexVal(feats[x * 2]) << 4) | AngbandColors.HexVal(feats[x * 2 + 1]);
                 var kind = KindOf(feat);
                 if (kind == Kind.Store)
@@ -1744,6 +1791,9 @@ public partial class DungeonWorld : Node3D
                 monster.CurrentYaw = Mathf.LerpAngle(monster.CurrentYaw, monster.TargetYaw, rotT);
             }
             monster.CharacterNode.Rotation = new Vector3(0, monster.CurrentYaw, 0);
+
+            // Update lively procedural animations for creature tokens (rodents, insects, centipedes, bats, slimes, etc.)
+            MonsterModelResolver.UpdateProceduralAnimation(monster, delta, (float)_flicker);
         }
     }
 }

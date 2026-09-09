@@ -27,93 +27,36 @@ public partial class Overlay : Control
     // Minimap properties
     public float MinimapScale { get; set; } = 1.0f;
     private const float MinMinimapScale = 0.5f;
-    private const float MaxMinimapScale = 2.5f;
-    private bool _isDraggingMinimapResizer;
-    private Vector2 _dragStartPos;
-    private float _scaleStart;
+    private const float MaxMinimapScale = 3.0f;
+    private const float Margin = 12f;
+
+    public void ChangeMinimapScale(float delta)
+    {
+        MinimapScale = Mathf.Clamp(MinimapScale + delta, MinMinimapScale, MaxMinimapScale);
+        QueueRedraw();
+    }
 
     public override void _Ready()
     {
+        SetAnchorsPreset(LayoutPreset.FullRect);
         _font = ThemeDB.FallbackFont;
         _cell = new Vector2(
             _font.GetStringSize("#", HorizontalAlignment.Left, -1, _fontSize).X,
             _font.GetHeight(_fontSize) + 2);
-        MouseFilter = MouseFilterEnum.Pass;
+        MouseFilter = MouseFilterEnum.Ignore;
     }
 
     private Rect2 GetMinimapRect()
     {
-        var baseW = 200f;
-        var baseH = 150f;
-        var w = baseW * MinimapScale;
-        var h = baseH * MinimapScale;
-        var margin = 12f;
         var top = _cell.Y + 12f;
-        var left = View.X - w - margin;
+        var baseW = 240f;
+        var baseH = 180f;
+        var maxW = Mathf.Max(140f, View.X - Margin * 2);
+        var maxH = Mathf.Max(100f, View.Y - top - (_cell.Y * 2 + 20f));
+        var w = Mathf.Clamp(baseW * MinimapScale, 140f, maxW);
+        var h = Mathf.Clamp(baseH * MinimapScale, 100f, maxH);
+        var left = View.X - w - Margin;
         return new Rect2(left, top, w, h);
-    }
-
-    private Rect2 GetMinimapResizeHandleRect()
-    {
-        var mapRect = GetMinimapRect();
-        var handleSize = 16f;
-        // Bottom-left corner of the minimap
-        return new Rect2(mapRect.Position.X, mapRect.Position.Y + mapRect.Size.Y - handleSize, handleSize, handleSize);
-    }
-
-    public override void _GuiInput(InputEvent @event)
-    {
-        if (Mode != ViewMode.World)
-        {
-            return;
-        }
-
-        if (@event is InputEventMouseButton mb)
-        {
-            var mapRect = GetMinimapRect();
-            var handleRect = GetMinimapResizeHandleRect();
-
-            if (mb.ButtonIndex == MouseButton.WheelUp && mapRect.HasPoint(mb.Position))
-            {
-                MinimapScale = Mathf.Clamp(MinimapScale + 0.1f, MinMinimapScale, MaxMinimapScale);
-                QueueRedraw();
-                AcceptEvent();
-                return;
-            }
-            if (mb.ButtonIndex == MouseButton.WheelDown && mapRect.HasPoint(mb.Position))
-            {
-                MinimapScale = Mathf.Clamp(MinimapScale - 0.1f, MinMinimapScale, MaxMinimapScale);
-                QueueRedraw();
-                AcceptEvent();
-                return;
-            }
-
-            if (mb.ButtonIndex == MouseButton.Left)
-            {
-                if (mb.Pressed && handleRect.HasPoint(mb.Position))
-                {
-                    _isDraggingMinimapResizer = true;
-                    _dragStartPos = mb.Position;
-                    _scaleStart = MinimapScale;
-                    AcceptEvent();
-                    return;
-                }
-                else if (!mb.Pressed && _isDraggingMinimapResizer)
-                {
-                    _isDraggingMinimapResizer = false;
-                    AcceptEvent();
-                    return;
-                }
-            }
-        }
-        else if (@event is InputEventMouseMotion mm && _isDraggingMinimapResizer)
-        {
-            var delta = _dragStartPos - mm.Position;
-            var scaleDelta = (delta.X + delta.Y) / 200f;
-            MinimapScale = Mathf.Clamp(_scaleStart + scaleDelta, MinMinimapScale, MaxMinimapScale);
-            QueueRedraw();
-            AcceptEvent();
-        }
     }
 
     // A Control inside a CanvasLayer has no meaningful size of its own, so lay
@@ -301,78 +244,95 @@ public partial class Overlay : Control
         var py = player.GetProperty("y").GetInt32();
 
         var mapRect = GetMinimapRect();
-        var handleRect = GetMinimapResizeHandleRect();
 
-        // Background box with border
-        DrawRect(mapRect, new Color(0.02f, 0.02f, 0.03f, 0.85f));
-        DrawRect(mapRect, new Color(0.35f, 0.35f, 0.45f, 0.9f), false, 1.5f);
+        // Header bar layout
+        var headerH = 18f;
+        var headerRect = new Rect2(mapRect.Position.X, mapRect.Position.Y, mapRect.Size.X, headerH);
+        var contentRect = new Rect2(mapRect.Position.X + 2, mapRect.Position.Y + headerH, mapRect.Size.X - 4, mapRect.Size.Y - headerH - 2);
 
-        // Minimap font cell size scaled to fit a view window or scaled glyphs
-        var miniFontSize = Mathf.Clamp(Mathf.RoundToInt(10 * MinimapScale), 7, 24);
+        // Semi-transparent background panel with shadow/border
+        DrawRect(mapRect, new Color(0.02f, 0.03f, 0.04f, 0.88f));
+        DrawRect(headerRect, new Color(0.06f, 0.08f, 0.12f, 0.95f));
+        DrawRect(mapRect, new Color(0.28f, 0.35f, 0.48f, 0.85f), false, 1.5f);
+        DrawLine(
+            new Vector2(headerRect.Position.X, headerRect.Position.Y + headerH),
+            new Vector2(headerRect.Position.X + headerRect.Size.X, headerRect.Position.Y + headerH),
+            new Color(0.25f, 0.32f, 0.42f, 0.8f), 1f);
+
+        // Header Title and Info
+        var titleFont = 11;
+        DrawString(_font, new Vector2(headerRect.Position.X + 6, headerRect.Position.Y + _font.GetAscent(titleFont) + 2),
+            "MINIMAP", HorizontalAlignment.Left, -1, titleFont, new Color(0.95f, 0.82f, 0.45f, 0.95f));
+
+        var depth = player.GetProperty("depth").GetInt32();
+        var locStr = depth == 0 ? "Town" : $"{depth * 50}ft";
+        var coordStr = $"({px},{py}) {locStr}";
+        var coordSize = _font.GetStringSize(coordStr, HorizontalAlignment.Left, -1, 10);
+        DrawString(_font, new Vector2(headerRect.Position.X + headerRect.Size.X - coordSize.X - 6, headerRect.Position.Y + _font.GetAscent(10) + 3),
+            coordStr, HorizontalAlignment.Left, -1, 10, new Color(0.6f, 0.68f, 0.8f, 0.9f));
+
+        // Compute dynamic font size for content based on minimap height
+        var miniFontSize = Mathf.Clamp(Mathf.RoundToInt(contentRect.Size.Y / 16f), 8, 22);
         var miniCell = new Vector2(
             _font.GetStringSize("#", HorizontalAlignment.Left, -1, miniFontSize).X,
             _font.GetHeight(miniFontSize));
 
-        if (miniCell.X <= 0 || miniCell.Y <= 0)
+        if (miniCell.X > 0 && miniCell.Y > 0)
         {
-            return;
-        }
+            var cols = Mathf.FloorToInt(contentRect.Size.X / miniCell.X);
+            var lines = Mathf.FloorToInt(contentRect.Size.Y / miniCell.Y);
+            var ox = Mathf.Clamp(px - cols / 2, 0, Mathf.Max(0, w - cols));
+            var oy = Mathf.Clamp(py - lines / 2, 0, Mathf.Max(0, h - lines));
 
-        var cols = Mathf.FloorToInt(mapRect.Size.X / miniCell.X);
-        var lines = Mathf.FloorToInt(mapRect.Size.Y / miniCell.Y);
-        var ox = Mathf.Clamp(px - cols / 2, 0, Mathf.Max(0, w - cols));
-        var oy = Mathf.Clamp(py - lines / 2, 0, Mathf.Max(0, h - lines));
-
-        for (var row = 0; row < lines && oy + row < h; row++)
-        {
-            var r = rows[oy + row];
-            var glyphs = r.GetProperty("g").GetString() ?? "";
-            var attrs = r.GetProperty("a").GetString() ?? "";
-            var flags = r.GetProperty("l").GetString() ?? "";
-
-            for (var c = 0; c < cols && ox + c < w; c++)
+            for (var row = 0; row < lines && oy + row < h; row++)
             {
-                var cell = ox + c;
-                if (cell >= glyphs.Length)
-                {
-                    break;
-                }
-                var ch = glyphs[cell];
-                if (ch == ' ')
-                {
-                    continue;
-                }
+                var r = rows[oy + row];
+                var glyphs = r.GetProperty("g").GetString() ?? "";
+                var attrs = r.GetProperty("a").GetString() ?? "";
+                var flags = r.GetProperty("l").GetString() ?? "";
 
-                var flag = cell < flags.Length ? AngbandColors.HexVal(flags[cell]) : 0;
-                if ((flag & 0x3) == 0)
+                for (var c = 0; c < cols && ox + c < w; c++)
                 {
-                    continue;
+                    var cell = ox + c;
+                    if (cell >= glyphs.Length)
+                    {
+                        break;
+                    }
+                    var ch = glyphs[cell];
+                    if (ch == ' ')
+                    {
+                        continue;
+                    }
+
+                    var flag = cell < flags.Length ? AngbandColors.HexVal(flags[cell]) : 0;
+                    if ((flag & 0x3) == 0)
+                    {
+                        continue;
+                    }
+
+                    var colour = AngbandColors.Get(AngbandColors.ParseAttr(attrs, cell));
+                    if ((flag & 0x2) == 0)
+                    {
+                        colour = colour.Darkened(0.55f);
+                    }
+
+                    var isPlayer = (cell == px && oy + row == py);
+                    if (isPlayer)
+                    {
+                        colour = new Color(1.0f, 0.95f, 0.4f);
+                    }
+
+                    var drawPos = new Vector2(
+                        contentRect.Position.X + c * miniCell.X,
+                        contentRect.Position.Y + row * miniCell.Y + _font.GetAscent(miniFontSize));
+
+                    if (drawPos.Y <= mapRect.Position.Y + mapRect.Size.Y)
+                    {
+                        DrawString(_font, drawPos, ch.ToString(), HorizontalAlignment.Left, -1, miniFontSize, colour);
+                    }
                 }
-
-                var colour = AngbandColors.Get(AngbandColors.ParseAttr(attrs, cell));
-                if ((flag & 0x2) == 0)
-                {
-                    colour = colour.Darkened(0.55f);
-                }
-
-                var drawPos = new Vector2(
-                    mapRect.Position.X + c * miniCell.X,
-                    mapRect.Position.Y + row * miniCell.Y + _font.GetAscent(miniFontSize));
-
-                DrawString(_font, drawPos, ch.ToString(), HorizontalAlignment.Left, -1, miniFontSize, colour);
             }
         }
-
-        // Draw resize grip in the corner handle
-        DrawRect(handleRect, new Color(0.4f, 0.4f, 0.6f, 0.4f));
-        DrawLine(
-            new Vector2(handleRect.Position.X + 2, handleRect.Position.Y + handleRect.Size.Y - 2),
-            new Vector2(handleRect.Position.X + handleRect.Size.X - 2, handleRect.Position.Y + 2),
-            new Color(0.7f, 0.7f, 0.8f, 0.8f), 1.5f);
-        DrawLine(
-            new Vector2(handleRect.Position.X + 6, handleRect.Position.Y + handleRect.Size.Y - 2),
-            new Vector2(handleRect.Position.X + handleRect.Size.X - 2, handleRect.Position.Y + 6),
-            new Color(0.7f, 0.7f, 0.8f, 0.8f), 1.5f);
     }
 
     private void DrawHud(JsonElement frame)
@@ -417,7 +377,7 @@ public partial class Overlay : Control
         DrawRect(new Rect2(0, View.Y - barH, View.X, barH), new Color(0, 0, 0, 0.6f));
         DrawString(_font, new Vector2(6, View.Y - barH + _font.GetAscent(_fontSize) + 3),
             (StairsHint != null ? StairsHint + "   |   " : "") +
-            "arrows: turn/walk   Shift-M: map   Tab: terminal   >: stairs   " +
+            "arrows: turn/walk   Shift-M: map   Tab: terminal   PgUp/PgDn: minimap   " +
             "i: inventory   ^S: save   ?: help",
             HorizontalAlignment.Left, -1, _fontSize, new Color(0.45f, 0.45f, 0.52f));
         DrawString(_font, new Vector2(6, View.Y - 8), line,

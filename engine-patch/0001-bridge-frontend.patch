@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..edb80b722
+index 000000000..7d76d0ebe
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,759 @@
+@@ -0,0 +1,760 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -305,12 +305,13 @@ index 000000000..edb80b722
 +
 +/**
 + * True once there is a generated level with the player actually placed on it.
-+ * Frames can be emitted mid-generation, so this must be checked before any
-+ * grid-relative lookup.
++ * Frames can be emitted mid-generation or during level transitions, so this
++ * must be checked before any grid-relative lookup.
 + */
 +static bool bridge_in_play(void)
 +{
 +	return character_dungeon && character_generated && cave && player
++		&& player->upkeep && !player->upkeep->generate_level
 +		&& square_in_bounds(cave, player->grid);
 +}
 +

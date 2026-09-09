@@ -752,6 +752,20 @@ public partial class Main : Node
             return;
         }
 
+        if (inWorld && key.Keycode == Key.Pageup)
+        {
+            _overlay.ChangeMinimapScale(0.15f);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (inWorld && key.Keycode == Key.Pagedown)
+        {
+            _overlay.ChangeMinimapScale(-0.15f);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // Turning is a camera change, not a game action: it must always be
         // instant, and must never wait on the engine or cost a game turn.
         if (inWorld && key.Keycode is Key.Left or Key.Right)

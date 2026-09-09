@@ -6,7 +6,7 @@ built as a fork of the game rather than a reimplementation of it.
 The goal is *Dungeon Master*-style presentation with Angband's full roguelike
 depth: every monster, item, artifact, curse and level generator, unchanged.
 
-**Status: Phase 1 — the bridge works.** There is no 3D renderer yet.
+**Status: Phase 2b — fully playable 3D dungeon crawler with Godot 4.**
 
 ## How it works
 
@@ -58,13 +58,19 @@ It launches the engine, rolls a random character and drops you into the town.
 
 | key | action |
 |---|---|
-| arrows / `hjkl` | move |
-| `>` | descend stairs |
-| `Tab` | toggle the raw terminal view |
+| Left / Right | turn camera 90° (instant, 0 turns) |
+| Up / Down | step forward / backward |
+| `hjkl` | cardinal grid move |
+| `>` / `<` | descend / ascend stairs |
+| `Shift-M` | toggle 2D classic map overlay |
+| `PgUp` / `PgDn` | scale HUD minimap |
+| `Tab` | toggle raw terminal view |
+| `Escape` | pause menu (save, load, quit) |
 | `i` | inventory |
-| `Ctrl-S` | save |
+| `Ctrl-S` | quick save |
 | `Ctrl-X` | save and quit |
 | `Ctrl-W` | wizard (god) mode |
+| `Ctrl-A` | wizard debug menu |
 | `?` | help |
 
 Prompts, menus and stores appear in the **terminal view** (`Tab`) — those parts

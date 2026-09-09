@@ -110,6 +110,54 @@ player has been placed, before a character exists. Any grid-relative lookup must
 therefore be guarded; `bridge_in_play()` exists for this. An unguarded read here
 crashes the process and appears to the client as truncated JSON.
 
+## System Architecture & Data Flow
+
+```mermaid
+flowchart TD
+    subgraph Engine [Angband C Engine Process]
+        A[Angband Game Core] -->|blocks for input| B[src/main-bridge.c]
+        B -->|serializes state| C[src/bridge-json.c]
+    end
+
+    subgraph IPC [Standard Streams IPC]
+        C -->|stdout JSON stream| D[BridgeClient.cs]
+        D -->|stdin key commands| B
+    end
+
+    subgraph Client [Godot 4 C# Frontend]
+        D -->|Parsed Frame Object| E[Main.cs: View & State Coordinator]
+        E -->|ViewMode: World| F[DungeonWorld.cs: 3D Renderer]
+        E -->|ViewMode: Terminal / Map / HUD| G[Overlay.cs: 2D Canvas]
+        F --> H[MultiMesh Static Batches]
+        F --> I[Monster Entities & 3D Models]
+        F --> J[3D Item Pickups]
+        E -->|Raw Key Events| K[Input Dispatcher]
+        K -->|Camera Turn 0-turn| F
+        K -->|Relative Numpad / Arrow Key| D
+    end
+```
+
+## View Routing State Machine (`NeedsTerminal`)
+
+Angband switches between different interaction contexts (dungeon exploration, character birth, inventory, store shopping, and direction/targeting prompts). The client routes these seamlessly:
+
+| Condition in Frame | View Mode | Visual Presentation |
+|---|---|---|
+| `phase != "play"` | `ViewMode.Terminal` | Character creation / splash / death screens |
+| `ui.overlay > 0` | `ViewMode.Terminal` | Menus, inventory, equipment, stores |
+| `!ui.awaiting_command && !ui.more` | `ViewMode.Terminal` | Direction prompts, targeting, yes/no queries |
+| `ui.more == true` | `ViewMode.World` | `-more-` message pauses stay in 3D with HUD prompt |
+| `_mapMode == true` | `ViewMode.Map` | Full-level 2D tactical map |
+| Normal dungeon play | `ViewMode.World` | First-person 3D world with HUD overlays |
+
+## 3D Rendering & MultiMesh Batching
+
+To render a 12,000-tile Angband dungeon floor with high performance:
+1. **MultiMesh Instance Batches**: Walls, floors, ceilings, stairs, and rubble are grouped into contiguous `MultiMeshInstance3D` nodes by material.
+2. **Procedural PBR Textures**: High-resolution stone block masonry, chisel bevels, flagstone floors, and normal maps are generated procedurally on startup with zero texture file dependencies.
+3. **Orientation-Aware Portals**: Door frames detect wall configurations and orient themselves along North-South or East-West corridor paths with accurate open, closed, and broken states.
+4. **Dynamic Entity Tracking**: Visible monsters and items are tracked across frames with `MonsterEntity` instances, interpolating position and orientation smoothly while playing character walk/idle animations.
+
 ## Licensing and content
 
 The project is GPL v2, inherited from Angband. That permits commercial use and
@@ -117,7 +165,7 @@ donations.
 
 Angband's *content*, however, is heavily Tolkien-derived — Morgoth, Sauron, the
 artifacts, much of the bestiary. Angband is untroubled as a free non-commercial
-project. Distributing this in a form that accepts money is a different risk
+project. Distributing this in a form that accepts money is a different risk.
 profile.
 
 The mitigation is cheap and lives in the data files: `engine/lib/gamedata/`

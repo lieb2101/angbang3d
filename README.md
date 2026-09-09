@@ -50,61 +50,101 @@ the bridge with no special casing.
 
 Double-click **`play.cmd`**, or from a terminal:
 
-```
+```powershell
 C:\Dev\angband3d\play.cmd
 ```
 
 It launches the engine, rolls a random character and drops you into the town.
 
-| key | action |
-|---|---|
-| Left / Right | turn camera 90° (instant, 0 turns) |
-| Up / Down | step forward / backward |
-| `hjkl` | cardinal grid move |
-| `>` / `<` | descend / ascend stairs |
-| `Shift-M` | toggle 2D classic map overlay |
-| `PgUp` / `PgDn` | scale HUD minimap |
-| `Tab` | toggle raw terminal view |
-| `Escape` | pause menu (save, load, quit) |
-| `i` | inventory |
-| `Ctrl-S` | quick save |
-| `Ctrl-X` | save and quit |
-| `Ctrl-W` | wizard (god) mode |
-| `Ctrl-A` | wizard debug menu |
-| `?` | help |
+### Controls
 
-Prompts, menus and stores appear in the **terminal view** (`Tab`) — those parts
-of Angband are inseparable from its game logic, so they are shown as text until
+| Key | Action |
+|---|---|
+| **Arrow Left / Right** | Turn camera 90° left / right (instant, costs 0 game turns) |
+| **Arrow Up / Down** | Step forward / backward in current camera facing |
+| **Numpad 8 / 2** | Step forward / backward relative to camera facing |
+| **Numpad 4 / 6** | Strafe left / strafe right relative to camera facing |
+| **Numpad 7 / 9** | Diagonal step forward-left / forward-right |
+| **Numpad 1 / 3** | Diagonal step backward-left / backward-right |
+| **Numpad 5** | Stay in place / rest for 1 turn |
+| **`hjkl` / `yubn`** | Classic roguelike cardinal & diagonal grid moves |
+| **`>` / `<`** | Descend / ascend stairs |
+| **`Shift-M`** | Toggle 2D full-level tactical map overlay |
+| **`PgUp` / `PgDn`** | Zoom HUD mini-map scale in / out |
+| **`Tab`** | Toggle raw 80x24 terminal view |
+| **`Escape`** | In-game pause menu (Resume, Quick Save, Load, Save & Quit) |
+| **`i` / `e` / `w`** | Inventory / equipment / wield item |
+| **`d` / `k`** | Drop / destroy item |
+| **`m` / `p`** | Cast spell / pray |
+| **`Ctrl-S`** | Quick save |
+| **`Ctrl-X`** | Save and quit |
+| **`Ctrl-W`** | Toggle Wizard (God) mode |
+| **`Ctrl-A`** | Open Wizard debug command menu |
+| **`?`** | Help |
+
+Prompts, menus, and stores appear in the **terminal view** (`Tab`) — those parts
+of Angband are tightly entangled with game logic, so they are shown as text until
 native panels replace them.
 
 Squares you can currently see are drawn lit; squares you remember but cannot see
-are dimmed. That distinction comes straight from Angband and is what becomes
+are dimmed. That distinction comes straight from Angband and drives the
 fog-of-memory rendering in 3D.
 
 To play plain text Angband instead:
 
-```
+```powershell
 play.cmd -Classic
 ```
 
-The `.cmd` wrappers exist because PowerShell refuses to run unsigned scripts by
-default; they bypass that for the one script rather than changing any
-system-wide policy. If you would rather run the `.ps1` files directly, use
+The `.cmd` wrappers exist because PowerShell restricts running unsigned scripts by
+default; they bypass that for the one script rather than changing system-wide
+policy. If you would rather run the `.ps1` files directly, use
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-## Building
+## Quickstart for Contributors
 
-Requires MSYS2 with the MinGW-w64 toolchain on Windows, or GCC/CMake elsewhere.
+We welcome contributions of all kinds — from adding new 3D creature models, dungeon materials, and audio effects to refining UI overlays, optimizing mesh pipelines, or writing alternate frontends (VR, web, mobile).
 
+### Prerequisites
+
+| Tool | Purpose | Recommended Version |
+|---|---|---|
+| **.NET SDK** | Godot C# client compilation | .NET 8.0 or 9.0 |
+| **Godot Engine (.NET version)** | Client editor and runtime | Godot 4.3+ (.NET / Mono) |
+| **Python** | Smoke test runner & bridge scripting | Python 3.8+ |
+| **MSYS2 / MinGW-w64** *(Windows only)* | Building Angband C engine | GCC 13+, CMake 3.20+, Ninja |
+| **GCC / Clang + CMake + Ninja** *(Linux / macOS)* | Building Angband C engine | Standard dev packages |
+
+### Building
+
+```powershell
+# 1. One-time toolchain setup (Windows MSYS2 + MinGW)
+.\tools\bootstrap.ps1
+
+# 2. Build the Angband C engine
+.\build.cmd
+
+# 3. Build the Godot C# client
+dotnet build client/angband3d.csproj
+
+# 4. Run automated bridge acceptance tests
+python tools/smoke_test.py
 ```
-tools\bootstrap.ps1   # one-time toolchain setup
-build.cmd             # build
-python tools\smoke_test.py
-```
 
-At least one graphical front end must be enabled or CMake selects the Windows
-front end, which disables the bridge. The build scripts enable GCU, which also
-gives you a playable text Angband in the same binary.
+### Extending & Contributing
+
+- **Adding 3D Monster Models**: Map GLTF/GLB models or procedural tokens declaratively in `client/scripts/MonsterModelResolver.cs`.
+- **Adding 3D Item Pickups**: Register item meshes and scale in `client/scripts/ItemModelResolver.cs`.
+- **Procedural Masonry & Textures**: Customize PBR shaders and geometry in `client/scripts/DungeonWorld.cs`.
+- **HUD & UI**: Enhance the 2D canvas and terminal overlays in `client/scripts/Overlay.cs`.
+- **Engine Bridge**: Maintain the lightweight C JSON bridge in `engine/src/main-bridge.c`.
+
+For comprehensive developer guides, architecture deep dives, and step-by-step tutorials, see:
+- 📖 [Contributing Guide](docs/CONTRIBUTING.md) — Step-by-step contribution recipes, coding standards, and PR instructions.
+- 🏛️ [Architecture](docs/ARCHITECTURE.md) — Technical rationale, frame synchronization, and rendering pipeline.
+- 📡 [Bridge Protocol v1](docs/PROTOCOL.md) — Wire specification for the JSON IPC protocol.
+- 🎨 [Graphics & Assets Handover](docs/GRAPHICS_HANDOVER.md) — 3D pipeline blueprints, shaders, and lighting design.
+- 🤖 [LLM / Agent Context](docs/LLM_CONTEXT.md) — High-density cheatsheet for AI coding assistants.
 
 ## Trying the bridge by hand
 
@@ -112,12 +152,17 @@ gives you a playable text Angband in the same binary.
 python tools/bridge.py enter enter '@' '@' '@' '@'
 ```
 
-Rolls a random character and prints the screen after each keypress.
+Rolls a random character and prints the screen after each keypress. For interactive debugging, see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#debugging-the-bridge-by-hand).
 
 ## Licence
 
 GPL v2. angband3d is a derivative work of Angband, which is dual licensed under
 the GPL v2 and the traditional Angband licence; this project takes the GPL v2
+option. See [LICENSE](LICENSE) and `engine/docs/copying.rst`.
+
+Angband's content draws heavily on Tolkien. That is fine for a free,
+non-commercial project, but see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+before distributing this in any form that accepts money.
 option. See [LICENSE](LICENSE) and `engine/docs/copying.rst`.
 
 Angband's content draws heavily on Tolkien. That is fine for a free,

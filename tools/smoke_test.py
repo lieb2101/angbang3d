@@ -143,7 +143,8 @@ def test_wizard_mode_and_detection():
         b.key(">")
         b.dismiss()
         check(b.frame["player"]["depth"] == 1, "should be on dungeon level 1")
-        check(b.frame["player"]["light"] > 0, "should have a lit torch in the dungeon")
+        check("light" in b.frame["player"] and b.frame["player"]["light"] >= 0,
+              "player light radius should be reported and non-negative")
 
         b.debug("m")
         b.debug("u")

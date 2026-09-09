@@ -29,6 +29,7 @@ public partial class Main : Node
     private bool _shotTaken;
     private string _saveName = "angband3d";
     private bool _manualRequested;
+    private bool _randomRequested;
     private bool _inMenu;
     private bool _inPauseMenu;
     private int _menuIndex;
@@ -171,10 +172,10 @@ public partial class Main : Node
             _inMenu = false;
             StartGame();
         }));
-        _menuItems.Add(("New Character (Random)", () =>
+        _menuItems.Add(("New Character (Random - Review & Re-roll)", () =>
         {
             _saveName = FreeSlot(_saveName);
-            _autoBirth = true;
+            _randomRequested = true;
             _inMenu = false;
             StartGame();
         }));
@@ -313,7 +314,8 @@ public partial class Main : Node
         _overlay.Waiting = 0.0;
 
         AutoBirth(f);
-        if (!_autoBirth)
+        HandleRandomBirth(f);
+        if (!_autoBirth && !_randomRequested)
         {
             _world.Features = _bridge.Features;
             _world.OnFrame(f);
@@ -471,6 +473,52 @@ public partial class Main : Node
         else
         {
             _bridge.SendKey("@");
+        }
+    }
+
+    private void HandleRandomBirth(JsonElement frame)
+    {
+        if (!_randomRequested)
+        {
+            return;
+        }
+
+        if (frame.GetProperty("phase").GetString() == "play"
+            && frame.GetProperty("map").ValueKind == JsonValueKind.Object
+            && frame.GetProperty("ui").GetProperty("awaiting_command").GetBoolean())
+        {
+            _randomRequested = false;
+            _world.OnFrame(frame);
+            return;
+        }
+
+        var screen = Screen(frame);
+        if (screen.Contains("['esc' to step back, 's' to start over"))
+        {
+            // Character summary review screen reached: stop auto-advancing so player can review / re-roll
+            _randomRequested = false;
+            return;
+        }
+
+        if (screen.Contains("press any key to continue") || screen.Contains("[press any key"))
+        {
+            _bridge.SendKey("enter");
+        }
+        else if (screen.Contains("select your character traits"))
+        {
+            _bridge.SendKey("@");
+        }
+        else if (screen.Contains("-more-"))
+        {
+            _bridge.SendKey("enter");
+        }
+        else if (screen.Contains("[y/n]") || screen.Contains("are you sure"))
+        {
+            _bridge.SendKey("y");
+        }
+        else
+        {
+            _bridge.SendKey("enter");
         }
     }
 

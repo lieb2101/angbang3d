@@ -240,7 +240,7 @@ public partial class Overlay : Control
         DrawRect(new Rect2(0, View.Y - barH, View.X, barH), new Color(0, 0, 0, 0.6f));
         DrawString(_font, new Vector2(6, View.Y - barH + _font.GetAscent(_fontSize) + 3),
             (StairsHint != null ? StairsHint + "   |   " : "") +
-            "arrows: turn/walk   M: map   Tab: terminal   >: stairs   " +
+            "arrows: turn/walk   Shift-M: map   Tab: terminal   >: stairs   " +
             "i: inventory   ^S: save   ?: help",
             HorizontalAlignment.Left, -1, _fontSize, new Color(0.45f, 0.45f, 0.52f));
         DrawString(_font, new Vector2(6, View.Y - 8), line,

@@ -512,7 +512,8 @@ public partial class Main : Node
         var frame = _bridge.Frame;
         var inWorld = frame.HasValue && EffectiveMode(frame.Value) == ViewMode.World;
 
-        if (key.Keycode == Key.M && (inWorld || _mapMode))
+        // Capital M only: lowercase m is Angband's cast command.
+        if (key.Keycode == Key.M && key.ShiftPressed && (inWorld || _mapMode))
         {
             _mapMode = !_mapMode;
             Refresh();

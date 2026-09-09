@@ -364,13 +364,20 @@ public partial class Overlay : Control
         // Depth 0 is the town, which is the same every visit; everything below
         // is generated fresh each time you arrive.
         var place = depth == 0 ? "Town" : $"Depth {depth}  ({depth * 50}ft)";
+        var lightRadius = p.GetProperty("light").GetInt32();
+        var hasLightItem = p.TryGetProperty("light_item", out var liProp) && !string.IsNullOrEmpty(liProp.GetString());
+        var lightItemName = hasLightItem ? liProp.GetString() : "None";
+        var lightStr = depth == 0
+            ? (hasLightItem ? $"{lightItemName} (day)" : "None")
+            : (hasLightItem ? $"{lightItemName} (R:{lightRadius})" : (lightRadius > 0 ? $"Light {lightRadius}" : "None"));
+
         var line =
             $"{p.GetProperty("race").GetString()} {p.GetProperty("class").GetString()}  " +
             $"L{p.GetProperty("level").GetInt32()}  " +
             $"HP {p.GetProperty("hp").GetInt32()}/{p.GetProperty("hp_max").GetInt32()}  " +
             $"AU {p.GetProperty("gold").GetInt32()}  " +
             $"{place}  " +
-            $"Torch {p.GetProperty("light").GetInt32()}  " +
+            $"Light: {lightStr}  " +
             $"Facing {FacingName}{wizard}";
 
         var barH = _cell.Y * 2 + 10;

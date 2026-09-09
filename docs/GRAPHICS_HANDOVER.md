@@ -109,8 +109,82 @@
 
 ---
 
-## 4. Next Priorities for Future Work
-1. **Modular Town Buildings**: Place individual 3D roof/chimney props or modular building models in town cells.
-2. **Combat Animations**: Trigger attack / hit reaction animations during player and monster turns.
-3. **Sound Effects**: Add 3D spatial audio cues for footfalls, door opening/bashing, and combat.
+## 4. Comprehensive 3D Visual Enhancement Blueprint (Next Steps)
+
+### Phase 1: First-Person Viewmodel & Weapon Dynamics
+- **Goal**: Provide physical presence on screen, eliminating the disembodied floating camera.
+- **Node**: Create `client/scripts/ViewModel.cs` attached as a child of `DungeonWorld._camera`.
+- **Existing Assets in `client/assets/models/`**:
+  - `dungeon/torch_lit.gltf.glb` (Torch / Offhand Light)
+  - `characters/sword_1handed.gltf` (Melee Blade)
+  - `characters/shield_badge.gltf` (Shield)
+  - `characters/wand.gltf` (Wand / Staff)
+  - `characters/spellbook_closed.gltf` (Magic Tome)
+- **Mechanics**:
+  1. **Dual-Hand Positioning**:
+     - Left Hand: Torch/Shield at `Vector3(-0.35f, -0.28f, -0.55f)`.
+     - Right Hand: Weapon/Staff at `Vector3(0.38f, -0.26f, -0.55f)`.
+  2. **Procedural Motion & Sway**:
+     - Walk-bob sinusoidal oscillation driven by `StepSeconds` movement accumulator.
+     - Yaw/Pitch lag inertia: calculate delta camera angle and lerp viewmodel offset with damping.
+  3. **Action Tweens**:
+     - Melee Attack: Fast forward thrust ($+0.25\text{ m}$ Z-offset) with $-15^\circ$ slash rotation over $0.12\text{ s}$, then return.
+     - Spell Cast: Raise wand/tome with a brief emissive glow pulse.
+     - Incoming Hit: Brief recoil back toward the camera ($-0.1\text{ m}$).
+
+### Phase 2: Combat VFX, Floating Combat Text & Kinetic "Juice"
+- **Goal**: Bring combat feedback from text logs directly into the 3D world.
+- **Hook Points**: `Main.OnFrame` $\to$ `DungeonWorld.OnFrame(JsonElement frame)` (carries `messages` array and monster `hp` changes).
+- **Components**:
+  1. **3D Floating Combat Text**:
+     - Instantiate lightweight billboarded `Label3D` instances above target entity heads.
+     - Styling: Orange (`#FF8800`) for damage numbers, silver (`#AAAAAA`) for misses, gold (`#FFDD00`) with $1.4\times$ scale punch for critical hits.
+     - Tween: Float upward $+0.8\text{ m}$, scale down $1.2\times \to 1.0\times$, fade alpha to 0 over $0.65\text{ s}$, then `QueueFree()`.
+  2. **Impact Particles (`CpuParticles3D`)**:
+     - Directional impact sparks/blood bursts matching monster attribute color.
+     - Monster death: Dissolve particle burst and spectral smoke poof.
+  3. **Spell & Missile Projectiles**:
+     - Interpolate high-speed particle nodes (`GpuParticles3D` or `CpuParticles3D` with trail) from player camera to target cell upon spell/missile messages (Magic Missile, Fireball, Arrows, Breath attacks).
+  4. **Camera Trauma / Impact Shake**:
+     - Add a `_trauma` scalar ($0.0 \to 1.0$) in `DungeonWorld.cs` decaying at $1.5\text{/s}$.
+     - On player damage: set `_trauma = Mathf.Min(1.0f, _trauma + dmg / maxHp)` and apply rotational noise shake in `_Process`.
+
+### Phase 3: Procedural Dungeon Dressing & Clutter Placement
+- **Goal**: Break up uniform corridor and room geometry using existing CC0 assets.
+- **Existing Assets in `client/assets/models/`**:
+  - `dungeon/torch_mounted.gltf.glb` (Wall Sconces)
+  - `dungeon/column.gltf.glb`, `dungeon/pillar.gltf.glb` (Corner Columns)
+  - `dungeon/barrel_large.gltf.glb`, `dungeon/barrel_small_stack.gltf.glb` (Barrels)
+  - `dungeon/crates_stacked.gltf.glb`, `dungeon/box_stacked.gltf.glb` (Crates)
+  - `dungeon/floor_tile_big_grate.gltf.glb` (Floor Grates)
+  - `dungeon/banner_shield_red.gltf.glb` (Wall Banners)
+  - `props/tree_dead_large.gltf` (Dead Roots / Foliage)
+- **Placement Logic (in `DungeonWorld.Rebuild()`)**:
+  1. **Wall Torches**: Detect continuous corridor/room wall sections and spawn a `torch_mounted` instance every 6–8 tiles with a low-energy point light ($1.2\text{ energy}$, $4\text{ m}$ radius).
+  2. **Corner Pillars**: Detect concave room corners (where two perpendicular walls meet floor) and place `pillar.gltf.glb`.
+  3. **Deterministic Scatter**: For passable floor cells with 2 or 3 adjacent walls (corners, alcoves, dead ends), compute `uint hash = Hash(depth, x, y)`. If `hash % 100 < 15`, spawn a random clutter instance (barrels, crates, bones, cobwebs).
+  4. **Wall Banners**: In large open rooms with unbroken walls, spawn decorative banners at $Y = 1.8\text{ m}$.
+
+### Phase 4: Depth-Based Biome Themes & Palette Grading
+- **Goal**: Visually communicate depth progression through distinct environmental palettes and atmospheric effects.
+- **Biome Configuration Matrix**:
+  | Depth Range | Biome Name | Wall/Floor Tint | Lighting / Ambient | Fog Density & Color | Particle FX |
+  |---|---|---|---|---|---|
+  | **0** | Town / Surface | Warm half-timbered stone | Bright twilight ($1.6\text{ energy}$) | $0.004$, Navy `#141E38` | Night breeze |
+  | **1–15** | Upper Crypts & Dungeon | Classic grey limestone | Warm torchlight ($2.4\text{ energy}$) | $0.014$, Dark Grey `#08080A` | Dust motes |
+  | **16–35** | Overgrown Ruins & Fungi | Mossy greenish stone | Dim green/amber ($2.0\text{ energy}$) | $0.018$, Murky Green `#0A150D` | Floating spores |
+  | **36–60** | Crystal Caverns & Flooded Depths | Blue/slate granite | Cool cyan crystal glints ($1.8\text{ energy}$) | $0.022$, Cyan-Dark `#05101A` | Water drips |
+  | **61–85** | Magma Underworld | Obsidian / basalt | Incandescent orange glow ($2.6\text{ energy}$) | $0.025$, Embers `#1A0A05` | Rising heat & sparks |
+  | **86–100** | Abyssal Throne (Morgoth) | Pitch-black Permarock | Ethereal violet/crimson ($1.4\text{ energy}$) | $0.030$, Deep Violet `#120418` | Void tendrils |
+- **Implementation**: On depth change (`_levelKey`), smoothly interpolate `WorldEnvironment` properties (`VolumetricFogDensity`, `VolumetricFogAlbedo`, `AmbientLightColor`) and assign pre-tinted `StandardMaterial3D` sets.
+
+### Phase 5: Modular Town Architecture Overhaul (Depth 0)
+- **Goal**: Replace flat store cubes with an authentic medieval settlement.
+- **Existing Assets in `client/assets/models/town/`**:
+  - Modular buildings, pitched roofs (`building_A.gltf`, `roof_sloped.gltf`), awnings, and streetlamps.
+- **Mechanics**:
+  - Replace town `Kind.Store` MultiMesh boxes with modular pitched-roof building models.
+  - Add wooden shop doors, market stalls, and streetlamp posts.
+  - Position animated 3D townspeople NPCs (`t`) wandering outside shop frontages.
+  - Directional sunlight/moonlight with real-time shadow projection across the town square.
 

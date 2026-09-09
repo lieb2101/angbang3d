@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..7d76d0ebe
+index 000000000..b025d4dd6
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,760 @@
+@@ -0,0 +1,771 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -260,6 +260,7 @@ index 000000000..7d76d0ebe
 +#include "message.h"
 +#include "monster.h"
 +#include "obj-desc.h"
++#include "obj-gear.h"
 +#include "object.h"
 +#include "player.h"
 +#include "ui-map.h"
@@ -360,6 +361,16 @@ index 000000000..7d76d0ebe
 +	/* Player's own light radius (torch/lantern) - drives client torch. */
 +	bj_kv_int(fp, "light", player->state.cur_light);
 +	fputc(',', fp);
++	/* Currently equipped light item (if any) */
++	struct object *light_obj = equipped_item_by_slot_name(player, "light");
++	if (light_obj) {
++		char lbuf[80];
++		object_desc(lbuf, sizeof(lbuf), light_obj, ODESC_BASE, player);
++		bj_kv_string(fp, "light_item", lbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "light_fuel", light_obj->timeout);
++		fputc(',', fp);
++	}
 +	/*
 +	 * Ambient light of the square the player stands on. Every grid-relative
 +	 * lookup must go through bridge_in_play(): during birth and level

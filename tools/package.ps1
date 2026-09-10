@@ -34,13 +34,46 @@ if (-not (Test-Path $engineExe)) {
     Write-Host "[1/5] Angband C engine already built: $engineExe" -ForegroundColor Green
 }
 
-# 2. Build Godot C# Client in Release mode
+# 2. Build Godot C# Client in Release mode & Export Standalone Executable
 Write-Host "[2/5] Compiling Godot C# client (Release)..." -ForegroundColor Yellow
 $clientProj = Join-Path $repo 'client\angband3d.csproj'
+$clientSln = Join-Path $repo 'client\angband3d.sln'
+if (-not (Test-Path $clientSln)) {
+    Push-Location (Join-Path $repo 'client')
+    try {
+        & dotnet new sln -n angband3d
+        & dotnet sln angband3d.sln add angband3d.csproj
+    } finally {
+        Pop-Location
+    }
+}
 & dotnet build $clientProj -c Release
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to build client project."
 }
+
+# Find Godot executable for export
+function Find-GodotExe {
+    $cmd = Get-Command godot -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    $roots = @(
+        "$env:LOCALAPPDATA\Microsoft\WinGet\Packages",
+        "$env:ProgramFiles\Godot",
+        "$env:LOCALAPPDATA\Programs\Godot"
+    )
+    foreach ($root in $roots) {
+        if (-not (Test-Path $root)) { continue }
+        $hit = Get-ChildItem $root -Recurse -Filter 'Godot*.exe' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notlike '*console*' } |
+            Sort-Object { $_.Name -like '*mono*' } -Descending |
+            Select-Object -First 1
+        if ($hit) { return $hit.FullName }
+    }
+    return $null
+}
+
+$godotExe = Find-GodotExe
 
 # 3. Prepare Staging Directory
 $distRoot = Join-Path $repo $OutputDir
@@ -52,6 +85,20 @@ if (Test-Path $stageDir) {
 }
 New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 Write-Host "[3/5] Staging distribution into: $stageDir" -ForegroundColor Yellow
+
+# Export Standalone Executable if Godot is available
+if ($godotExe) {
+    Write-Host "Exporting standalone Angband3D.exe using Godot ($godotExe)..." -ForegroundColor Yellow
+    $exportTarget = Join-Path $stageDir 'Angband3D.exe'
+    & $godotExe --headless --path (Join-Path $repo 'client') --export-release "Windows Desktop" $exportTarget
+    if ($LASTEXITCODE -eq 0 -and (Test-Path $exportTarget)) {
+        Write-Host "Standalone executable exported successfully: $exportTarget" -ForegroundColor Green
+    } else {
+        Write-Host "Warning: Standalone export exited with code $LASTEXITCODE; falling back to source distribution staging." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Godot executable not found; skipping standalone .exe export step." -ForegroundColor Yellow
+}
 
 # Copy root docs and licenses
 Copy-Item (Join-Path $repo 'LICENSE') $stageDir

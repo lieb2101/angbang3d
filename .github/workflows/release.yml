@@ -15,49 +15,23 @@ on:
         required: false
         default: 'Angband3D Release'
 
+permissions:
+  contents: write
+
 env:
   ANGBAND_TAG: "4.2.6"
 
 jobs:
-  build-engine-linux:
-    name: Build Engine (Linux)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build libncurses-dev
-
-      - name: Reconstruct engine fork
-        run: |
-          git clone --origin upstream --branch "$ANGBAND_TAG" --depth 1 \
-            https://github.com/angband/angband.git engine
-          cd engine
-          git apply --verbose ../engine-patch/0001-bridge-frontend.patch
-
-      - name: Build Engine
-        run: |
-          cmake -G Ninja \
-            -DSUPPORT_BRIDGE_FRONTEND=ON \
-            -DSUPPORT_GCU_FRONTEND=ON \
-            -B engine/build engine
-          cmake --build engine/build
-
-      - name: Upload Linux Engine Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: engine-linux
-          path: |
-            engine/build/game/angband
-            engine/build/game/lib/
-
-  build-engine-windows:
-    name: Build Engine (Windows)
+  build-windows:
+    name: Build & Package (Windows x64)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
@@ -71,7 +45,7 @@ jobs:
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-pdcurses
 
-      - name: Reconstruct engine fork & Build
+      - name: Reconstruct engine fork & Build Engine
         shell: msys2 {0}
         run: |
           git clone --origin upstream --branch "$ANGBAND_TAG" --depth 1 \
@@ -84,20 +58,21 @@ jobs:
             -B build .
           cmake --build build
 
-      - name: Upload Windows Engine Artifact
+      - name: Package Windows ZIP
+        shell: pwsh
+        run: |
+          .\tools\package.ps1
+
+      - name: Upload Windows Package
         uses: actions/upload-artifact@v4
         with:
-          name: engine-windows
-          path: |
-            engine/build/game/angband.exe
-            engine/build/game/lib/
+          name: Angband3D-Windows-x64
+          path: dist/Angband3D-Windows-x64.zip
+          if-no-files-found: error
 
-  package-and-release:
-    name: Package & Publish Release
-    needs: [build-engine-linux, build-engine-windows]
+  build-linux:
+    name: Build & Package (Linux x64)
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -106,43 +81,27 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build libncurses-dev zip
+
+      - name: Reconstruct engine fork & Build Engine
+        run: |
+          git clone --origin upstream --branch "$ANGBAND_TAG" --depth 1 \
+            https://github.com/angband/angband.git engine
+          cd engine
+          git apply --verbose ../engine-patch/0001-bridge-frontend.patch
+          cmake -G Ninja \
+            -DSUPPORT_BRIDGE_FRONTEND=ON \
+            -DSUPPORT_GCU_FRONTEND=ON \
+            -B build .
+          cmake --build build
+          cd ..
+
       - name: Build C# Client (Release)
         run: dotnet build client/angband3d.csproj -c Release
 
-      - name: Download Engine Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      # --- Package Windows ---
-      - name: Package Windows ZIP
-        run: |
-          mkdir -p dist/Angband3D-Windows-x64/client
-          mkdir -p dist/Angband3D-Windows-x64/engine/build/game
-
-          # Copy client files & assets
-          cp -r client/Main.tscn client/project.godot client/icon.svg client/assets client/scripts dist/Angband3D-Windows-x64/client/
-          if [ -d client/.godot ]; then cp -r client/.godot dist/Angband3D-Windows-x64/client/; fi
-
-          # Copy engine binaries & gamedata
-          cp artifacts/engine-windows/angband.exe dist/Angband3D-Windows-x64/engine/build/game/
-          cp -r artifacts/engine-windows/lib dist/Angband3D-Windows-x64/engine/build/game/
-          mkdir -p dist/Angband3D-Windows-x64/engine/build/game/lib/save
-
-          # Copy documentation and launchers
-          cp LICENSE README.md play.cmd play.ps1 dist/Angband3D-Windows-x64/
-          cat << 'EOF' > dist/Angband3D-Windows-x64/Play-Angband3D.cmd
-          @echo off
-          setlocal
-          cd /d "%~dp0"
-          call play.cmd %*
-          EOF
-
-          cd dist
-          zip -r Angband3D-Windows-x64.zip Angband3D-Windows-x64
-          cd ..
-
-      # --- Package Linux ---
       - name: Package Linux ZIP
         run: |
           mkdir -p dist/Angband3D-Linux-x64/client
@@ -153,9 +112,9 @@ jobs:
           if [ -d client/.godot ]; then cp -r client/.godot dist/Angband3D-Linux-x64/client/; fi
 
           # Copy engine binaries & gamedata
-          cp artifacts/engine-linux/angband dist/Angband3D-Linux-x64/engine/build/game/
+          cp engine/build/game/angband dist/Angband3D-Linux-x64/engine/build/game/
           chmod +x dist/Angband3D-Linux-x64/engine/build/game/angband
-          cp -r artifacts/engine-linux/lib dist/Angband3D-Linux-x64/engine/build/game/
+          cp -r engine/build/game/lib dist/Angband3D-Linux-x64/engine/build/game/
           mkdir -p dist/Angband3D-Linux-x64/engine/build/game/lib/save
 
           # Copy documentation and launchers
@@ -179,6 +138,31 @@ jobs:
           zip -r Angband3D-Linux-x64.zip Angband3D-Linux-x64
           cd ..
 
+      - name: Upload Linux Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Angband3D-Linux-x64
+          path: dist/Angband3D-Linux-x64.zip
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          path: release-packages
+
+      - name: Prepare Assets
+        run: |
+          mkdir -p final-dist
+          find release-packages -name "*.zip" -exec cp {} final-dist/ \;
+          ls -la final-dist/
+
       - name: Determine Release Tag
         id: tag_info
         run: |
@@ -198,6 +182,8 @@ jobs:
           name: ${{ steps.tag_info.outputs.title }}
           draft: false
           prerelease: false
+          generate_release_notes: true
+          files: final-dist/*.zip
           generate_release_notes: true
           files: |
             dist/Angband3D-Windows-x64.zip

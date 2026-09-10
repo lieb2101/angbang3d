@@ -51,6 +51,12 @@ $packs = @(
         Url = "https://github.com/KayKit-Game-Assets/KayKit-City-Builder-Bits-1.0/archive/refs/heads/main.zip"
         TargetDir = $townDir
         Filter = "*.*"
+    },
+    @{
+        Name = "KayKit Medieval Hexagon Pack 1.0"
+        Url = "https://github.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0/archive/refs/heads/main.zip"
+        TargetDir = $townDir
+        Filter = "*.*"
     }
 )
 

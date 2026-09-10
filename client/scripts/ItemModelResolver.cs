@@ -183,11 +183,14 @@ public static class ItemModelResolver
         mat = new StandardMaterial3D
         {
             AlbedoColor = color,
-            Roughness = 0.35f,
-            Metallic = glyph is ')' or '[' or ']' or '(' or '=' ? 0.85f : 0.1f,
+            Roughness = glyph is ')' or '[' or ']' or '(' or '=' ? 0.28f : 0.45f,
+            Metallic = glyph is ')' or '[' or ']' or '(' or '=' ? 0.92f : 0.05f,
             EmissionEnabled = true,
             Emission = color,
-            EmissionEnergyMultiplier = 0.65f,
+            EmissionEnergyMultiplier = 0.85f,
+            RimEnabled = true,
+            Rim = 0.5f,
+            RimTint = 0.5f,
         };
         _materialCache[key] = mat;
         return mat;

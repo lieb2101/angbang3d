@@ -624,132 +624,134 @@ public partial class DungeonWorld : Node3D
 
     private static ImageTexture CreateStoneWallTexture()
     {
-        const int size = 256;
+        const int size = 512;
         return CreateTexture(size, size, (x, y) =>
         {
-            var row = y / 64;
-            var yInRow = y % 64;
-            var distY = Math.Min(yInRow, 63 - yInRow);
-            var xOff = (row % 2 == 1) ? 64 : 0;
-            var xInRow = (x + size - xOff) % 128;
-            var distX = Math.Min(xInRow, 127 - xInRow);
+            var row = y / 128;
+            var yInRow = y % 128;
+            var distY = Math.Min(yInRow, 127 - yInRow);
+            var xOff = (row % 2 == 1) ? 128 : 0;
+            var xInRow = (x + size - xOff) % 256;
+            var distX = Math.Min(xInRow, 255 - xInRow);
             var mortarDist = Math.Min(distX, distY);
 
-            // Natural dark mortar joints
-            if (mortarDist <= 2)
+            // Natural dark mortar joints with realistic deep grit
+            if (mortarDist <= 4)
             {
-                var mn = SmoothNoise(x * 0.15f, y * 0.15f, 101) * 0.04f - 0.02f;
-                return new Color(0.14f + mn, 0.14f + mn, 0.15f + mn);
+                var mn = SmoothNoise(x * 0.15f, y * 0.15f, 101) * 0.05f - 0.025f;
+                return new Color(0.11f + mn, 0.11f + mn, 0.12f + mn);
             }
 
             // Stone block tonal variation
-            var blockId = row * 4 + ((x + size - xOff) / 128);
+            var blockId = row * 4 + ((x + size - xOff) / 256);
             var blockHue = Hash(blockId, 0, 77);
-            var rBase = 0.35f + (blockHue - 0.5f) * 0.05f;
-            var gBase = 0.35f + (blockHue - 0.5f) * 0.04f;
-            var bBase = 0.37f + (0.5f - blockHue) * 0.04f;
+            var rBase = 0.33f + (blockHue - 0.5f) * 0.06f;
+            var gBase = 0.33f + (blockHue - 0.5f) * 0.05f;
+            var bBase = 0.35f + (0.5f - blockHue) * 0.05f;
 
             // Soft bevel from mortar to block face
-            var bevel = Mathf.Clamp((mortarDist - 2) / 6.0f, 0.55f, 1.0f);
+            var bevel = Mathf.Clamp((mortarDist - 4) / 12.0f, 0.55f, 1.0f);
 
             // Natural multi-scale stone grain & mineral texture
-            var grain = (FractalNoise(x * 0.08f, y * 0.08f, 3, 1) - 0.5f) * 0.10f;
+            var grain = (FractalNoise(x * 0.05f, y * 0.05f, 4, 1) - 0.5f) * 0.14f;
+            var microGrain = (SmoothNoise(x * 0.25f, y * 0.25f, 88) - 0.5f) * 0.04f;
 
-            var r = Mathf.Clamp(rBase * bevel + grain, 0f, 1f);
-            var g = Mathf.Clamp(gBase * bevel + grain, 0f, 1f);
-            var b = Mathf.Clamp(bBase * bevel + grain, 0f, 1f);
+            var r = Mathf.Clamp(rBase * bevel + grain + microGrain, 0f, 1f);
+            var g = Mathf.Clamp(gBase * bevel + grain + microGrain, 0f, 1f);
+            var b = Mathf.Clamp(bBase * bevel + grain + microGrain, 0f, 1f);
             return new Color(r, g, b);
         });
     }
 
     private static ImageTexture CreateStoneWallNormal()
     {
-        const int size = 256;
+        const int size = 512;
         return CreateTexture(size, size, (x, y) =>
         {
-            var row = y / 64;
-            var yInRow = y % 64;
-            var distY = Math.Min(yInRow, 63 - yInRow);
-            var xOff = (row % 2 == 1) ? 64 : 0;
-            var xInRow = (x + size - xOff) % 128;
-            var distX = Math.Min(xInRow, 127 - xInRow);
+            var row = y / 128;
+            var yInRow = y % 128;
+            var distY = Math.Min(yInRow, 127 - yInRow);
+            var xOff = (row % 2 == 1) ? 128 : 0;
+            var xInRow = (x + size - xOff) % 256;
+            var distX = Math.Min(xInRow, 255 - xInRow);
             var mortarDist = Math.Min(distX, distY);
 
-            if (mortarDist <= 2)
+            if (mortarDist <= 4)
             {
                 return new Color(0.5f, 0.5f, 1.0f);
             }
 
-            var dx = (xInRow < 64) ? (1.0f - xInRow / 10.0f) : -(1.0f - (127 - xInRow) / 10.0f);
-            var dy = (yInRow < 32) ? (1.0f - yInRow / 10.0f) : -(1.0f - (63 - yInRow) / 10.0f);
+            var dx = (xInRow < 128) ? (1.0f - xInRow / 20.0f) : -(1.0f - (255 - xInRow) / 20.0f);
+            var dy = (yInRow < 64) ? (1.0f - yInRow / 20.0f) : -(1.0f - (127 - yInRow) / 20.0f);
             dx = Mathf.Clamp(dx, -1f, 1f);
             dy = Mathf.Clamp(dy, -1f, 1f);
 
-            var microBump = (SmoothNoise(x * 0.12f, y * 0.12f, 50) - 0.5f) * 0.25f;
-            var norm = new Vector3((dx + microBump) * 0.45f, -(dy + microBump) * 0.45f, 1.0f).Normalized();
+            var microBump = (FractalNoise(x * 0.06f, y * 0.06f, 3, 50) - 0.5f) * 0.35f;
+            var norm = new Vector3((dx + microBump) * 0.55f, -(dy + microBump) * 0.55f, 1.0f).Normalized();
             return new Color(norm.X * 0.5f + 0.5f, norm.Y * 0.5f + 0.5f, norm.Z * 0.5f + 0.5f);
         });
     }
 
     private static ImageTexture CreateFloorTexture()
     {
-        const int size = 256;
+        const int size = 512;
         return CreateTexture(size, size, (x, y) =>
         {
-            // 2x2 large paving flagstones (128x128 each) with staggered sub-tiles
-            var tileX = x / 128;
-            var tileY = y / 128;
-            var inTileX = x % 128;
-            var inTileY = y % 128;
-            var distX = Math.Min(inTileX, 127 - inTileX);
-            var distY = Math.Min(inTileY, 127 - inTileY);
+            // 2x2 large paving flagstones (256x256 each) with staggered sub-tiles
+            var tileX = x / 256;
+            var tileY = y / 256;
+            var inTileX = x % 256;
+            var inTileY = y % 256;
+            var distX = Math.Min(inTileX, 255 - inTileX);
+            var distY = Math.Min(inTileY, 255 - inTileY);
             var mortarDist = Math.Min(distX, distY);
 
-            if (mortarDist <= 2)
+            if (mortarDist <= 4)
             {
-                var mn = SmoothNoise(x * 0.15f, y * 0.15f, 202) * 0.03f - 0.015f;
-                return new Color(0.12f + mn, 0.12f + mn, 0.13f + mn);
+                var mn = SmoothNoise(x * 0.15f, y * 0.15f, 202) * 0.04f - 0.02f;
+                return new Color(0.09f + mn, 0.09f + mn, 0.10f + mn);
             }
 
             var tileId = tileY * 2 + tileX;
             var tileHue = Hash(tileId, 0, 99);
-            var rBase = 0.26f + (tileHue - 0.5f) * 0.04f;
-            var gBase = 0.27f + (tileHue - 0.5f) * 0.03f;
-            var bBase = 0.29f + (0.5f - tileHue) * 0.03f;
+            var rBase = 0.24f + (tileHue - 0.5f) * 0.05f;
+            var gBase = 0.25f + (tileHue - 0.5f) * 0.04f;
+            var bBase = 0.27f + (0.5f - tileHue) * 0.04f;
 
-            var bevel = Mathf.Clamp((mortarDist - 2) / 8.0f, 0.70f, 1.0f);
-            var grain = (FractalNoise(x * 0.07f, y * 0.07f, 3, 3) - 0.5f) * 0.08f;
+            var bevel = Mathf.Clamp((mortarDist - 4) / 16.0f, 0.65f, 1.0f);
+            var grain = (FractalNoise(x * 0.05f, y * 0.05f, 4, 3) - 0.5f) * 0.12f;
+            var microGrain = (SmoothNoise(x * 0.22f, y * 0.22f, 102) - 0.5f) * 0.03f;
 
-            var r = Mathf.Clamp(rBase * bevel + grain, 0f, 1f);
-            var g = Mathf.Clamp(gBase * bevel + grain, 0f, 1f);
-            var b = Mathf.Clamp(bBase * bevel + grain, 0f, 1f);
+            var r = Mathf.Clamp(rBase * bevel + grain + microGrain, 0f, 1f);
+            var g = Mathf.Clamp(gBase * bevel + grain + microGrain, 0f, 1f);
+            var b = Mathf.Clamp(bBase * bevel + grain + microGrain, 0f, 1f);
             return new Color(r, g, b);
         });
     }
 
     private static ImageTexture CreateFloorNormal()
     {
-        const int size = 256;
+        const int size = 512;
         return CreateTexture(size, size, (x, y) =>
         {
-            var inTileX = x % 128;
-            var inTileY = y % 128;
-            var distX = Math.Min(inTileX, 127 - inTileX);
-            var distY = Math.Min(inTileY, 127 - inTileY);
+            var inTileX = x % 256;
+            var inTileY = y % 256;
+            var distX = Math.Min(inTileX, 255 - inTileX);
+            var distY = Math.Min(inTileY, 255 - inTileY);
             var mortarDist = Math.Min(distX, distY);
 
-            if (mortarDist <= 2)
+            if (mortarDist <= 4)
             {
                 return new Color(0.5f, 0.5f, 1.0f);
             }
 
-            var dx = (inTileX < 64) ? (1.0f - inTileX / 12.0f) : -(1.0f - (127 - inTileX) / 12.0f);
-            var dy = (inTileY < 64) ? (1.0f - inTileY / 12.0f) : -(1.0f - (127 - inTileY) / 12.0f);
+            var dx = (inTileX < 128) ? (1.0f - inTileX / 24.0f) : -(1.0f - (255 - inTileX) / 24.0f);
+            var dy = (inTileY < 128) ? (1.0f - inTileY / 24.0f) : -(1.0f - (255 - inTileY) / 24.0f);
             dx = Mathf.Clamp(dx, -1f, 1f);
             dy = Mathf.Clamp(dy, -1f, 1f);
 
-            var microBump = (SmoothNoise(x * 0.10f, y * 0.10f, 60) - 0.5f) * 0.20f;
-            var norm = new Vector3((dx + microBump) * 0.40f, -(dy + microBump) * 0.40f, 1.0f).Normalized();
+            var microBump = (FractalNoise(x * 0.06f, y * 0.06f, 3, 60) - 0.5f) * 0.30f;
+            var norm = new Vector3((dx + microBump) * 0.50f, -(dy + microBump) * 0.50f, 1.0f).Normalized();
             return new Color(norm.X * 0.5f + 0.5f, norm.Y * 0.5f + 0.5f, norm.Z * 0.5f + 0.5f);
         });
     }
@@ -1163,13 +1165,19 @@ public partial class DungeonWorld : Node3D
             AlbedoTexture = wallTex,
             NormalEnabled = true,
             NormalTexture = wallNormal,
-            NormalScale = 0.70f,
+            NormalScale = 0.95f,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
             Uv1Triplanar = true,
             Uv1WorldTriplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
-            Roughness = 0.88f,
-            Metallic = 0.02f,
+            Roughness = 0.82f,
+            Metallic = 0.04f,
+            HeightmapEnabled = true,
+            HeightmapDeepParallax = true,
+            HeightmapMinLayers = 8,
+            HeightmapMaxLayers = 32,
+            HeightmapScale = 0.04f,
+            HeightmapTexture = wallNormal,
         };
 
         _floorMaterial = new StandardMaterial3D
@@ -1178,13 +1186,19 @@ public partial class DungeonWorld : Node3D
             AlbedoTexture = floorTex,
             NormalEnabled = true,
             NormalTexture = floorNormal,
-            NormalScale = 0.65f,
+            NormalScale = 0.90f,
             TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
             Uv1Triplanar = true,
             Uv1WorldTriplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
-            Roughness = 0.84f,
-            Metallic = 0.02f,
+            Roughness = 0.76f,
+            Metallic = 0.05f,
+            HeightmapEnabled = true,
+            HeightmapDeepParallax = true,
+            HeightmapMinLayers = 8,
+            HeightmapMaxLayers = 32,
+            HeightmapScale = 0.035f,
+            HeightmapTexture = floorNormal,
         };
 
         _ceilingMaterial = new StandardMaterial3D

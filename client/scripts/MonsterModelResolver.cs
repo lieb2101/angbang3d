@@ -414,11 +414,12 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    // KayKit characters have native height ~ 2.3f
-                    entity.ModelHeight = 2.35f * scale;
+                    // Realistic humanoid proportions: scale 0.82 to fit natural dungeon doorways
+                    entity.ModelHeight = 2.05f * scale;
                 }
 
-                instance.Scale = new Vector3(scale, scale, scale);
+                // Realistic anatomically grounded scale: slight non-uniform X/Z slenderize to reduce cartoon chibi width
+                instance.Scale = new Vector3(scale * 0.90f, scale * 1.05f, scale * 0.90f);
                 instance.Position = Vector3.Zero;
 
                 var ap = FindAnimationPlayer(instance);

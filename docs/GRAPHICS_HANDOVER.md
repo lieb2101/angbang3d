@@ -54,6 +54,10 @@
 ### G. Dual-Mode Minimap & Independent Geometry Scaling (`Overlay.cs`)
 - **Decoupled Minimap Controls**: Adjust physical HUD window dimensions (`Ctrl+PgUp/PgDn` or `[`/`]`) independently from grid tile zoom radius (`PgUp/PgDn` or `+`/`-`).
 - **Full-Screen 2D Tactical Map**: Press `Shift-M` for an instant top-down view with your directional vision cone and fog of memory.
+- **PBR Texture & Normal Mapping Upgrades**:
+  - High-resolution (512x512) multi-octave fractal noise maps with micro-grit normal mapping and deep Parallax Occlusion Mapping (POM) on stone masonry and flagstone paving.
+  - Deep parallax layer stepping (8 to 32 layers) on wall and floor materials giving true 3D tactile depth under dynamic torchlight.
+  - Anatomical slenderizing and realistic proportions on character/monster models with rim and metallic shader highlights.
 
 ---
 

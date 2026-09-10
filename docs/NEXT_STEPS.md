@@ -28,30 +28,77 @@
 
 ---
 
-## Roadmap & Next Steps for Next Session
+## Active Execution Focus & High-Fidelity Roadmap (Daggerfall / Skyrim Aesthetic Track)
 
-### Priority 1: First-Person Hand & Rig Mesh Upgrades
-- **Skeletal / Rigged Hand Meshes or Pre-Made CC0 First-Person Rigs**:
-  - Replace procedural multi-mesh geometry with an imported rigged low-poly arm/hand asset (e.g., KayKit or Kenney first-person hand pack) with dedicated bone animations for idling, walking, swinging, blocking, shooting, and casting.
-  - Add glove/gauntlet overlays based on equipped armor (`EQUIP_GLOVES` / `EQUIP_BODY_ARMOR`).
+The project focus has pivoted directly to **Tier 4 Visual & Environmental Overhaul**: delivering immersive dungeon atmosphere, depth-based biome shifts, dynamic torch flame VFX, and rich PBR materials, while preserving 100% of existing viewmodel, tracking, and bridge architecture.
 
-### Priority 2: Enhanced Equipment Visuals & Particles
-- **Dynamic Particle Effects on Held Items**:
-  - Emissive flame & smoke particles for torches.
-  - Glow and rune trails for enchanted / ego weapons (`+to_hit`, `+to_dam`, branded weapons like fire/frost/lightning).
-  - Arcane charge particle effects on wands and spellbooks during casting.
+### Priority 1: Depth-Based Biomes & Atmospheric Lighting (Phase 4 / Tier 4)
+- **Scope**: `client/scripts/DungeonWorld.cs`
+- **Objective**: Transform uniform grey limestone into 6 distinct atmospheric subterranean depth zones that smoothly transition as the player descends:
+  1. **Town / Overworld (Depth 0)**: Midnight sky, cool navy fog, moonlight directional shadows, warm streetlights.
+  2. **Upper Crypts (Levels 1–15)**: Cold ashlar limestone, warm 2400K torchlight, faint dust motes.
+  3. **Overgrown Catacombs (Levels 16–35)**: Damp mossy green stone, murky green volumetric fog, floating luminous spores.
+  4. **Crystal Caverns (Levels 36–60)**: Blue slate granite, cyan crystal glints, damp reflective floor flagstones.
+  5. **Magma Underworld (Levels 61–85)**: Charcoal obsidian walls, glowing magma rivers with orange bloom, rising embers and heat distortion.
+  6. **Permarock / Abyssal Throne (Levels 86–100)**: Pitch-black monolithic permarock, void purple fog, crimson accents.
+- **Key Tasks**:
+  - Implement a depth lookup matrix in `DungeonWorld.cs` returning `BiomeProfile`.
+  - On level transition (`_levelKey` change), smoothly lerp `WorldEnvironment` properties (`VolumetricFogDensity`, `VolumetricFogAlbedo`, `AmbientLightColor`, `AmbientLightEnergy`, `TonemapExposure`).
+  - Swap / tint MultiMesh materials for walls, floors, and ceilings per biome.
+  - Dynamically configure atmospheric particulate emitter (dust motes, spores, mist drips, rising embers).
 
-### Priority 3: Monster Animations & State Feedback
-- **Monster Visual Behaviors**:
-  - Integrate walk, attack, hurt, and death animations from KayKit character assets.
-  - Sleeping / Asleep indicators (floating "Zzz" or rested poses).
-  - Fear / Fleeing visual state (retracting or turning away).
+### Priority 2: High-Fidelity PBR Materials & Normal/Roughness Mapping
+- **Scope**: `client/scripts/DungeonWorld.cs`
+- **Objective**: Elevate procedural stone surfaces with tactile normal maps, deep mortar crevices, wet roughness variation, and glowing mineral veins.
+- **Key Tasks**:
+  - Multi-octave procedural normal mapping for chiseled masonry, flagstone slabs, and heavy wooden door planks.
+  - Specular glints and roughness maps that react dynamically to moving torchlight.
+  - Incandescent emissive glow for magma fissures and crystal veins with Softlight bloom.
 
-### Priority 4: Advanced Minimap & HUD Refinements
-- **Minimap Interactive Styling**:
-  - Radar-style directional compass cone for player facing direction.
-  - Fog of war reveal smoothing.
-  - Customizable UI widget positioning.
+### Priority 3: Dynamic Torch Flame VFX & Ego Weapon Light Auras (Step 9)
+- **Scope**: `client/scripts/ViewModel.cs`, `client/scripts/DungeonWorld.cs`
+- **Objective**: Bring held light sources and enchanted weaponry to life with particle fire and ambient flicker.
+- **Key Tasks**:
+  - Replace static torch tip with animated `CpuParticles3D` flame and rising smoke plume.
+  - Multi-octave Perlin noise light flicker (subtle position jitter + luminous intensity pulse) casting dancing shadows.
+  - Elemental particle auras for ego-branded weapons (Flame, Frost, Lightning, Venom) and pulsing runes on spellbooks.
+
+### Priority 4: Viewmodel Glove & Gauntlet Hand Armor Overlays (Step 11)
+- **Scope**: `client/scripts/ViewModel.cs`
+- **Objective**: Match first-person hand geometry to equipped body and hand armor.
+- **Key Tasks**:
+  - Dynamic hand overlays: Bare hands $\to$ Leather wraps $\to$ Studded bracers $\to$ Heavy steel plate gauntlets.
+
+### Priority 5: 3D Magic Projectiles & Monster Status VFX (Step 10 & Spells)
+- **Scope**: `client/scripts/DungeonWorld.cs`
+- **Objective**: Kinetic in-world spells and monster behavioral cues.
+- **Key Tasks**:
+  - Visual projectile trails (Magic Missile, Fireball, Arrows) streaking from camera to target coordinates.
+  - Overhead 3D status billboarding ("Zzz" sleep indicators, panic/sweat cues, targeting reticle badge).
+
+---
+
+## Secondary Polish Queue (Wave 2 Backlog)
+
+- **Step 13**: Minimap Fog-of-War Smoothing & Golden Discovery Pulses (`Overlay.cs`).
+- **Step 12**: Procedural Atmospheric Subterranean Soundscape (`AudioManager.cs`).
+- **Step 14**: Dynamic Door Kinematics & Destruction Debris (`DungeonWorld.cs`).
+
+---
+
+## Skyrim-Style Graphical & Model Quality Scaling Track
+
+1. **PBR Surface Realism & Parallax Mapping**:
+   - 2K/4K PBR material sets (Albedo, Normal, Roughness, AO, Height/Displacement) for chiseled granite stone walls, damp flagstones, and cavern walls.
+   - Parallax Occlusion Mapping (POM) in `StandardMaterial3D` for deep mortar crevices and stone protrusions.
+2. **Forward+ Lighting & Atmospheric Post-Processing**:
+   - Volumetric Fog with light-shaft scattering for torches and wall sconces.
+   - Signed Distance Field Global Illumination (SDFGI) for secondary light bounce.
+   - ACES Tonemapping and Nordic/dark-fantasy color grading LUT (cool slate shadows, warm incandescent fire).
+   - Perlin-noise torch light jitter and flicker dynamics.
+3. **Rigged 3D Assets & Skeletal Animations**:
+   - Rigged first-person arm/hand pack with dedicated bone animations (walk, swing, block, shoot, cast).
+   - High-fidelity dark-fantasy monster meshes with skeletal movement and combat animations.
 
 ---
 

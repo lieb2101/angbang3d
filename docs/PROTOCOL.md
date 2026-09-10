@@ -101,6 +101,8 @@ freeze.
 | `weapon_item`, `weapon_tval`, `weapon_sval` | Equipped melee weapon name and item type/subtype tags. |
 | `bow_item`, `bow_tval`, `bow_sval` | Equipped ranged weapon name and item type/subtype tags. |
 | `shield_item`, `shield_tval`, `shield_sval` | Equipped shield name and item type/subtype tags. |
+| `body_armor_item`, `body_armor_tval`, `body_armor_sval` | Equipped body armor name and item type/subtype tags. |
+| `gloves_item`, `gloves_tval`, `gloves_sval` | Equipped gloves/gauntlets name and item type/subtype tags. |
 | `grid_light` | **Ambient light of the square the player stands on.** Distinct from `light`; this is what Angband's status bar shows as "Light N". |
 | `speed` | Current speed. |
 | `dead` | Whether the character has died. |

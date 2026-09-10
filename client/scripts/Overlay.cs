@@ -30,6 +30,20 @@ public partial class Overlay : Control
     public int GuideSection { get; set; } = 0;
     public int GuideScroll { get; set; } = 0;
 
+    // Discovery Pulses & Fog Smoothing (Step 13)
+    private struct DiscoveryPulse
+    {
+        public int X;
+        public int Y;
+        public double StartTime;
+        public double Duration;
+        public Color Color;
+    }
+
+    private readonly System.Collections.Generic.Dictionary<long, double> _knownFeatures = new();
+    private readonly System.Collections.Generic.List<DiscoveryPulse> _activePulses = new();
+    private int _lastKnownDepth = -1;
+
     // Minimap properties
     public float MinimapScale { get; set; } = 1.0f;
     public float MinimapZoom { get; set; } = 1.0f;
@@ -618,6 +632,151 @@ public partial class Overlay : Control
             HorizontalAlignment.Left, -1, 13, new Color(0.6f, 0.68f, 0.82f));
     }
 
+    #region Compass & Orientation Helpers
+
+    private static Vector2 GetFacingVector(string facing) => facing switch
+    {
+        "E" => new Vector2(1, 0),
+        "S" => new Vector2(0, 1),
+        "W" => new Vector2(-1, 0),
+        _ => new Vector2(0, -1) // "N"
+    };
+
+    private static float GetFacingAngle(string facing) => facing switch
+    {
+        "E" => Mathf.Pi / 2f,
+        "S" => Mathf.Pi,
+        "W" => -Mathf.Pi / 2f,
+        _ => 0f // "N"
+    };
+
+    private static string GetFacingArrowChar(string facing) => facing switch
+    {
+        "E" => "▶",
+        "S" => "▼",
+        "W" => "◀",
+        _ => "▲" // "N"
+    };
+
+    private void DrawDirectionalPointer(Vector2 center, float size, string facing, Color fillColor, Color outlineColor)
+    {
+        var dir = GetFacingVector(facing);
+        var side = new Vector2(-dir.Y, dir.X);
+
+        var tip = center + dir * size;
+        var baseCenter = center - dir * (size * 0.55f);
+        var leftCorner = baseCenter + side * (size * 0.65f);
+        var rightCorner = baseCenter - side * (size * 0.65f);
+        var notch = center - dir * (size * 0.20f);
+
+        // Two-tone 3D arrow fill for depth
+        DrawColoredPolygon(new[] { tip, leftCorner, notch }, fillColor);
+        DrawColoredPolygon(new[] { tip, notch, rightCorner }, fillColor.Darkened(0.25f));
+
+        // Perimeter outline
+        DrawPolyline(new[] { leftCorner, tip, rightCorner, notch, leftCorner }, outlineColor, 1.2f);
+    }
+
+    private void UpdateDiscoveryPulses(JsonElement frame, double now)
+    {
+        if (frame.GetProperty("player").ValueKind != JsonValueKind.Object ||
+            frame.GetProperty("map").ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        var player = frame.GetProperty("player");
+        var depth = player.GetProperty("depth").GetInt32();
+
+        // Level transition: reset discoveries
+        if (_lastKnownDepth != depth)
+        {
+            _lastKnownDepth = depth;
+            _knownFeatures.Clear();
+            _activePulses.Clear();
+        }
+
+        // Clean expired pulses
+        for (var i = _activePulses.Count - 1; i >= 0; i--)
+        {
+            if (now - _activePulses[i].StartTime >= _activePulses[i].Duration)
+            {
+                _activePulses.RemoveAt(i);
+            }
+        }
+
+        var map = frame.GetProperty("map");
+        var rows = map.GetProperty("rows");
+        var h = map.GetProperty("h").GetInt32();
+        var w = map.GetProperty("w").GetInt32();
+
+        for (var y = 0; y < h && y < rows.GetArrayLength(); y++)
+        {
+            var r = rows[y];
+            var glyphs = r.GetProperty("g").GetString() ?? "";
+            var flags = r.GetProperty("l").GetString() ?? "";
+
+            for (var x = 0; x < w && x < glyphs.Length; x++)
+            {
+                var ch = glyphs[x];
+                var flag = x < flags.Length ? AngbandColors.HexVal(flags[x]) : 0;
+                var inView = (flag & 0x2) != 0;
+
+                if (!inView)
+                {
+                    continue;
+                }
+
+                // Detect landmark features entering active view for the first time
+                var isStairsUp = ch == '<';
+                var isStairsDown = ch == '>';
+                var isStore = ch >= '1' && ch <= '9';
+
+                if (isStairsUp || isStairsDown || isStore)
+                {
+                    var key = ((long)y << 16) | (long)(x & 0xFFFF);
+                    if (!_knownFeatures.ContainsKey(key))
+                    {
+                        _knownFeatures[key] = now;
+                        var pulseColor = isStairsDown ? new Color(1.0f, 0.85f, 0.20f, 0.95f) :
+                                         isStairsUp ? new Color(0.35f, 0.85f, 1.0f, 0.95f) :
+                                         new Color(0.40f, 1.0f, 0.50f, 0.90f);
+
+                        _activePulses.Add(new DiscoveryPulse
+                        {
+                            X = x,
+                            Y = y,
+                            StartTime = now,
+                            Duration = 0.85,
+                            Color = pulseColor
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    private void DrawVisionCone(Vector2 playerCenter, float distance, string facing, Color coneColor, Color edgeColor)
+    {
+        var dir = GetFacingVector(facing);
+        var side = new Vector2(-dir.Y, dir.X);
+        var coneSpread = distance * 0.65f;
+
+        var leftTip = playerCenter + dir * distance + side * coneSpread;
+        var rightTip = playerCenter + dir * distance - side * coneSpread;
+
+        // Translucent vision wedge
+        DrawColoredPolygon(new[] { playerCenter, leftTip, rightTip }, coneColor);
+        DrawLine(playerCenter, leftTip, edgeColor, 1.0f);
+        DrawLine(playerCenter, rightTip, edgeColor, 1.0f);
+
+        // Arc along front boundary
+        var baseAngle = Mathf.Atan2(dir.Y, dir.X);
+        DrawArc(playerCenter, distance, baseAngle - 0.58f, baseAngle + 0.58f, 12, edgeColor, 1.0f);
+    }
+
+    #endregion
+
     private void DrawMap(JsonElement frame)
     {
         if (frame.GetProperty("map").ValueKind != JsonValueKind.Object)
@@ -632,11 +791,35 @@ public partial class Overlay : Control
         var w = map.GetProperty("w").GetInt32();
         var player = frame.GetProperty("player");
 
+        var px = player.GetProperty("x").GetInt32();
+        var py = player.GetProperty("y").GetInt32();
+        var depth = player.GetProperty("depth").GetInt32();
+        var locStr = depth == 0 ? "Town" : $"{depth * 50}ft";
+        var headingChar = GetFacingArrowChar(FacingName);
+
         var cols = Mathf.FloorToInt(View.X / _cell.X);
         var lines = Mathf.FloorToInt((View.Y - _cell.Y * 3) / _cell.Y);
-        var ox = Mathf.Clamp(player.GetProperty("x").GetInt32() - cols / 2, 0, Mathf.Max(0, w - cols));
-        var oy = Mathf.Clamp(player.GetProperty("y").GetInt32() - lines / 2, 0, Mathf.Max(0, h - lines));
+        var ox = Mathf.Clamp(px - cols / 2, 0, Mathf.Max(0, w - cols));
+        var oy = Mathf.Clamp(py - lines / 2, 0, Mathf.Max(0, h - lines));
         var top = _cell.Y * 2;
+
+        // Top tactical header bar
+        DrawRect(new Rect2(0, 0, View.X, top - 2), new Color(0.03f, 0.05f, 0.09f, 0.95f));
+        DrawLine(new Vector2(0, top - 2), new Vector2(View.X, top - 2), new Color(0.35f, 0.45f, 0.62f, 0.85f), 1.2f);
+        var titleText = $"TACTICAL MAP  ({px},{py}) {locStr}   Facing: {FacingName} {headingChar}   [M / Esc] Close Map";
+        DrawString(_font, new Vector2(12, _font.GetAscent(_fontSize) + 2), titleText,
+            HorizontalAlignment.Left, -1, _fontSize, new Color(1.0f, 0.88f, 0.48f));
+
+        // Draw vision cone if player is in visible window
+        if (px >= ox && px < ox + cols && py >= oy && py < oy + lines)
+        {
+            var playerPos = new Vector2((px - ox) * _cell.X + _cell.X / 2f, top + (py - oy) * _cell.Y + _cell.Y / 2f);
+            var coneDist = _cell.Y * 4.0f;
+            DrawVisionCone(playerPos, coneDist, FacingName, new Color(1.0f, 0.88f, 0.35f, 0.16f), new Color(1.0f, 0.90f, 0.50f, 0.40f));
+        }
+
+        var now = Time.GetTicksMsec() / 1000.0;
+        UpdateDiscoveryPulses(frame, now);
 
         for (var row = 0; row < lines && oy + row < h; row++)
         {
@@ -664,14 +847,62 @@ public partial class Overlay : Control
                     continue;
                 }
 
-                var colour = AngbandColors.Get(AngbandColors.ParseAttr(attrs, cell));
-                if ((flag & 0x2) == 0)
+                var inView = (flag & 0x2) != 0;
+                var cellRect = new Rect2(c * _cell.X, top + row * _cell.Y, _cell.X, _cell.Y);
+
+                // FoW Tile Underlay Smoothing
+                if (inView)
                 {
-                    colour = colour.Darkened(0.55f);
+                    var isFloor = ch == '.' || ch == '+' || ch == '\'';
+                    var underColor = isFloor ? new Color(0.14f, 0.16f, 0.22f, 0.45f) : new Color(0.10f, 0.12f, 0.17f, 0.35f);
+                    DrawRect(cellRect, underColor);
+                }
+                else
+                {
+                    DrawRect(cellRect, new Color(0.03f, 0.04f, 0.06f, 0.65f));
                 }
 
-                DrawString(_font, new Vector2(c * _cell.X, top + row * _cell.Y + _font.GetAscent(_fontSize)),
-                    ch.ToString(), HorizontalAlignment.Left, -1, _fontSize, colour);
+                var colour = AngbandColors.Get(AngbandColors.ParseAttr(attrs, cell));
+                if (!inView)
+                {
+                    colour = colour.Darkened(0.55f);
+                    colour.A = 0.65f;
+                }
+
+                var isPlayer = (cell == px && oy + row == py);
+                if (isPlayer)
+                {
+                    var playerPos = new Vector2(c * _cell.X + _cell.X / 2f, top + row * _cell.Y + _cell.Y / 2f);
+                    DrawCircle(playerPos, _cell.Y * 0.60f, new Color(1.0f, 0.85f, 0.25f, 0.35f));
+                    DrawDirectionalPointer(playerPos, _cell.Y * 0.65f, FacingName,
+                        new Color(1.0f, 0.95f, 0.40f), new Color(0.15f, 0.10f, 0.02f, 0.95f));
+                }
+                else
+                {
+                    DrawString(_font, new Vector2(c * _cell.X, top + row * _cell.Y + _font.GetAscent(_fontSize)),
+                        ch.ToString(), HorizontalAlignment.Left, -1, _fontSize, colour);
+                }
+            }
+        }
+
+        // Render animated discovery pulses on tactical map
+        for (var i = 0; i < _activePulses.Count; i++)
+        {
+            var p = _activePulses[i];
+            if (p.X >= ox && p.X < ox + cols && p.Y >= oy && p.Y < oy + lines)
+            {
+                var pulseT = (float)((now - p.StartTime) / p.Duration);
+                if (pulseT >= 0f && pulseT <= 1f)
+                {
+                    var centerPos = new Vector2(
+                        (p.X - ox) * _cell.X + _cell.X / 2f,
+                        top + (p.Y - oy) * _cell.Y + _cell.Y / 2f);
+                    var radius = Mathf.Lerp(_cell.Y * 0.4f, _cell.Y * 2.2f, pulseT);
+                    var alpha = (1f - pulseT) * p.Color.A;
+                    var c = new Color(p.Color.R, p.Color.G, p.Color.B, alpha);
+                    DrawArc(centerPos, radius, 0, Mathf.Tau, 24, c, 1.8f);
+                    DrawCircle(centerPos, radius * 0.35f, new Color(c.R, c.G, c.B, alpha * 0.30f));
+                }
             }
         }
     }
@@ -769,12 +1000,13 @@ public partial class Overlay : Control
         DrawString(_font, new Vector2(hintX, headerRect.Position.Y + _font.GetAscent(hintFont) + 4),
             hintStr, HorizontalAlignment.Left, -1, hintFont, new Color(0.65f, 0.78f, 0.95f));
 
-        // Header Title & Coordinates: Left-aligned with automatic compacting based on available width
+        // Header Title & Orientation Heading: Left-aligned with automatic compacting based on available width
         var titleFont = 10;
         var maxLeftW = hintX - headerRect.Position.X - 8;
         var depth = player.GetProperty("depth").GetInt32();
         var locStr = depth == 0 ? "Town" : $"{depth * 50}ft";
-        var fullTitle = $"MINIMAP ({px},{py}) {locStr}";
+        var arrowChar = GetFacingArrowChar(FacingName);
+        var fullTitle = $"MINIMAP ({px},{py}) {locStr}  [{arrowChar} {FacingName}]";
         var fullTitleSize = _font.GetStringSize(fullTitle, HorizontalAlignment.Left, -1, titleFont);
 
         if (maxLeftW >= fullTitleSize.X)
@@ -784,7 +1016,7 @@ public partial class Overlay : Control
         }
         else
         {
-            var medTitle = $"MAP ({px},{py})";
+            var medTitle = $"MAP ({px},{py}) [{arrowChar}{FacingName}]";
             var medSize = _font.GetStringSize(medTitle, HorizontalAlignment.Left, -1, titleFont);
             if (maxLeftW >= medSize.X)
             {
@@ -793,7 +1025,7 @@ public partial class Overlay : Control
             }
             else
             {
-                var shortTitle = "MAP";
+                var shortTitle = $"[{arrowChar}{FacingName}]";
                 var shortSize = _font.GetStringSize(shortTitle, HorizontalAlignment.Left, -1, titleFont);
                 if (maxLeftW >= shortSize.X)
                 {
@@ -809,12 +1041,27 @@ public partial class Overlay : Control
             _font.GetStringSize("#", HorizontalAlignment.Left, -1, miniFontSize).X,
             _font.GetHeight(miniFontSize));
 
+        var now = Time.GetTicksMsec() / 1000.0;
+        UpdateDiscoveryPulses(frame, now);
+
         if (miniCell.X > 0 && miniCell.Y > 0)
         {
             var cols = Mathf.FloorToInt(contentRect.Size.X / miniCell.X);
             var lines = Mathf.FloorToInt(contentRect.Size.Y / miniCell.Y);
             var ox = Mathf.Clamp(px - cols / 2, 0, Mathf.Max(0, w - cols));
             var oy = Mathf.Clamp(py - lines / 2, 0, Mathf.Max(0, h - lines));
+
+            // Draw player directional vision cone on minimap
+            if (px >= ox && px < ox + cols && py >= oy && py < oy + lines)
+            {
+                var playerMiniPos = new Vector2(
+                    contentRect.Position.X + (px - ox) * miniCell.X + miniCell.X / 2f,
+                    contentRect.Position.Y + (py - oy) * miniCell.Y + miniCell.Y / 2f);
+                var coneDist = Mathf.Clamp(miniCell.Y * 3.2f, 16f, 65f);
+                DrawVisionCone(playerMiniPos, coneDist, FacingName,
+                    new Color(1.0f, 0.85f, 0.25f, 0.16f),
+                    new Color(1.0f, 0.88f, 0.45f, 0.38f));
+            }
 
             for (var row = 0; row < lines && oy + row < h; row++)
             {
@@ -842,25 +1089,77 @@ public partial class Overlay : Control
                         continue;
                     }
 
+                    var inView = (flag & 0x2) != 0;
+                    var cellPos = new Vector2(contentRect.Position.X + c * miniCell.X, contentRect.Position.Y + row * miniCell.Y);
+                    var cellRect = new Rect2(cellPos, miniCell);
+
+                    if (cellPos.Y + miniCell.Y <= mapRect.Position.Y + mapRect.Size.Y)
+                    {
+                        // FoW Underlay Smoothing
+                        if (inView)
+                        {
+                            var isFloor = ch == '.' || ch == '+' || ch == '\'';
+                            var underColor = isFloor ? new Color(0.14f, 0.16f, 0.22f, 0.45f) : new Color(0.10f, 0.12f, 0.17f, 0.35f);
+                            DrawRect(cellRect, underColor);
+                        }
+                        else
+                        {
+                            DrawRect(cellRect, new Color(0.03f, 0.04f, 0.06f, 0.65f));
+                        }
+                    }
+
                     var colour = AngbandColors.Get(AngbandColors.ParseAttr(attrs, cell));
-                    if ((flag & 0x2) == 0)
+                    if (!inView)
                     {
                         colour = colour.Darkened(0.55f);
+                        colour.A = 0.65f;
                     }
 
                     var isPlayer = (cell == px && oy + row == py);
-                    if (isPlayer)
-                    {
-                        colour = new Color(1.0f, 0.95f, 0.4f);
-                    }
-
                     var drawPos = new Vector2(
                         contentRect.Position.X + c * miniCell.X,
                         contentRect.Position.Y + row * miniCell.Y + _font.GetAscent(miniFontSize));
 
                     if (drawPos.Y <= mapRect.Position.Y + mapRect.Size.Y)
                     {
-                        DrawString(_font, drawPos, ch.ToString(), HorizontalAlignment.Left, -1, miniFontSize, colour);
+                        if (isPlayer)
+                        {
+                            var centerPos = new Vector2(
+                                contentRect.Position.X + c * miniCell.X + miniCell.X / 2f,
+                                contentRect.Position.Y + row * miniCell.Y + miniCell.Y / 2f);
+                            DrawCircle(centerPos, Mathf.Max(miniCell.Y * 0.55f, 4.5f), new Color(1.0f, 0.85f, 0.2f, 0.30f));
+                            DrawDirectionalPointer(centerPos, Mathf.Max(miniCell.Y * 0.60f, 5.5f), FacingName,
+                                new Color(1.0f, 0.95f, 0.40f), new Color(0.15f, 0.10f, 0.02f, 0.95f));
+                        }
+                        else
+                        {
+                            DrawString(_font, drawPos, ch.ToString(), HorizontalAlignment.Left, -1, miniFontSize, colour);
+                        }
+                    }
+                }
+            }
+
+            // Render animated discovery pulses within minimap bounds
+            for (var i = 0; i < _activePulses.Count; i++)
+            {
+                var p = _activePulses[i];
+                if (p.X >= ox && p.X < ox + cols && p.Y >= oy && p.Y < oy + lines)
+                {
+                    var pulseT = (float)((now - p.StartTime) / p.Duration);
+                    if (pulseT >= 0f && pulseT <= 1f)
+                    {
+                        var centerPos = new Vector2(
+                            contentRect.Position.X + (p.X - ox) * miniCell.X + miniCell.X / 2f,
+                            contentRect.Position.Y + (p.Y - oy) * miniCell.Y + miniCell.Y / 2f);
+
+                        if (centerPos.Y >= contentRect.Position.Y && centerPos.Y <= mapRect.Position.Y + mapRect.Size.Y)
+                        {
+                            var radius = Mathf.Lerp(miniCell.Y * 0.4f, miniCell.Y * 2.0f, pulseT);
+                            var alpha = (1f - pulseT) * p.Color.A;
+                            var c = new Color(p.Color.R, p.Color.G, p.Color.B, alpha);
+                            DrawArc(centerPos, radius, 0, Mathf.Tau, 20, c, 1.5f);
+                            DrawCircle(centerPos, radius * 0.35f, new Color(c.R, c.G, c.B, alpha * 0.25f));
+                        }
                     }
                 }
             }

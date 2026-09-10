@@ -164,6 +164,236 @@ public partial class DungeonWorld : Node3D
     /// <summary>Bearing and distance to the nearest known down staircase (e.g. "stairs down: 12 SE").</summary>
     public string StairsHint { get; private set; }
 
+    /// <summary>
+    /// Depth-based atmospheric biome configuration profile (Priority 1).
+    /// Defines sky/background colors, ambient lighting, volumetric fog density/albedo,
+    /// tonemap exposure, material tints, and ambient particulate emissions.
+    /// </summary>
+    public class BiomeProfile
+    {
+        public string Name { get; set; } = "Upper Crypts";
+        public Color BackgroundColor { get; set; } = new Color(0.005f, 0.006f, 0.010f);
+        public Color AmbientLightColor { get; set; } = new Color(0.18f, 0.20f, 0.26f);
+        public float AmbientLightEnergy { get; set; } = 0.08f;
+        public Color FogLightColor { get; set; } = new Color(0.005f, 0.006f, 0.010f);
+        public float FogDensity { get; set; } = 0.024f;
+        public float VolumetricFogDensity { get; set; } = 0.014f;
+        public Color VolumetricFogAlbedo { get; set; } = new Color(0.14f, 0.16f, 0.22f);
+        public Color VolumetricFogEmission { get; set; } = Colors.Black;
+        public float TonemapExposure { get; set; } = 1.12f;
+        public Color TorchLightColor { get; set; } = new Color(1.0f, 0.84f, 0.60f);
+        public float TorchLightEnergy { get; set; } = 2.4f;
+        public Color WallColor { get; set; } = new Color(0.78f, 0.78f, 0.80f);
+        public Color FloorColor { get; set; } = new Color(0.70f, 0.70f, 0.72f);
+        public Color CeilingColor { get; set; } = new Color(0.55f, 0.55f, 0.58f);
+        public float FloorRoughness { get; set; } = 0.84f;
+        public Color ParticleColor { get; set; } = new Color(0.85f, 0.82f, 0.75f, 0.35f);
+        public int ParticleAmount { get; set; } = 22;
+        public float ParticleScaleMin { get; set; } = 0.015f;
+        public float ParticleScaleMax { get; set; } = 0.035f;
+        public float ParticleSpeedMin { get; set; } = 0.08f;
+        public float ParticleSpeedMax { get; set; } = 0.25f;
+        public Vector3 ParticleGravity { get; set; } = new Vector3(0, -0.04f, 0);
+
+        public static BiomeProfile GetForDepth(int depth)
+        {
+            if (depth <= 0)
+            {
+                // Zone 0: Town / Overworld (Depth 0)
+                return new BiomeProfile
+                {
+                    Name = "Town & Overworld",
+                    BackgroundColor = new Color(0.08f, 0.12f, 0.22f),
+                    AmbientLightColor = new Color(0.50f, 0.54f, 0.66f),
+                    AmbientLightEnergy = 1.6f,
+                    FogLightColor = new Color(0.08f, 0.12f, 0.22f),
+                    FogDensity = 0.004f,
+                    VolumetricFogDensity = 0.003f,
+                    VolumetricFogAlbedo = new Color(0.12f, 0.15f, 0.22f),
+                    VolumetricFogEmission = Colors.Black,
+                    TonemapExposure = 1.05f,
+                    TorchLightColor = new Color(1.0f, 0.86f, 0.64f),
+                    TorchLightEnergy = 2.2f,
+                    WallColor = new Color(0.88f, 0.88f, 0.88f),
+                    FloorColor = new Color(0.84f, 0.82f, 0.80f),
+                    CeilingColor = new Color(0.70f, 0.70f, 0.75f),
+                    FloorRoughness = 0.84f,
+                    ParticleColor = new Color(0.75f, 0.82f, 0.95f, 0.35f),
+                    ParticleAmount = 16,
+                    ParticleScaleMin = 0.015f,
+                    ParticleScaleMax = 0.030f,
+                    ParticleSpeedMin = 0.1f,
+                    ParticleSpeedMax = 0.3f,
+                    ParticleGravity = new Vector3(0, -0.05f, 0),
+                };
+            }
+            if (depth <= 15)
+            {
+                // Zone 1: Upper Crypts (Levels 1–15)
+                return new BiomeProfile
+                {
+                    Name = "Upper Crypts",
+                    BackgroundColor = new Color(0.005f, 0.006f, 0.010f),
+                    AmbientLightColor = new Color(0.18f, 0.20f, 0.26f),
+                    AmbientLightEnergy = 0.08f,
+                    FogLightColor = new Color(0.005f, 0.006f, 0.010f),
+                    FogDensity = 0.024f,
+                    VolumetricFogDensity = 0.014f,
+                    VolumetricFogAlbedo = new Color(0.14f, 0.16f, 0.22f),
+                    VolumetricFogEmission = Colors.Black,
+                    TonemapExposure = 1.12f,
+                    TorchLightColor = new Color(1.0f, 0.84f, 0.60f),
+                    TorchLightEnergy = 2.4f,
+                    WallColor = new Color(0.78f, 0.78f, 0.80f),
+                    FloorColor = new Color(0.70f, 0.70f, 0.72f),
+                    CeilingColor = new Color(0.55f, 0.55f, 0.58f),
+                    FloorRoughness = 0.84f,
+                    ParticleColor = new Color(0.85f, 0.82f, 0.75f, 0.35f),
+                    ParticleAmount = 24,
+                    ParticleScaleMin = 0.015f,
+                    ParticleScaleMax = 0.035f,
+                    ParticleSpeedMin = 0.08f,
+                    ParticleSpeedMax = 0.25f,
+                    ParticleGravity = new Vector3(0, -0.04f, 0),
+                };
+            }
+            if (depth <= 35)
+            {
+                // Zone 2: Overgrown Catacombs (Levels 16–35)
+                return new BiomeProfile
+                {
+                    Name = "Overgrown Catacombs",
+                    BackgroundColor = new Color(0.004f, 0.008f, 0.005f),
+                    AmbientLightColor = new Color(0.12f, 0.22f, 0.16f),
+                    AmbientLightEnergy = 0.09f,
+                    FogLightColor = new Color(0.004f, 0.010f, 0.006f),
+                    FogDensity = 0.030f,
+                    VolumetricFogDensity = 0.022f,
+                    VolumetricFogAlbedo = new Color(0.10f, 0.24f, 0.14f),
+                    VolumetricFogEmission = new Color(0.01f, 0.03f, 0.015f),
+                    TonemapExposure = 1.15f,
+                    TorchLightColor = new Color(1.0f, 0.88f, 0.55f),
+                    TorchLightEnergy = 2.3f,
+                    WallColor = new Color(0.70f, 0.84f, 0.68f),
+                    FloorColor = new Color(0.62f, 0.75f, 0.60f),
+                    CeilingColor = new Color(0.48f, 0.60f, 0.46f),
+                    FloorRoughness = 0.65f, // damp mossy floor
+                    ParticleColor = new Color(0.45f, 0.95f, 0.45f, 0.70f),
+                    ParticleAmount = 32,
+                    ParticleScaleMin = 0.02f,
+                    ParticleScaleMax = 0.045f,
+                    ParticleSpeedMin = 0.1f,
+                    ParticleSpeedMax = 0.35f,
+                    ParticleGravity = new Vector3(0, 0.08f, 0), // rising luminous spores
+                };
+            }
+            if (depth <= 60)
+            {
+                // Zone 3: Crystal Caverns (Levels 36–60)
+                return new BiomeProfile
+                {
+                    Name = "Crystal Caverns",
+                    BackgroundColor = new Color(0.003f, 0.006f, 0.014f),
+                    AmbientLightColor = new Color(0.14f, 0.22f, 0.34f),
+                    AmbientLightEnergy = 0.11f,
+                    FogLightColor = new Color(0.003f, 0.008f, 0.016f),
+                    FogDensity = 0.026f,
+                    VolumetricFogDensity = 0.018f,
+                    VolumetricFogAlbedo = new Color(0.12f, 0.22f, 0.36f),
+                    VolumetricFogEmission = new Color(0.01f, 0.025f, 0.04f),
+                    TonemapExposure = 1.18f,
+                    TorchLightColor = new Color(0.98f, 0.84f, 0.68f),
+                    TorchLightEnergy = 2.5f,
+                    WallColor = new Color(0.65f, 0.75f, 0.95f),
+                    FloorColor = new Color(0.58f, 0.68f, 0.88f),
+                    CeilingColor = new Color(0.45f, 0.52f, 0.72f),
+                    FloorRoughness = 0.55f, // damp reflective flagstones
+                    ParticleColor = new Color(0.45f, 0.85f, 1.0f, 0.75f),
+                    ParticleAmount = 28,
+                    ParticleScaleMin = 0.02f,
+                    ParticleScaleMax = 0.04f,
+                    ParticleSpeedMin = 0.15f,
+                    ParticleSpeedMax = 0.45f,
+                    ParticleGravity = new Vector3(0, 0.02f, 0), // floating crystal shimmer
+                };
+            }
+            if (depth <= 85)
+            {
+                // Zone 4: Magma Underworld (Levels 61–85)
+                return new BiomeProfile
+                {
+                    Name = "Magma Underworld",
+                    BackgroundColor = new Color(0.014f, 0.005f, 0.003f),
+                    AmbientLightColor = new Color(0.32f, 0.14f, 0.08f),
+                    AmbientLightEnergy = 0.14f,
+                    FogLightColor = new Color(0.014f, 0.005f, 0.002f),
+                    FogDensity = 0.028f,
+                    VolumetricFogDensity = 0.024f,
+                    VolumetricFogAlbedo = new Color(0.34f, 0.16f, 0.08f),
+                    VolumetricFogEmission = new Color(0.04f, 0.015f, 0.005f),
+                    TonemapExposure = 1.20f,
+                    TorchLightColor = new Color(1.0f, 0.80f, 0.50f),
+                    TorchLightEnergy = 2.6f,
+                    WallColor = new Color(0.88f, 0.70f, 0.62f),
+                    FloorColor = new Color(0.75f, 0.60f, 0.52f),
+                    CeilingColor = new Color(0.60f, 0.45f, 0.38f),
+                    FloorRoughness = 0.70f,
+                    ParticleColor = new Color(1.0f, 0.55f, 0.12f, 0.90f),
+                    ParticleAmount = 36,
+                    ParticleScaleMin = 0.025f,
+                    ParticleScaleMax = 0.055f,
+                    ParticleSpeedMin = 0.5f,
+                    ParticleSpeedMax = 1.4f,
+                    ParticleGravity = new Vector3(0, 0.4f, 0), // rising hot embers
+                };
+            }
+
+            // Zone 5: Permarock / Abyssal Throne (Levels 86–100+)
+            return new BiomeProfile
+            {
+                Name = "Abyssal Throne",
+                BackgroundColor = new Color(0.008f, 0.002f, 0.012f),
+                AmbientLightColor = new Color(0.24f, 0.10f, 0.28f),
+                AmbientLightEnergy = 0.09f,
+                FogLightColor = new Color(0.008f, 0.002f, 0.012f),
+                FogDensity = 0.032f,
+                VolumetricFogDensity = 0.028f,
+                VolumetricFogAlbedo = new Color(0.26f, 0.10f, 0.32f),
+                VolumetricFogEmission = new Color(0.03f, 0.008f, 0.035f),
+                TonemapExposure = 1.22f,
+                TorchLightColor = new Color(0.95f, 0.85f, 0.75f),
+                TorchLightEnergy = 2.4f,
+                WallColor = new Color(0.75f, 0.65f, 0.85f),
+                FloorColor = new Color(0.68f, 0.58f, 0.78f),
+                CeilingColor = new Color(0.50f, 0.40f, 0.60f),
+                FloorRoughness = 0.60f,
+                ParticleColor = new Color(0.85f, 0.30f, 0.95f, 0.80f),
+                ParticleAmount = 32,
+                ParticleScaleMin = 0.025f,
+                ParticleScaleMax = 0.050f,
+                ParticleSpeedMin = 0.2f,
+                ParticleSpeedMax = 0.6f,
+                ParticleGravity = new Vector3(0, 0.15f, 0), // void purple energy wisps
+            };
+        }
+    }
+
+    private class ActiveProjectile
+    {
+        public Node3D Node { get; set; }
+        public Vector3 StartPos { get; set; }
+        public Vector3 TargetPos { get; set; }
+        public float Elapsed { get; set; }
+        public float Duration { get; set; }
+        public Color Color { get; set; }
+        public string EffectType { get; set; }
+    }
+
+    private BiomeProfile _currentBiome;
+    private BiomeProfile _targetBiome;
+    private CpuParticles3D _biomeParticles;
+    private readonly List<ActiveProjectile> _activeProjectiles = new();
+
     // Materials
     private static StandardMaterial3D _wallMaterial;
     private static StandardMaterial3D _floorMaterial;
@@ -184,7 +414,10 @@ public partial class DungeonWorld : Node3D
     {
         InitMaterials();
 
-        _env = BuildEnvironment();
+        _currentBiome = BiomeProfile.GetForDepth(0);
+        _targetBiome = _currentBiome;
+
+        _env = BuildEnvironment(_currentBiome);
         AddChild(new WorldEnvironment { Environment = _env });
         _camera = new Camera3D { Current = true, Fov = 84, Near = 0.05f };
         var audioListener = new AudioListener3D();
@@ -198,8 +431,8 @@ public partial class DungeonWorld : Node3D
         // Realistic warm torch with soft shadows and ember particles
         _torch = new OmniLight3D
         {
-            LightColor = new Color(1.0f, 0.86f, 0.64f),
-            LightEnergy = 2.4f,
+            LightColor = _currentBiome.TorchLightColor,
+            LightEnergy = _currentBiome.TorchLightEnergy,
             OmniRange = 9.0f,
             OmniAttenuation = 0.85f,
             ShadowEnabled = true,
@@ -233,6 +466,32 @@ public partial class DungeonWorld : Node3D
         };
         _camera.AddChild(embers);
 
+        // Depth-based atmospheric particulate emitter (dust motes, spores, crystal shimmer, embers, void wisps)
+        _biomeParticles = new CpuParticles3D
+        {
+            Name = "BiomeAtmosphericParticles",
+            Amount = _currentBiome.ParticleAmount,
+            Lifetime = 3.5f,
+            EmissionShape = CpuParticles3D.EmissionShapeEnum.Box,
+            EmissionBoxExtents = new Vector3(8.0f, 2.5f, 8.0f),
+            Direction = Vector3.Up,
+            Spread = 45f,
+            InitialVelocityMin = _currentBiome.ParticleSpeedMin,
+            InitialVelocityMax = _currentBiome.ParticleSpeedMax,
+            Gravity = _currentBiome.ParticleGravity,
+            ScaleAmountMin = _currentBiome.ParticleScaleMin,
+            ScaleAmountMax = _currentBiome.ParticleScaleMax,
+            Color = _currentBiome.ParticleColor,
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                VertexColorUseAsAlbedo = true,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                AlbedoColor = Colors.White,
+            },
+        };
+        AddChild(_biomeParticles);
+
         _entities = new Node3D { Name = "Entities" };
         AddChild(_entities);
 
@@ -265,31 +524,35 @@ public partial class DungeonWorld : Node3D
         }
     }
 
-    private static Godot.Environment BuildEnvironment() => new()
+    private static Godot.Environment BuildEnvironment(BiomeProfile initialBiome = null)
     {
-        BackgroundMode = Godot.Environment.BGMode.Color,
-        BackgroundColor = new Color(0.005f, 0.006f, 0.010f),
-        AmbientLightSource = Godot.Environment.AmbientSource.Color,
-        AmbientLightColor = new Color(0.18f, 0.20f, 0.26f),
-        AmbientLightEnergy = 0.08f,
-        FogEnabled = true,
-        FogLightColor = new Color(0.005f, 0.006f, 0.010f),
-        FogDensity = 0.024f,
-        VolumetricFogEnabled = true,
-        VolumetricFogDensity = 0.014f,
-        VolumetricFogAlbedo = new Color(0.14f, 0.16f, 0.22f),
-        VolumetricFogEmission = Colors.Black,
-        VolumetricFogLength = 28.0f,
-        SsaoEnabled = true,
-        SsaoRadius = 1.2f,
-        SsaoIntensity = 1.0f,
-        GlowEnabled = true,
-        GlowIntensity = 0.50f,
-        GlowBloom = 0.08f,
-        GlowBlendMode = Godot.Environment.GlowBlendModeEnum.Softlight,
-        TonemapMode = Godot.Environment.ToneMapper.Filmic,
-        TonemapExposure = 1.12f,
-    };
+        var b = initialBiome ?? BiomeProfile.GetForDepth(0);
+        return new()
+        {
+            BackgroundMode = Godot.Environment.BGMode.Color,
+            BackgroundColor = b.BackgroundColor,
+            AmbientLightSource = Godot.Environment.AmbientSource.Color,
+            AmbientLightColor = b.AmbientLightColor,
+            AmbientLightEnergy = b.AmbientLightEnergy,
+            FogEnabled = true,
+            FogLightColor = b.FogLightColor,
+            FogDensity = b.FogDensity,
+            VolumetricFogEnabled = true,
+            VolumetricFogDensity = b.VolumetricFogDensity,
+            VolumetricFogAlbedo = b.VolumetricFogAlbedo,
+            VolumetricFogEmission = b.VolumetricFogEmission,
+            VolumetricFogLength = 28.0f,
+            SsaoEnabled = true,
+            SsaoRadius = 1.2f,
+            SsaoIntensity = 1.0f,
+            GlowEnabled = true,
+            GlowIntensity = 0.50f,
+            GlowBloom = 0.08f,
+            GlowBlendMode = Godot.Environment.GlowBlendModeEnum.Softlight,
+            TonemapMode = Godot.Environment.ToneMapper.Filmic,
+            TonemapExposure = b.TonemapExposure,
+        };
+    }
 
     #region Procedural Textures & Materials
 
@@ -1434,18 +1697,23 @@ public partial class DungeonWorld : Node3D
         _ => Kind.Wall,
     };
 
-    private static Color BaseColour(Kind k) => k switch
+    private Color BaseColour(Kind k)
     {
-        Kind.Wall => new Color(1.0f, 1.0f, 1.0f),
-        Kind.Floor => new Color(1.0f, 1.0f, 1.0f),
-        Kind.Ceiling => new Color(0.90f, 0.90f, 0.90f),
-        Kind.DoorClosed or Kind.DoorOpen or Kind.DoorBroken => new Color(1.0f, 1.0f, 1.0f),
-        Kind.StairsDown or Kind.StairsUp => new Color(1.0f, 1.0f, 1.0f),
-        Kind.Rubble => new Color(1.0f, 1.0f, 1.0f),
-        Kind.Lava => new Color(1.0f, 0.45f, 0.12f),
-        _ when IsStoreKind(k) => new Color(1.0f, 1.0f, 1.0f),
-        _ => Colors.White,
-    };
+        var biome = _targetBiome ?? _currentBiome;
+        if (biome == null) return Colors.White;
+        return k switch
+        {
+            Kind.Wall => biome.WallColor,
+            Kind.Floor => biome.FloorColor,
+            Kind.Ceiling => biome.CeilingColor,
+            Kind.DoorClosed or Kind.DoorOpen or Kind.DoorBroken => biome.WallColor,
+            Kind.StairsDown or Kind.StairsUp => biome.FloorColor,
+            Kind.Rubble => biome.WallColor,
+            Kind.Lava => new Color(1.0f, 0.45f, 0.12f),
+            _ when IsStoreKind(k) => Colors.White,
+            _ => Colors.White,
+        };
+    }
 
     public void OnFrame(JsonElement frame)
     {
@@ -1466,19 +1734,40 @@ public partial class DungeonWorld : Node3D
             var isInitial = string.IsNullOrEmpty(_levelKey);
             _levelKey = depthKey;
             _outdoors = depth == 0;
-            // The town is an open street under sky, not a lightless dungeon.
-            _env.BackgroundColor = _outdoors
-                ? new Color(0.08f, 0.12f, 0.22f)
-                : new Color(0.005f, 0.006f, 0.010f);
-            _env.AmbientLightEnergy = _outdoors ? 1.6f : 0.08f;
-            _env.AmbientLightColor = _outdoors
-                ? new Color(0.50f, 0.54f, 0.66f)
-                : new Color(0.18f, 0.20f, 0.26f);
-            _env.FogLightColor = _outdoors
-                ? new Color(0.08f, 0.12f, 0.22f)
-                : new Color(0.005f, 0.006f, 0.010f);
-            _env.FogDensity = _outdoors ? 0.004f : 0.024f;
-            _env.VolumetricFogDensity = _outdoors ? 0.003f : 0.014f;
+
+            // Transition to new depth biome profile
+            _targetBiome = BiomeProfile.GetForDepth(depth);
+            _currentBiome ??= _targetBiome;
+            if (isInitial)
+            {
+                _currentBiome = _targetBiome;
+                _env.BackgroundColor = _targetBiome.BackgroundColor;
+                _env.AmbientLightColor = _targetBiome.AmbientLightColor;
+                _env.AmbientLightEnergy = _targetBiome.AmbientLightEnergy;
+                _env.FogLightColor = _targetBiome.FogLightColor;
+                _env.FogDensity = _targetBiome.FogDensity;
+                _env.VolumetricFogDensity = _targetBiome.VolumetricFogDensity;
+                _env.VolumetricFogAlbedo = _targetBiome.VolumetricFogAlbedo;
+                _env.VolumetricFogEmission = _targetBiome.VolumetricFogEmission;
+                _env.TonemapExposure = _targetBiome.TonemapExposure;
+            }
+
+            if (_floorMaterial != null)
+            {
+                _floorMaterial.Roughness = _targetBiome.FloorRoughness;
+            }
+
+            if (_biomeParticles != null)
+            {
+                _biomeParticles.Amount = _targetBiome.ParticleAmount;
+                _biomeParticles.Color = _targetBiome.ParticleColor;
+                _biomeParticles.InitialVelocityMin = _targetBiome.ParticleSpeedMin;
+                _biomeParticles.InitialVelocityMax = _targetBiome.ParticleSpeedMax;
+                _biomeParticles.Gravity = _targetBiome.ParticleGravity;
+                _biomeParticles.ScaleAmountMin = _targetBiome.ParticleScaleMin;
+                _biomeParticles.ScaleAmountMax = _targetBiome.ParticleScaleMax;
+                _biomeParticles.Restart();
+            }
 
             foreach (var m in _activeMonsters.Values) m.RootNode.QueueFree();
             _activeMonsters.Clear();
@@ -2199,6 +2488,17 @@ public partial class DungeonWorld : Node3D
         var playerPos = _targetPos;
 
         // Process Monsters
+        string targetMonsterId = null;
+        if (frame.TryGetProperty("player", out var pProp) &&
+            pProp.TryGetProperty("target", out var targetProp) &&
+            targetProp.ValueKind == JsonValueKind.Object)
+        {
+            if (targetProp.TryGetProperty("id", out var tidProp))
+            {
+                targetMonsterId = tidProp.GetInt32().ToString();
+            }
+        }
+
         var seenMonsterIds = new HashSet<string>();
         foreach (var m in frame.GetProperty("monsters").EnumerateArray())
         {
@@ -2206,6 +2506,7 @@ public partial class DungeonWorld : Node3D
             var gy = m.GetProperty("y").GetInt32();
             var monId = m.TryGetProperty("id", out var idProp) ? idProp.GetInt32().ToString() : $"{gx}_{gy}";
             var targetWorldPos = new Vector3(gx * Cell, 0, gy * Cell);
+            var isTargeted = targetMonsterId != null && monId == targetMonsterId;
 
             seenMonsterIds.Add(monId);
 
@@ -2224,7 +2525,7 @@ public partial class DungeonWorld : Node3D
                     AudioManager.PlayAt(SoundEffect.MeleeHit, entity.CurrentPos);
                 }
 
-                MonsterModelResolver.UpdateMonsterVisual(entity, m);
+                MonsterModelResolver.UpdateMonsterVisual(entity, m, isTargeted);
 
                 if (entity.GridX != gx || entity.GridY != gy)
                 {
@@ -2264,6 +2565,7 @@ public partial class DungeonWorld : Node3D
             {
                 // Newly appeared monster
                 var newEntity = MonsterModelResolver.CreateMonsterEntity(m, targetWorldPos, playerPos, monId);
+                MonsterModelResolver.UpdateMonsterVisual(newEntity, m, isTargeted);
                 newEntity.LastSeenFrame = _frameSeq;
                 _entities.AddChild(newEntity.RootNode);
                 _activeMonsters[monId] = newEntity;
@@ -2509,6 +2811,65 @@ public partial class DungeonWorld : Node3D
         });
     }
 
+    /// <summary>Spawn kinetic 3D magical or ranged projectile flying between world coordinates.</summary>
+    public void SpawnProjectile(Vector3 startPos, Vector3 targetPos, Color color, string effectType = "magic")
+    {
+        var dist = startPos.DistanceTo(targetPos);
+        var duration = Mathf.Clamp(dist / 14.0f, 0.15f, 0.50f);
+
+        var projNode = new Node3D { Position = startPos };
+
+        // Glowing core sphere
+        var core = new MeshInstance3D
+        {
+            Mesh = new SphereMesh { Radius = 0.05f, Height = 0.10f },
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                AlbedoColor = color,
+            },
+        };
+        projNode.AddChild(core);
+
+        // Particle trail
+        var trail = new CpuParticles3D
+        {
+            Amount = 18,
+            Lifetime = 0.25f,
+            EmissionShape = CpuParticles3D.EmissionShapeEnum.Sphere,
+            EmissionSphereRadius = 0.06f,
+            Direction = Vector3.Up,
+            Spread = 25f,
+            InitialVelocityMin = 0.2f,
+            InitialVelocityMax = 0.6f,
+            Gravity = Vector3.Zero,
+            ScaleAmountMin = 0.025f,
+            ScaleAmountMax = 0.055f,
+            Color = color,
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                VertexColorUseAsAlbedo = true,
+                AlbedoColor = color,
+            },
+        };
+        projNode.AddChild(trail);
+        trail.Emitting = true;
+
+        AddChild(projNode);
+
+        _activeProjectiles.Add(new ActiveProjectile
+        {
+            Node = projNode,
+            StartPos = startPos,
+            TargetPos = targetPos,
+            Elapsed = 0f,
+            Duration = duration,
+            Color = color,
+            EffectType = effectType,
+        });
+    }
+
     private void ProcessCombatEvents(JsonElement frame)
     {
         if (!frame.TryGetProperty("messages", out var msgs) || msgs.ValueKind != JsonValueKind.Array || msgs.GetArrayLength() == 0)
@@ -2540,6 +2901,13 @@ public partial class DungeonWorld : Node3D
             var hitPos = _targetPos + forward * 0.8f + (GD.Randf() > 0.5f ? right * 0.3f : -right * 0.3f);
             SpawnFloatingText("OUCH!", hitPos, new Color(1.0f, 0.30f, 0.30f), 1.1f);
             SpawnHitSparks(hitPos, -forward, new Color(0.9f, 0.2f, 0.2f), 14);
+
+            if (lower.Contains("casts a spell") || lower.Contains("shoots you") || lower.Contains("burns you"))
+            {
+                var srcPos = _targetPos + forward * 4.0f + new Vector3(0, 0.4f, 0);
+                var projCol = lower.Contains("burns") ? new Color(1.0f, 0.45f, 0.10f) : new Color(0.85f, 0.35f, 1.0f);
+                SpawnProjectile(srcPos, _targetPos + new Vector3(0, 0.2f, 0), projCol, "enemy_spell");
+            }
         }
         // Critical / heavy hit
         else if (lower.Contains("critical hit") || lower.Contains("great force") || lower.Contains("superb"))
@@ -2554,12 +2922,34 @@ public partial class DungeonWorld : Node3D
         {
             _viewModel?.TriggerCast();
             AudioManager.Play(SoundEffect.SpellCast);
-            SpawnSpellVfx(spawnInFront, new Color(0.35f, 0.75f, 1.0f));
-            SpawnFloatingText("CAST", spawnInFront, new Color(0.45f, 0.85f, 1.0f), 1.0f);
+
+            Color spellCol;
+            if (lower.Contains("fire") || lower.Contains("flame")) spellCol = new Color(1.0f, 0.45f, 0.10f);
+            else if (lower.Contains("frost") || lower.Contains("cold") || lower.Contains("ice")) spellCol = new Color(0.40f, 0.85f, 1.0f);
+            else if (lower.Contains("lightning") || lower.Contains("elec") || lower.Contains("spark")) spellCol = new Color(1.0f, 0.95f, 0.30f);
+            else if (lower.Contains("poison") || lower.Contains("acid") || lower.Contains("stinking")) spellCol = new Color(0.35f, 0.95f, 0.30f);
+            else if (lower.Contains("heal") || lower.Contains("cure") || lower.Contains("bless")) spellCol = new Color(0.40f, 1.0f, 0.60f);
+            else spellCol = new Color(0.55f, 0.75f, 1.0f);
+
+            var startPos = _targetPos + forward * 0.4f + new Vector3(0, -0.1f, 0);
+            var targetPos = _targetPos + forward * 6.0f + new Vector3(0, 0.2f, 0);
+            SpawnProjectile(startPos, targetPos, spellCol, "player_spell");
+            SpawnSpellVfx(spawnInFront, spellCol);
+            SpawnFloatingText("CAST", spawnInFront, spellCol, 1.0f);
+        }
+        // Player shooting bow / sling / crossbow
+        else if (lower.Contains("you shoot") || lower.Contains("you fire"))
+        {
+            _viewModel?.TriggerAttack();
+            AudioManager.Play(SoundEffect.BowShoot);
+            var startPos = _targetPos + forward * 0.4f + new Vector3(0.15f, -0.1f, 0);
+            var targetPos = _targetPos + forward * 8.0f + new Vector3(0, 0.2f, 0);
+            SpawnProjectile(startPos, targetPos, new Color(1.0f, 0.85f, 0.40f), "arrow");
+            SpawnFloatingText("SHOOT", spawnInFront, new Color(0.95f, 0.85f, 0.40f), 1.0f);
         }
         // Player hitting monster
         else if (lower.Contains("you hit") || lower.Contains("you strike") || lower.Contains("you slash") ||
-                 lower.Contains("you shoot") || lower.Contains("you smite") || lower.Contains("you crush"))
+                 lower.Contains("you smite") || lower.Contains("you crush"))
         {
             _viewModel?.TriggerAttack();
             AudioManager.Play(SoundEffect.MeleeHit);
@@ -2641,6 +3031,27 @@ public partial class DungeonWorld : Node3D
         // Update first-person viewmodel motion, bobbing & inertia sway
         _viewModel?.ProcessMotion(delta, isMoving, yawDelta, 0f);
 
+        // Smooth depth biome atmospheric environment transition
+        if (_targetBiome != null && _env != null)
+        {
+            var lerpSpeed = (float)Math.Min(1.0, delta * 3.0);
+            _env.BackgroundColor = _env.BackgroundColor.Lerp(_targetBiome.BackgroundColor, lerpSpeed);
+            _env.AmbientLightColor = _env.AmbientLightColor.Lerp(_targetBiome.AmbientLightColor, lerpSpeed);
+            _env.AmbientLightEnergy = Mathf.Lerp(_env.AmbientLightEnergy, _targetBiome.AmbientLightEnergy, lerpSpeed);
+            _env.FogLightColor = _env.FogLightColor.Lerp(_targetBiome.FogLightColor, lerpSpeed);
+            _env.FogDensity = Mathf.Lerp(_env.FogDensity, _targetBiome.FogDensity, lerpSpeed);
+            _env.VolumetricFogDensity = Mathf.Lerp(_env.VolumetricFogDensity, _targetBiome.VolumetricFogDensity, lerpSpeed);
+            _env.VolumetricFogAlbedo = _env.VolumetricFogAlbedo.Lerp(_targetBiome.VolumetricFogAlbedo, lerpSpeed);
+            _env.VolumetricFogEmission = _env.VolumetricFogEmission.Lerp(_targetBiome.VolumetricFogEmission, lerpSpeed);
+            _env.TonemapExposure = Mathf.Lerp(_env.TonemapExposure, _targetBiome.TonemapExposure, lerpSpeed);
+        }
+
+        // Keep atmospheric particulate emitter anchored to camera view
+        if (_biomeParticles != null)
+        {
+            _biomeParticles.Position = _targetPos + new Vector3(0, 1.2f, 0);
+        }
+
         // Update floating combat text
         for (var i = _activeFloaters.Count - 1; i >= 0; i--)
         {
@@ -2659,6 +3070,22 @@ public partial class DungeonWorld : Node3D
             }
         }
 
+        // Update kinetic 3D projectiles
+        for (var i = _activeProjectiles.Count - 1; i >= 0; i--)
+        {
+            var proj = _activeProjectiles[i];
+            proj.Elapsed += (float)delta;
+            var progress = Mathf.Clamp(proj.Elapsed / proj.Duration, 0f, 1f);
+            proj.Node.Position = proj.StartPos.Lerp(proj.TargetPos, progress);
+
+            if (proj.Elapsed >= proj.Duration)
+            {
+                SpawnHitSparks(proj.TargetPos, Vector3.Up, proj.Color, 16);
+                proj.Node.QueueFree();
+                _activeProjectiles.RemoveAt(i);
+            }
+        }
+
         // Camera trauma / kinetic impact shake
         if (_trauma > 0.001f)
         {
@@ -2671,9 +3098,22 @@ public partial class DungeonWorld : Node3D
         }
 
         _flicker += delta;
-        var f = 1.0f + 0.05f * Mathf.Sin((float)_flicker * 11f) + 0.03f * Mathf.Sin((float)_flicker * 23f);
+        var n1 = Mathf.Sin((float)_flicker * 9.5f);
+        var n2 = Mathf.Sin((float)_flicker * 17.3f);
+        var n3 = Mathf.Sin((float)_flicker * 31.7f);
+        var f = 1.0f + 0.045f * n1 + 0.030f * n2 + 0.015f * n3;
+        var targetEnergy = (_targetBiome?.TorchLightEnergy ?? 2.4f) * f;
+        var targetColor = _targetBiome?.TorchLightColor ?? new Color(1.0f, 0.86f, 0.64f);
+
         _torch.OmniRange = (_torchRadius + 2.5f) * Cell + 2.0f;
-        _torch.LightEnergy = 2.2f * f;
+        _torch.LightEnergy = Mathf.Lerp(_torch.LightEnergy, targetEnergy, (float)Math.Min(1.0, delta * 12.0));
+        _torch.LightColor = _torch.LightColor.Lerp(targetColor, (float)Math.Min(1.0, delta * 4.0));
+
+        // Subtle dancing torch shadow jitter
+        var jitterX = n2 * 0.012f;
+        var jitterY = n1 * 0.010f;
+        var jitterZ = n3 * 0.012f;
+        _torch.Position = new Vector3(-0.32f + jitterX, -0.10f + jitterY, -0.32f + jitterZ);
 
         // Process smooth monster movement, facing, and hover/animations
         var moveT = (float)Math.Min(1.0, delta / 0.16);
@@ -2685,11 +3125,16 @@ public partial class DungeonWorld : Node3D
             monster.CurrentPos = monster.CurrentPos.Lerp(monster.TargetPos, moveT);
             var distLeft = monster.CurrentPos.DistanceTo(monster.TargetPos);
 
-            // Floating / bobbing effect
+            // Floating / bobbing / breathing effect
             var floatY = monster.BaseY;
             if (monster.IsFloating)
             {
                 floatY += Mathf.Sin((float)_flicker * 3.0f + monster.FloatOffset) * 0.12f;
+            }
+            else if (monster.IsAsleep)
+            {
+                // Gentle slow breathing oscillation when asleep
+                floatY += Mathf.Sin((float)_flicker * 1.8f + monster.FloatOffset) * 0.03f;
             }
 
             monster.RootNode.Position = new Vector3(monster.CurrentPos.X, floatY, monster.CurrentPos.Z);
@@ -2703,12 +3148,30 @@ public partial class DungeonWorld : Node3D
                     MonsterModelResolver.PlayIdleAnimation(monster.CharacterNode);
                 }
 
-                // When stopped and adjacent to player, face the player
                 var toPlayer = _targetPos - monster.CurrentPos;
                 toPlayer.Y = 0;
-                if (toPlayer.LengthSquared() < (Cell * 2.5f) * (Cell * 2.5f) && toPlayer.LengthSquared() > 0.001f)
+
+                // Fleeing monsters face away from player; others face player when adjacent
+                if (monster.IsAfraid)
+                {
+                    if (toPlayer.LengthSquared() > 0.001f)
+                    {
+                        monster.TargetYaw = Mathf.Atan2(-toPlayer.X, -toPlayer.Z);
+                    }
+                }
+                else if (toPlayer.LengthSquared() < (Cell * 2.5f) * (Cell * 2.5f) && toPlayer.LengthSquared() > 0.001f)
                 {
                     monster.TargetYaw = Mathf.Atan2(toPlayer.X, toPlayer.Z);
+                }
+            }
+            else if (!monster.IsMoving && monster.IsAfraid)
+            {
+                // Continuously orient fleeing monsters away from player
+                var toPlayer = _targetPos - monster.CurrentPos;
+                toPlayer.Y = 0;
+                if (toPlayer.LengthSquared() > 0.001f)
+                {
+                    monster.TargetYaw = Mathf.Atan2(-toPlayer.X, -toPlayer.Z);
                 }
             }
 
@@ -2722,6 +3185,21 @@ public partial class DungeonWorld : Node3D
                 monster.CurrentYaw = Mathf.LerpAngle(monster.CurrentYaw, monster.TargetYaw, rotT);
             }
             monster.CharacterNode.Rotation = new Vector3(0, monster.CurrentYaw, 0);
+
+            // Animate overhead status badges and targeting reticles
+            if (monster.StatusBadge != null && monster.StatusBadge.Visible)
+            {
+                var badgeOffset = Mathf.Sin((float)_flicker * 2.5f + monster.FloatOffset) * 0.04f;
+                monster.StatusBadge.Position = new Vector3(0, monster.ModelHeight + 0.65f + badgeOffset, 0);
+            }
+
+            if (monster.TargetBadge != null && monster.TargetBadge.Visible)
+            {
+                var reticleOffset = Mathf.Sin((float)_flicker * 4.0f) * 0.06f;
+                var reticleAlpha = 0.80f + Mathf.Sin((float)_flicker * 5.0f) * 0.20f;
+                monster.TargetBadge.Position = new Vector3(0, monster.ModelHeight + 0.95f + reticleOffset, 0);
+                monster.TargetBadge.Modulate = new Color(1.0f, 0.92f, 0.30f, reticleAlpha);
+            }
 
             // Update lively procedural animations for creature tokens (rodents, insects, centipedes, bats, slimes, etc.)
             MonsterModelResolver.UpdateProceduralAnimation(monster, delta, (float)_flicker);

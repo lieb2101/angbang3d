@@ -98,6 +98,6 @@
 ## 🚀 Execution Instructions for New Chat Sessions
 
 When starting the next session, prompt:
-> **"Begin the low hanging fruit"** (or **"Implement step 7 of the low hanging fruit"**)
+> **"Implement Tier 4 Depth Biomes and Atmospheric Lighting"** (or **"Continue the Tier 4 visual overhaul"**)
 
-The assistant will read this file and `/memories/repo/low_hanging_fruit_plan.md`, implement **Step 7: Character Height World Scaling & Dynamic Viewmodel Hands/Wieldables** in full, verify the build with `dotnet build client/angband3d.csproj`, run smoke tests, and advance the queue.
+The assistant will read `docs/NEXT_STEPS.md`, `docs/GRAPHICS_HANDOVER.md`, and `/memories/repo/graphics_handover.md`, implement **Priority 1: Depth-Based Biomes & Atmospheric Lighting (6 depth zones, volumetric fog, color grading, and PBR textures)** in `DungeonWorld.cs`, verify the build with `dotnet build client/angband3d.csproj`, run smoke tests, and capture screenshots to verify the enhanced aesthetics.

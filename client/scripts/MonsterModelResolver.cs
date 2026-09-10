@@ -92,6 +92,15 @@ public class MonsterEntity
     public List<Node3D> Legs { get; } = new();
     public List<Node3D> Segments { get; } = new();
     public Vector3 InitialBodyScale { get; set; } = Vector3.One;
+
+    // Monster Status Cues & Target Reticle (Step 10)
+    public bool IsAsleep { get; set; }
+    public bool IsAfraid { get; set; }
+    public bool IsConfused { get; set; }
+    public bool IsStunned { get; set; }
+    public bool IsTargeted { get; set; }
+    public Label3D StatusBadge { get; set; }
+    public Label3D TargetBadge { get; set; }
 }
 
 /// <summary>
@@ -246,15 +255,62 @@ public static class MonsterModelResolver
         root.AddChild(caption);
         entity.Nameplate = caption;
 
+        // Overhead Status Badge (Sleep, Fear, Confusion, Stun)
+        var statusBadge = new Label3D
+        {
+            Text = "",
+            Visible = false,
+            OutlineModulate = new Color(0, 0, 0, 0.95f),
+            OutlineSize = 6,
+            FontSize = 26,
+            PixelSize = 0.0035f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Shaded = false,
+            NoDepthTest = true,
+            RenderPriority = 12,
+            Position = new Vector3(0, entity.ModelHeight + 0.65f, 0),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+        };
+        root.AddChild(statusBadge);
+        entity.StatusBadge = statusBadge;
+
+        // Overhead Target Reticle Badge
+        var targetBadge = new Label3D
+        {
+            Text = "[ ⌖ TARGET ⌖ ]",
+            Modulate = new Color(1.0f, 0.92f, 0.30f, 0.98f),
+            OutlineModulate = new Color(0.20f, 0.12f, 0.02f, 0.98f),
+            OutlineSize = 8,
+            FontSize = 28,
+            PixelSize = 0.0038f,
+            Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+            Shaded = false,
+            NoDepthTest = true,
+            RenderPriority = 14,
+            Visible = false,
+            Position = new Vector3(0, entity.ModelHeight + 0.95f, 0),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+        };
+        root.AddChild(targetBadge);
+        entity.TargetBadge = targetBadge;
+
         return entity;
     }
 
-    public static void UpdateMonsterVisual(MonsterEntity entity, JsonElement monster)
+    public static void UpdateMonsterVisual(MonsterEntity entity, JsonElement monster, bool isTargeted = false)
     {
         int hp = monster.TryGetProperty("hp", out var hProp) ? hProp.GetInt32() : entity.Hp;
         int hpMax = monster.TryGetProperty("hp_max", out var hmProp) ? hmProp.GetInt32() : entity.HpMax;
         entity.Hp = hp;
         entity.HpMax = hpMax;
+
+        entity.IsAsleep = monster.TryGetProperty("asleep", out var slProp) && slProp.GetBoolean();
+        entity.IsAfraid = monster.TryGetProperty("afraid", out var afProp) && afProp.GetBoolean();
+        entity.IsConfused = monster.TryGetProperty("confused", out var cfProp) && cfProp.GetBoolean();
+        entity.IsStunned = monster.TryGetProperty("stunned", out var stProp) && stProp.GetBoolean();
+        entity.IsTargeted = isTargeted;
 
         if (entity.Nameplate != null)
         {
@@ -264,6 +320,43 @@ public static class MonsterModelResolver
             {
                 entity.Nameplate.Modulate = HealthColour(hp, hpMax);
             }
+        }
+
+        if (entity.StatusBadge != null)
+        {
+            if (entity.IsAsleep)
+            {
+                entity.StatusBadge.Text = "💤 Zzz...";
+                entity.StatusBadge.Modulate = new Color(0.65f, 0.85f, 1.0f, 0.95f);
+                entity.StatusBadge.Visible = true;
+            }
+            else if (entity.IsAfraid)
+            {
+                entity.StatusBadge.Text = "⚠ FLEEING";
+                entity.StatusBadge.Modulate = new Color(1.0f, 0.35f, 0.20f, 0.98f);
+                entity.StatusBadge.Visible = true;
+            }
+            else if (entity.IsConfused)
+            {
+                entity.StatusBadge.Text = "🌀 CONFUSED";
+                entity.StatusBadge.Modulate = new Color(0.85f, 0.50f, 1.0f, 0.95f);
+                entity.StatusBadge.Visible = true;
+            }
+            else if (entity.IsStunned)
+            {
+                entity.StatusBadge.Text = "💫 STUNNED";
+                entity.StatusBadge.Modulate = new Color(1.0f, 0.90f, 0.25f, 0.95f);
+                entity.StatusBadge.Visible = true;
+            }
+            else
+            {
+                entity.StatusBadge.Visible = false;
+            }
+        }
+
+        if (entity.TargetBadge != null)
+        {
+            entity.TargetBadge.Visible = isTargeted;
         }
     }
 

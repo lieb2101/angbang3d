@@ -15,6 +15,7 @@ public enum SoundEffect
     MonsterDeath,
     PlayerHurt,
     SpellCast,
+    BowShoot,
     DoorOpen,
     DoorClose,
     DoorBreak,
@@ -218,6 +219,7 @@ public partial class AudioManager : Node
         _sfxLibrary[SoundEffect.MonsterDeath] = SynthMonsterDeath();
         _sfxLibrary[SoundEffect.PlayerHurt] = SynthPlayerHurt();
         _sfxLibrary[SoundEffect.SpellCast] = SynthSpellCast();
+        _sfxLibrary[SoundEffect.BowShoot] = SynthBowShoot();
         _sfxLibrary[SoundEffect.DoorOpen] = SynthDoor(open: true);
         _sfxLibrary[SoundEffect.DoorClose] = SynthDoor(open: false);
         _sfxLibrary[SoundEffect.DoorBreak] = SynthDoorBreak();
@@ -445,6 +447,27 @@ public partial class AudioManager : Node
             var shock = Mathf.Sin(2f * Mathf.Pi * 65f * t) * 0.5f;
 
             samples[i] = (impact + shock) * env * 0.90f;
+        }
+        return CreateWav(samples);
+    }
+
+    private static AudioStreamWav SynthBowShoot()
+    {
+        var duration = 0.20f;
+        var totalSamples = (int)(SampleRate * duration);
+        var samples = new float[totalSamples];
+        var rng = new Random(505);
+
+        for (var i = 0; i < totalSamples; i++)
+        {
+            var t = i / (float)SampleRate;
+            var env = Mathf.Exp(-t * 24f);
+
+            // Bowstring twang + whoosh
+            var twang = Mathf.Sin(2f * Mathf.Pi * (380f + Mathf.Sin(t * 120f) * 40f) * t) * 0.65f;
+            var snap = ((float)rng.NextDouble() * 2f - 1f) * Mathf.Exp(-t * 90f) * 0.45f;
+
+            samples[i] = (twang + snap) * env * 0.85f;
         }
         return CreateWav(samples);
     }

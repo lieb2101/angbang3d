@@ -37,6 +37,17 @@ public partial class ViewModel : Node3D
     private StandardMaterial3D _skinMaterial;
     private StandardMaterial3D _sleeveMaterial;
     private StandardMaterial3D _cuffMaterial;
+    private StandardMaterial3D _handArmorMaterial;
+
+    // Dynamic Torch Flame & Smoke VFX (Priority 3)
+    private CpuParticles3D _leftTorchFlame;
+    private CpuParticles3D _leftTorchSmoke;
+    private OmniLight3D _leftTorchLight;
+
+    // Dynamic Ego Weapon Aura & Light (Priority 3)
+    private CpuParticles3D _rightWeaponAura;
+    private OmniLight3D _rightWeaponLight;
+    private string _currentWeaponEgo = "";
 
     // Cache instantiated weapon/item nodes
     private readonly Dictionary<string, Node3D> _modelCache = new();
@@ -79,6 +90,72 @@ public partial class ViewModel : Node3D
         _leftItemSlot = new Node3D { Name = "LeftItemSlot" };
         _leftHandSlot.AddChild(_leftItemSlot);
 
+        // Torch Flame particle emitter
+        _leftTorchFlame = new CpuParticles3D
+        {
+            Name = "TorchFlameVfx",
+            Amount = 24,
+            Lifetime = 0.35f,
+            EmissionShape = CpuParticles3D.EmissionShapeEnum.Sphere,
+            EmissionSphereRadius = 0.035f,
+            Direction = Vector3.Up,
+            Spread = 20f,
+            InitialVelocityMin = 0.35f,
+            InitialVelocityMax = 0.85f,
+            Gravity = new Vector3(0, 0.4f, 0),
+            ScaleAmountMin = 0.035f,
+            ScaleAmountMax = 0.075f,
+            Color = new Color(1.0f, 0.70f, 0.15f, 0.95f),
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                VertexColorUseAsAlbedo = true,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                AlbedoColor = new Color(1.0f, 0.75f, 0.20f),
+            },
+            Visible = false,
+        };
+        _leftItemSlot.AddChild(_leftTorchFlame);
+
+        // Torch Smoke particle emitter
+        _leftTorchSmoke = new CpuParticles3D
+        {
+            Name = "TorchSmokeVfx",
+            Amount = 14,
+            Lifetime = 0.75f,
+            EmissionShape = CpuParticles3D.EmissionShapeEnum.Sphere,
+            EmissionSphereRadius = 0.03f,
+            Direction = Vector3.Up,
+            Spread = 30f,
+            InitialVelocityMin = 0.25f,
+            InitialVelocityMax = 0.60f,
+            Gravity = new Vector3(0, 0.2f, 0),
+            ScaleAmountMin = 0.04f,
+            ScaleAmountMax = 0.10f,
+            Color = new Color(0.20f, 0.20f, 0.22f, 0.35f),
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                VertexColorUseAsAlbedo = true,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                AlbedoColor = new Color(0.35f, 0.35f, 0.38f, 0.4f),
+            },
+            Visible = false,
+        };
+        _leftItemSlot.AddChild(_leftTorchSmoke);
+
+        _leftTorchLight = new OmniLight3D
+        {
+            Name = "TorchTipLight",
+            LightColor = new Color(1.0f, 0.82f, 0.50f),
+            LightEnergy = 1.4f,
+            OmniRange = 2.2f,
+            OmniAttenuation = 1.2f,
+            ShadowEnabled = false,
+            Visible = false,
+        };
+        _leftItemSlot.AddChild(_leftTorchLight);
+
         // Create Right Hand hierarchy
         _rightHandSlot = new Node3D { Name = "RightHandSlot", Position = _rightRestPos, Rotation = _rightRestRot };
         _swayRoot.AddChild(_rightHandSlot);
@@ -88,6 +165,45 @@ public partial class ViewModel : Node3D
 
         _rightItemSlot = new Node3D { Name = "RightItemSlot" };
         _rightHandSlot.AddChild(_rightItemSlot);
+
+        // Right Weapon Elemental Ego Aura
+        _rightWeaponAura = new CpuParticles3D
+        {
+            Name = "WeaponEgoAura",
+            Amount = 26,
+            Lifetime = 0.40f,
+            EmissionShape = CpuParticles3D.EmissionShapeEnum.Box,
+            EmissionBoxExtents = new Vector3(0.04f, 0.18f, 0.04f),
+            Direction = Vector3.Up,
+            Spread = 35f,
+            InitialVelocityMin = 0.15f,
+            InitialVelocityMax = 0.45f,
+            Gravity = new Vector3(0, 0.1f, 0),
+            ScaleAmountMin = 0.025f,
+            ScaleAmountMax = 0.055f,
+            Color = new Color(1.0f, 0.60f, 0.10f, 0.85f),
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                VertexColorUseAsAlbedo = true,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                AlbedoColor = Colors.White,
+            },
+            Visible = false,
+        };
+        _rightItemSlot.AddChild(_rightWeaponAura);
+
+        _rightWeaponLight = new OmniLight3D
+        {
+            Name = "WeaponEgoLight",
+            LightColor = new Color(1.0f, 0.60f, 0.15f),
+            LightEnergy = 0.8f,
+            OmniRange = 1.8f,
+            OmniAttenuation = 1.4f,
+            ShadowEnabled = false,
+            Visible = false,
+        };
+        _rightItemSlot.AddChild(_rightWeaponLight);
     }
 
     private void InitMaterials()
@@ -111,6 +227,14 @@ public partial class ViewModel : Node3D
             AlbedoColor = new Color(0.55f, 0.46f, 0.32f),
             Roughness = 0.45f,
             Metallic = 0.40f,
+            SpecularMode = BaseMaterial3D.SpecularModeEnum.SchlickGgx,
+        };
+
+        _handArmorMaterial = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.75f, 0.76f, 0.80f),
+            Roughness = 0.28f,
+            Metallic = 0.92f,
             SpecularMode = BaseMaterial3D.SpecularModeEnum.SchlickGgx,
         };
     }
@@ -231,9 +355,11 @@ public partial class ViewModel : Node3D
         var bowItem = player.TryGetProperty("bow_item", out var biProp) ? biProp.GetString() : null;
         var bowTval = player.TryGetProperty("bow_tval", out var btProp) ? btProp.GetInt32() : 0;
         var shieldItem = player.TryGetProperty("shield_item", out var siProp) ? siProp.GetString() : null;
+        var bodyArmorItem = player.TryGetProperty("body_armor_item", out var baProp) ? baProp.GetString() : null;
+        var glovesItem = player.TryGetProperty("gloves_item", out var gvProp) ? gvProp.GetString() : null;
 
-        // Apply dynamic race skin tone and class clothing palette
-        UpdateRaceClassColors(pRace, pClass);
+        // Apply dynamic race skin tone, class clothing palette, and armor overlays (Priority 4)
+        UpdateArmorAndRaceColors(pRace, pClass, bodyArmorItem, glovesItem);
 
         // Left Hand: Torch when lit/in dungeon, otherwise equipped shield or spellbook/class item
         var leftModelPath = "";
@@ -287,11 +413,177 @@ public partial class ViewModel : Node3D
 
         SetSlotModel(_leftItemSlot, ref _currentLeftModel, leftModelPath, leftScale * handScaleFactor);
         SetSlotModel(_rightItemSlot, ref _currentRightModel, rightModelPath, rightScale * handScaleFactor);
+
+        // Dynamic Torch Flame VFX (Priority 3)
+        var isTorch = !string.IsNullOrEmpty(leftModelPath) && leftModelPath.ToLowerInvariant().Contains("torch");
+        if (_leftTorchFlame != null)
+        {
+            _leftTorchFlame.Visible = isTorch;
+            _leftTorchFlame.Position = new Vector3(0, 0.22f * handScaleFactor, 0);
+            if (isTorch && !_leftTorchFlame.Emitting) _leftTorchFlame.Emitting = true;
+        }
+        if (_leftTorchSmoke != null)
+        {
+            _leftTorchSmoke.Visible = isTorch;
+            _leftTorchSmoke.Position = new Vector3(0, 0.24f * handScaleFactor, 0);
+            if (isTorch && !_leftTorchSmoke.Emitting) _leftTorchSmoke.Emitting = true;
+        }
+        if (_leftTorchLight != null)
+        {
+            _leftTorchLight.Visible = isTorch;
+            _leftTorchLight.Position = new Vector3(0, 0.22f * handScaleFactor, 0);
+        }
+
+        // Dynamic Weapon Elemental Ego Aura (Priority 3)
+        UpdateWeaponEgoAura(weaponItem, handScaleFactor);
     }
 
-    private void UpdateRaceClassColors(string race, string pClass)
+    private void UpdateWeaponEgoAura(string weaponItem, float handScaleFactor)
+    {
+        if (string.IsNullOrEmpty(weaponItem) || string.IsNullOrEmpty(_currentRightModel))
+        {
+            if (_rightWeaponAura != null) _rightWeaponAura.Visible = false;
+            if (_rightWeaponLight != null) _rightWeaponLight.Visible = false;
+            return;
+        }
+
+        var lowerW = weaponItem.ToLowerInvariant();
+        Color auraCol;
+        Color lightCol;
+        bool hasEgo = true;
+
+        if (lowerW.Contains("flame") || lowerW.Contains("fire") || lowerW.Contains("hellfire") || lowerW.Contains("dragon") || lowerW.Contains("chaos"))
+        {
+            auraCol = new Color(1.0f, 0.55f, 0.10f, 0.90f);
+            lightCol = new Color(1.0f, 0.55f, 0.15f);
+        }
+        else if (lowerW.Contains("frost") || lowerW.Contains("ice") || lowerW.Contains("cold") || lowerW.Contains("blizzard"))
+        {
+            auraCol = new Color(0.35f, 0.85f, 1.0f, 0.85f);
+            lightCol = new Color(0.35f, 0.80f, 1.0f);
+        }
+        else if (lowerW.Contains("lightning") || lowerW.Contains("thunder") || lowerW.Contains("elec") || lowerW.Contains("shock") || lowerW.Contains("spark"))
+        {
+            auraCol = new Color(1.0f, 0.95f, 0.30f, 0.95f);
+            lightCol = new Color(1.0f, 0.95f, 0.35f);
+        }
+        else if (lowerW.Contains("venom") || lowerW.Contains("acid") || lowerW.Contains("poison") || lowerW.Contains("corros"))
+        {
+            auraCol = new Color(0.35f, 0.95f, 0.25f, 0.85f);
+            lightCol = new Color(0.35f, 0.95f, 0.30f);
+        }
+        else if (lowerW.Contains("holy") || lowerW.Contains("slay") || lowerW.Contains("westernesse") || lowerW.Contains("defender") || lowerW.Contains("gondolin") || lowerW.Contains("blessed"))
+        {
+            auraCol = new Color(1.0f, 0.88f, 0.40f, 0.85f);
+            lightCol = new Color(1.0f, 0.88f, 0.45f);
+        }
+        else
+        {
+            hasEgo = false;
+            auraCol = Colors.White;
+            lightCol = Colors.White;
+        }
+
+        if (_rightWeaponAura != null)
+        {
+            _rightWeaponAura.Visible = hasEgo;
+            _rightWeaponAura.Color = auraCol;
+            _rightWeaponAura.Position = new Vector3(0, 0.15f * handScaleFactor, 0);
+            if (hasEgo && !_rightWeaponAura.Emitting) _rightWeaponAura.Emitting = true;
+        }
+        if (_rightWeaponLight != null)
+        {
+            _rightWeaponLight.Visible = hasEgo;
+            _rightWeaponLight.LightColor = lightCol;
+            _rightWeaponLight.Position = new Vector3(0, 0.15f * handScaleFactor, 0);
+        }
+    }
+
+    private void UpdateArmorAndRaceColors(string race, string pClass, string bodyArmorItem, string glovesItem)
     {
         var (skin, sleeve, cuff) = ResolveRaceClassColors(race, pClass);
+
+        // Body Armor Overlays (Priority 4)
+        if (!string.IsNullOrEmpty(bodyArmorItem))
+        {
+            var lowerArmor = bodyArmorItem.ToLowerInvariant();
+            if (lowerArmor.Contains("plate") || lowerArmor.Contains("dragon") || lowerArmor.Contains("mithril") || lowerArmor.Contains("adamant"))
+            {
+                sleeve = new Color(0.40f, 0.42f, 0.46f);
+                _sleeveMaterial.Metallic = 0.85f;
+                _sleeveMaterial.Roughness = 0.35f;
+                cuff = new Color(0.75f, 0.76f, 0.80f);
+                _cuffMaterial.Metallic = 0.95f;
+                _cuffMaterial.Roughness = 0.20f;
+            }
+            else if (lowerArmor.Contains("chain") || lowerArmor.Contains("mail") || lowerArmor.Contains("scale") || lowerArmor.Contains("ring"))
+            {
+                sleeve = new Color(0.35f, 0.36f, 0.40f);
+                _sleeveMaterial.Metallic = 0.70f;
+                _sleeveMaterial.Roughness = 0.45f;
+                cuff = new Color(0.60f, 0.58f, 0.52f);
+                _cuffMaterial.Metallic = 0.65f;
+                _cuffMaterial.Roughness = 0.35f;
+            }
+            else if (lowerArmor.Contains("leather") || lowerArmor.Contains("studded") || lowerArmor.Contains("hard leather") || lowerArmor.Contains("soft leather"))
+            {
+                sleeve = new Color(0.32f, 0.22f, 0.15f);
+                _sleeveMaterial.Metallic = 0.15f;
+                _sleeveMaterial.Roughness = 0.65f;
+                cuff = new Color(0.48f, 0.36f, 0.25f);
+                _cuffMaterial.Metallic = 0.30f;
+                _cuffMaterial.Roughness = 0.45f;
+            }
+            else
+            {
+                _sleeveMaterial.Metallic = 0.05f;
+                _sleeveMaterial.Roughness = 0.75f;
+                _cuffMaterial.Metallic = 0.40f;
+                _cuffMaterial.Roughness = 0.45f;
+            }
+        }
+        else
+        {
+            _sleeveMaterial.Metallic = 0.05f;
+            _sleeveMaterial.Roughness = 0.75f;
+            _cuffMaterial.Metallic = 0.40f;
+            _cuffMaterial.Roughness = 0.45f;
+        }
+
+        // Glove & Gauntlet Hand Armor Overlays (Priority 4)
+        if (!string.IsNullOrEmpty(glovesItem))
+        {
+            var lowerGloves = glovesItem.ToLowerInvariant();
+            if (lowerGloves.Contains("gauntlet") || lowerGloves.Contains("mithril") || lowerGloves.Contains("dragon") || lowerGloves.Contains("steel") || lowerGloves.Contains("iron"))
+            {
+                skin = new Color(0.72f, 0.74f, 0.78f);
+                _skinMaterial.Metallic = 0.90f;
+                _skinMaterial.Roughness = 0.28f;
+            }
+            else if (lowerGloves.Contains("cesti") || lowerGloves.Contains("cestus") || lowerGloves.Contains("studded"))
+            {
+                skin = new Color(0.30f, 0.28f, 0.26f);
+                _skinMaterial.Metallic = 0.55f;
+                _skinMaterial.Roughness = 0.40f;
+            }
+            else if (lowerGloves.Contains("leather") || lowerGloves.Contains("soft") || lowerGloves.Contains("hard") || lowerGloves.Contains("dragonhide"))
+            {
+                skin = new Color(0.28f, 0.20f, 0.14f);
+                _skinMaterial.Metallic = 0.10f;
+                _skinMaterial.Roughness = 0.65f;
+            }
+            else
+            {
+                _skinMaterial.Metallic = 0.0f;
+                _skinMaterial.Roughness = 0.65f;
+            }
+        }
+        else
+        {
+            _skinMaterial.Metallic = 0.0f;
+            _skinMaterial.Roughness = 0.65f;
+        }
+
         _skinMaterial.AlbedoColor = skin;
         _sleeveMaterial.AlbedoColor = sleeve;
         _cuffMaterial.AlbedoColor = cuff;

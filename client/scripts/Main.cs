@@ -4,7 +4,7 @@ using Godot;
 
 namespace Angband3D;
 
-public enum ViewMode { World, Map, Terminal, Menu }
+public enum ViewMode { World, Map, Terminal, Menu, Splash, Guide }
 /// <summary>
 /// Owns the bridge, decides which view is showing, and routes input.
 /// </summary>
@@ -30,6 +30,8 @@ public partial class Main : Node
     private string _saveName = "angband3d";
     private bool _manualRequested;
     private bool _randomRequested;
+    private bool _inSplash;
+    private bool _inGuide;
     private bool _inMenu;
     private bool _inPauseMenu;
     private int _menuIndex;
@@ -38,6 +40,15 @@ public partial class Main : Node
 
     public override void _Ready()
     {
+        try
+        {
+            if (DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Windowed)
+            {
+                DisplayServer.WindowSetMode(DisplayServer.WindowMode.Maximized);
+            }
+        }
+        catch { }
+
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (arg.StartsWith("--keys="))
@@ -72,6 +83,8 @@ public partial class Main : Node
             }
         }
 
+        AddChild(new AudioManager());
+
         _world = new DungeonWorld();
         AddChild(_world);
 
@@ -79,6 +92,69 @@ public partial class Main : Node
         AddChild(layer);
         _overlay = new Overlay();
         layer.AddChild(_overlay);
+
+        _overlay.MenuItemClicked += idx =>
+        {
+            if (_inMenu && idx >= 0 && idx < _menuItems.Count)
+            {
+                AudioManager.Play(SoundEffect.MenuSelect);
+                _menuIndex = idx;
+                _menuItems[_menuIndex].Execute();
+            }
+        };
+
+        _overlay.GuideTabClicked += section =>
+        {
+            if (_inGuide)
+            {
+                AudioManager.Play(SoundEffect.MenuNav);
+                _overlay.GuideSection = Mathf.Clamp(section, 0, 5);
+                _overlay.GuideScroll = 0;
+                _overlay.QueueRedraw();
+            }
+        };
+
+        _overlay.GuideCloseRequested += () =>
+        {
+            if (_inGuide)
+            {
+                _inGuide = false;
+                if (_inPauseMenu)
+                {
+                    OpenPauseMenu();
+                }
+                else
+                {
+                    OpenMenu();
+                }
+            }
+        };
+
+        _overlay.SplashContinueRequested += () =>
+        {
+            if (_inSplash)
+            {
+                OpenMenu();
+            }
+        };
+
+        _overlay.SplashGuideRequested += () =>
+        {
+            if (_inSplash)
+            {
+                OpenGuide();
+            }
+        };
+
+        _overlay.SplashWikiRequested += () =>
+        {
+            OS.ShellOpen("https://angband.readthedocs.io/");
+        };
+
+        _overlay.SplashQuitRequested += () =>
+        {
+            GetTree().Quit();
+        };
 
         _bridge = new BridgeClient();
         AddChild(_bridge);
@@ -96,14 +172,18 @@ public partial class Main : Node
             return;
         }
 
-        // A flag means the caller already decided; otherwise offer the choice.
+        // A flag or test script means the caller already decided; otherwise show splash.
         if (_autoBirth || _manualRequested)
         {
             StartGame();
         }
-        else
+        else if (_script != null || _autoMenuChoice > 0)
         {
             OpenMenu();
+        }
+        else
+        {
+            OpenSplash();
         }
     }
 
@@ -153,8 +233,35 @@ public partial class Main : Node
         return baseName + "-new";
     }
 
+    private void OpenSplash()
+    {
+        _inSplash = true;
+        _inGuide = false;
+        _inMenu = false;
+        _inPauseMenu = false;
+        _overlay.Status = null;
+        _overlay.Mode = ViewMode.Splash;
+        _overlay.QueueRedraw();
+    }
+
+    private void OpenGuide()
+    {
+        AudioManager.Play(SoundEffect.MenuOpen);
+        _inGuide = true;
+        _inSplash = false;
+        _inMenu = false;
+        _overlay.Status = null;
+        _overlay.Mode = ViewMode.Guide;
+        _overlay.GuideSection = 0;
+        _overlay.GuideScroll = 0;
+        _overlay.QueueRedraw();
+    }
+
     private void OpenMenu()
     {
+        AudioManager.Play(SoundEffect.MenuOpen);
+        _inSplash = false;
+        _inGuide = false;
         _inMenu = true;
         _inPauseMenu = false;
         _menuIndex = 0;
@@ -185,6 +292,16 @@ public partial class Main : Node
             _randomRequested = true;
             _inMenu = false;
             StartGame();
+        }));
+        _menuItems.Add(("Game Guide & Primer (Controls, Survival, Wiki)", OpenGuide));
+        _menuItems.Add(("Toggle Fullscreen / Windowed (F11)", () =>
+        {
+            ToggleFullscreen();
+            RefreshMenuDisplay("A N G B A N D 3 D", "first person Angband 4.2.6");
+        }));
+        _menuItems.Add(("Angband Wiki (Open in Browser)", () =>
+        {
+            OS.ShellOpen("https://angband.readthedocs.io/");
         }));
         _menuItems.Add(("Quit", () => GetTree().Quit()));
 
@@ -298,8 +415,11 @@ public partial class Main : Node
 
     private void OpenPauseMenu()
     {
+        AudioManager.Play(SoundEffect.MenuOpen);
         _inMenu = true;
         _inPauseMenu = true;
+        _inSplash = false;
+        _inGuide = false;
         _menuIndex = 0;
         _menuItems.Clear();
 
@@ -324,6 +444,17 @@ public partial class Main : Node
                 _overlay.Mode = EffectiveMode(f);
             }
             _overlay.QueueRedraw();
+        }));
+
+        _menuItems.Add(("Game Guide & Primer", OpenGuide));
+        _menuItems.Add(("Toggle Fullscreen / Windowed (F11)", () =>
+        {
+            ToggleFullscreen();
+            RefreshMenuDisplay("GAME MENU", $"Current Character: {_saveName}");
+        }));
+        _menuItems.Add(("Angband Wiki (Open in Browser)", () =>
+        {
+            OS.ShellOpen("https://angband.readthedocs.io/");
         }));
 
         _menuItems.Add(("Load Other Character...", OpenLoadMenu));
@@ -760,10 +891,156 @@ public partial class Main : Node
         GetTree().Quit();
     }
 
+    public void ToggleFullscreen()
+    {
+        try
+        {
+            var currentMode = DisplayServer.WindowGetMode();
+            if (currentMode is DisplayServer.WindowMode.Fullscreen or DisplayServer.WindowMode.ExclusiveFullscreen)
+            {
+                DisplayServer.WindowSetMode(DisplayServer.WindowMode.Maximized);
+            }
+            else
+            {
+                DisplayServer.WindowSetMode(DisplayServer.WindowMode.Fullscreen);
+            }
+        }
+        catch (Exception ex)
+        {
+            GD.PushWarning($"client: ToggleFullscreen failed: {ex.Message}");
+        }
+    }
+
     public override void _UnhandledKeyInput(InputEvent @event)
     {
         if (@event is not InputEventKey { Pressed: true } key || _bridge == null)
         {
+            return;
+        }
+
+        // Global display toggle: F11 or Alt+Enter toggles Fullscreen / Maximized
+        if (key.Keycode == Key.F11 || (key.Keycode == Key.Enter && key.AltPressed))
+        {
+            ToggleFullscreen();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_inSplash)
+        {
+            if (key.Keycode == Key.Escape)
+            {
+                GetTree().Quit();
+            }
+            else if (key.Keycode is Key.Key2 or Key.Kp2 or Key.G or Key.P)
+            {
+                OpenGuide();
+            }
+            else if (key.Keycode is Key.Key3 or Key.Kp3 or Key.W)
+            {
+                OS.ShellOpen("https://angband.readthedocs.io/");
+            }
+            else
+            {
+                OpenMenu();
+            }
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_inGuide)
+        {
+            if (key.Keycode is Key.Escape or Key.Enter or Key.KpEnter or Key.Space)
+            {
+                _inGuide = false;
+                if (_inPauseMenu)
+                {
+                    OpenPauseMenu();
+                }
+                else
+                {
+                    OpenMenu();
+                }
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode == Key.W)
+            {
+                OS.ShellOpen("https://angband.readthedocs.io/");
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode is Key.Tab or Key.Right)
+            {
+                _overlay.GuideSection = (_overlay.GuideSection + 1) % 6;
+                _overlay.GuideScroll = 0;
+                _overlay.QueueRedraw();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode == Key.Left)
+            {
+                _overlay.GuideSection = (_overlay.GuideSection + 5) % 6;
+                _overlay.GuideScroll = 0;
+                _overlay.QueueRedraw();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode is >= Key.Key1 and <= Key.Key6)
+            {
+                _overlay.GuideSection = (int)(key.Keycode - Key.Key1);
+                _overlay.GuideScroll = 0;
+                _overlay.QueueRedraw();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode is >= Key.Kp1 and <= Key.Kp6)
+            {
+                _overlay.GuideSection = (int)(key.Keycode - Key.Kp1);
+                _overlay.GuideScroll = 0;
+                _overlay.QueueRedraw();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode == Key.Up)
+            {
+                _overlay.GuideScroll = Mathf.Max(0, _overlay.GuideScroll - 1);
+                _overlay.QueueRedraw();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode == Key.Down)
+            {
+                _overlay.GuideScroll++;
+                _overlay.QueueRedraw();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode == Key.Pageup || key.PhysicalKeycode == Key.Pageup || key.KeyLabel == Key.Pageup)
+            {
+                _overlay.GuideScroll = Mathf.Max(0, _overlay.GuideScroll - 6);
+                _overlay.QueueRedraw();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            if (key.Keycode == Key.Pagedown || key.PhysicalKeycode == Key.Pagedown || key.KeyLabel == Key.Pagedown)
+            {
+                _overlay.GuideScroll += 6;
+                _overlay.QueueRedraw();
+                GetViewport().SetInputAsHandled();
+                return;
+            }
+
+            GetViewport().SetInputAsHandled();
             return;
         }
 
@@ -776,15 +1053,31 @@ public partial class Main : Node
 
             switch (key.Keycode)
             {
-                case Key.Up or Key.Kp8: _menuIndex = Mathf.PosMod(_menuIndex - 1, _menuItems.Count); break;
-                case Key.Down or Key.Kp2: _menuIndex = Mathf.PosMod(_menuIndex + 1, _menuItems.Count); break;
+                case Key.Up or Key.Kp8:
+                    _menuIndex = Mathf.PosMod(_menuIndex - 1, _menuItems.Count);
+                    AudioManager.Play(SoundEffect.MenuNav);
+                    break;
+                case Key.Down or Key.Kp2:
+                    _menuIndex = Mathf.PosMod(_menuIndex + 1, _menuItems.Count);
+                    AudioManager.Play(SoundEffect.MenuNav);
+                    break;
+                case Key.Home:
+                    _menuIndex = 0;
+                    AudioManager.Play(SoundEffect.MenuNav);
+                    break;
+                case Key.End:
+                    _menuIndex = _menuItems.Count - 1;
+                    AudioManager.Play(SoundEffect.MenuNav);
+                    break;
                 case Key.Enter or Key.KpEnter or Key.Space:
                     if (_menuIndex >= 0 && _menuIndex < _menuItems.Count)
                     {
+                        AudioManager.Play(SoundEffect.MenuSelect);
                         _menuItems[_menuIndex].Execute();
                     }
                     return;
                 case Key.Escape:
+                    AudioManager.Play(SoundEffect.MenuNav);
                     if (_overlay.MenuTitle == "CONFIRM DELETE")
                     {
                         OpenDeleteMenu();
@@ -883,6 +1176,50 @@ public partial class Main : Node
             return;
         }
 
+        // Minimap controls: Screen size ([ / ]) and Grid scale zoom (PgUp / PgDn / +/-)
+        // Must be checked BEFORE movement direction keys so PgUp/PgDn are never captured as keypad diagonal moves.
+        if (inWorld && IsBracketLeft(key))
+        {
+            _overlay.ChangeMinimapScale(-0.15f);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (inWorld && IsBracketRight(key))
+        {
+            _overlay.ChangeMinimapScale(0.15f);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (inWorld && IsMinimapZoomIn(key))
+        {
+            if (key.CtrlPressed)
+            {
+                _overlay.ChangeMinimapScale(0.15f);
+            }
+            else
+            {
+                _overlay.ChangeMinimapZoom(0.15f);
+            }
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (inWorld && IsMinimapZoomOut(key))
+        {
+            if (key.CtrlPressed)
+            {
+                _overlay.ChangeMinimapScale(-0.15f);
+            }
+            else
+            {
+                _overlay.ChangeMinimapZoom(-0.15f);
+            }
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // Relative directional movement via number pad (or top-row numbers in world view).
         // 8 = forward, 2 = back, 4 = strafe left, 6 = strafe right, diagonals 7,9,1,3, 5 = stay.
         var dir = GetDirectionKey(key);
@@ -896,20 +1233,6 @@ public partial class Main : Node
                     _bridge.SendKey(moveKey);
                 }
             }
-            GetViewport().SetInputAsHandled();
-            return;
-        }
-
-        if (inWorld && key.Keycode == Key.Pageup)
-        {
-            _overlay.ChangeMinimapScale(0.15f);
-            GetViewport().SetInputAsHandled();
-            return;
-        }
-
-        if (inWorld && key.Keycode == Key.Pagedown)
-        {
-            _overlay.ChangeMinimapScale(-0.15f);
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -944,14 +1267,17 @@ public partial class Main : Node
 
     private static int GetDirectionKey(InputEventKey key)
     {
+        // Explicitly guard against minimap and navigation keys being treated as directions
+        if (key.Keycode is Key.Pageup or Key.Pagedown or Key.Home or Key.End or Key.Insert or Key.Delete
+            || key.Keycode is Key.Bracketleft or Key.Bracketright or Key.Braceleft or Key.Braceright
+            || key.Keycode is Key.Equal or Key.Plus or Key.Minus or Key.KpAdd or Key.KpSubtract)
+        {
+            return 0;
+        }
+
         if (key.Keycode is >= Key.Kp1 and <= Key.Kp9)
         {
             return (int)(key.Keycode - Key.Kp1) + 1;
-        }
-
-        if (key.PhysicalKeycode is >= Key.Kp1 and <= Key.Kp9)
-        {
-            return (int)(key.PhysicalKeycode - Key.Kp1) + 1;
         }
 
         if (key.Keycode is >= Key.Key1 and <= Key.Key9)
@@ -959,7 +1285,50 @@ public partial class Main : Node
             return (int)(key.Keycode - Key.Key1) + 1;
         }
 
+        if (key.PhysicalKeycode is >= Key.Kp1 and <= Key.Kp9 && !key.CtrlPressed && !key.AltPressed)
+        {
+            return (int)(key.PhysicalKeycode - Key.Kp1) + 1;
+        }
+
         return 0;
+    }
+
+    private static bool IsBracketLeft(InputEventKey key)
+    {
+        return key.Keycode is Key.Bracketleft or Key.Braceleft
+            || key.PhysicalKeycode is Key.Bracketleft or Key.Braceleft
+            || key.KeyLabel is Key.Bracketleft or Key.Braceleft
+            || key.Unicode is '[' or '{'
+            || (char)key.Keycode is '[' or '{'
+            || key.AsTextKeycode() is "[" or "{";
+    }
+
+    private static bool IsBracketRight(InputEventKey key)
+    {
+        return key.Keycode is Key.Bracketright or Key.Braceright
+            || key.PhysicalKeycode is Key.Bracketright or Key.Braceright
+            || key.KeyLabel is Key.Bracketright or Key.Braceright
+            || key.Unicode is ']' or '}'
+            || (char)key.Keycode is ']' or '}'
+            || key.AsTextKeycode() is "]" or "}";
+    }
+
+    private static bool IsMinimapZoomIn(InputEventKey key)
+    {
+        return key.Keycode is Key.Pageup or Key.Equal or Key.Plus or Key.KpAdd
+            || key.PhysicalKeycode is Key.Pageup
+            || key.KeyLabel is Key.Pageup or Key.Equal or Key.Plus or Key.KpAdd
+            || key.Unicode is '+' or '='
+            || key.AsTextKeycode() is "PageUp" or "Page Up" or "PgUp" or "+" or "=";
+    }
+
+    private static bool IsMinimapZoomOut(InputEventKey key)
+    {
+        return key.Keycode is Key.Pagedown or Key.Minus or Key.KpSubtract
+            || key.PhysicalKeycode is Key.Pagedown
+            || key.KeyLabel is Key.Pagedown or Key.Minus or Key.KpSubtract
+            || key.Unicode is '-' or '_'
+            || key.AsTextKeycode() is "PageDown" or "Page Down" or "PgDn" or "-" or "_";
     }
 
     private void Refresh()

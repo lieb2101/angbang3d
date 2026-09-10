@@ -1,0 +1,22 @@
+# Cursor Rules for angband3d
+
+Before starting work, review `AGENTS.md` and `docs/LLM_CONTEXT.md`.
+
+## Key Commands
+- Build C Engine: `$env:MSYSTEM='MINGW64'; $env:CHERE_INVOKING='1'; & C:\msys64\usr\bin\bash.exe -lc "cd /c/Dev/angband3d/engine && cmake --build build"`
+- Build Godot C#: `dotnet build client/angband3d.csproj`
+- Run Smoke Tests: `python tools/smoke_test.py`
+- Play Game: `.\play.cmd`
+
+## Context & Token Efficiency
+- Do not perform recursive repository searches for standard classes; use the File Map in `AGENTS.md`.
+- Prefer minimal surgical edits with `replace_string_in_file` / `multi_replace_string_in_file`.
+- Check `docs/NEXT_STEPS.md` to immediately resume tasks without repeating research.
+
+## Core Invariants
+- Engine changes stay in `engine/src/main-bridge.c` and `engine/src/bridge-json.c`.
+- Export patch: `cd engine; git diff 4.2.6..HEAD --output=..\engine-patch\0001-bridge-frontend.patch` (never use `>`).
+- Always check `bridge_in_play()` before accessing `cave` or `player->grid`.
+- Use `bridge_get_equipped_by_type()` rather than `slot_by_name()`.
+- Movement = arrow keys. Turning = camera yaw only (0 game turns).
+- View routing = `NeedsTerminal(frame)` in `Main.cs`.

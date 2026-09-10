@@ -74,10 +74,15 @@ if (Test-Path (Join-Path $repo 'client\export_presets.cfg')) {
 # Copy Assets
 Copy-Item (Join-Path $repo 'client\assets') $destClient -Recurse
 
-# Copy Scripts & .godot cache
+# Copy Scripts & .godot cache (lean export: exclude Debug bin/obj binaries to minimize footprint)
 Copy-Item (Join-Path $repo 'client\scripts') $destClient -Recurse
 if (Test-Path (Join-Path $repo 'client\.godot')) {
     Copy-Item (Join-Path $repo 'client\.godot') $destClient -Recurse
+    # Strip non-release debug compilation artifacts from .godot
+    $debugBin = Join-Path $destClient '.godot\mono\temp\bin\Debug'
+    if (Test-Path $debugBin) { Remove-Item $debugBin -Recurse -Force }
+    $debugObj = Join-Path $destClient '.godot\mono\temp\obj\Debug'
+    if (Test-Path $debugObj) { Remove-Item $debugObj -Recurse -Force }
 }
 
 # Copy Engine binaries and gamedata

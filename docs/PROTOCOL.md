@@ -82,9 +82,25 @@ freeze.
 | `name`, `race`, `class` | Character identity. |
 | `y`, `x` | Position on the level. |
 | `depth`, `max_depth` | Current and deepest level reached. `0` is town. |
-| `level`, `exp`, `gold` | Character level, experience, gold. |
-| `hp`, `hp_max`, `sp`, `sp_max` | Hit and spell points. |
+| `level`, `max_lev` | Character level and maximum level reached. |
+| `ht`, `wt` | Character height (inches) and weight (pounds). Used for viewmodel/camera scaling. |
+| `exp`, `exp_max`, `exp_next` | Current experience, maximum experience attained, and experience target for next level. |
+| `gold` | Current gold (AU). |
+| `hp`, `hp_max` | Current and maximum hit points. |
+| `sp`, `sp_max` | Current and maximum spell/mana points. |
+| `ac`, `ac_base`, `ac_to_a` | Total armor class, base AC, and armor bonus (+to_a). |
+| `stats` | Object with `str`, `int`, `wis`, `dex`, `con` stats containing `use`, `max`, `top`, and `reduced` boolean. |
+| `statuses` | Array of active condition/effect badges with `name`, `attr` (color index), and `val`. |
+| `study` | Number of spells currently available to study/learn. |
+| `resting` | Resting turn counter (negative for special rest modes). |
+| `word_recall`, `deep_descent` | Active recall/descent countdown turns. |
+| `target` | Tracked monster target object with `name`, `hp`, `hp_max`, `pct`, and `attr` (when targeting/tracking). |
+| `feeling` | Level feeling object with `mon` (monster danger rating) and `obj` (treasure rating). |
 | `light` | **The player's own light radius** (torch, lantern). Drives client torch lighting. |
+| `light_item`, `light_fuel` | Equipped light source name and remaining turns of fuel. |
+| `weapon_item`, `weapon_tval`, `weapon_sval` | Equipped melee weapon name and item type/subtype tags. |
+| `bow_item`, `bow_tval`, `bow_sval` | Equipped ranged weapon name and item type/subtype tags. |
+| `shield_item`, `shield_tval`, `shield_sval` | Equipped shield name and item type/subtype tags. |
 | `grid_light` | **Ambient light of the square the player stands on.** Distinct from `light`; this is what Angband's status bar shows as "Light N". |
 | `speed` | Current speed. |
 | `dead` | Whether the character has died. |

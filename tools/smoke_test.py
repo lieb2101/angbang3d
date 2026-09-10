@@ -84,6 +84,14 @@ def test_birth_reaches_dungeon():
         check(bool(p["name"]), "player should have a name")
         check(bool(p["race"]) and bool(p["class"]), "race/class should be set")
         check(p["hp"] > 0 and p["hp_max"] > 0, "player should have hit points")
+        check("sp" in p and "sp_max" in p, "player should have sp fields")
+        check("ac" in p and "ac_base" in p and "ac_to_a" in p, "player should have ac fields")
+        check("exp_next" in p and "exp_max" in p, "player should have exp progression fields")
+        check("stats" in p and isinstance(p["stats"], dict), "player should have stats dict")
+        for stat in ("str", "int", "wis", "dex", "con"):
+            check(stat in p["stats"], f"stat {stat} should be present")
+            check(p["stats"][stat]["use"] > 0, f"stat {stat} use value should be positive")
+        check("statuses" in p and isinstance(p["statuses"], list), "player should have statuses list")
         check(p["level"] >= 1, "player should be at least level 1")
         check(p["depth"] == 0, "should start in town")
 

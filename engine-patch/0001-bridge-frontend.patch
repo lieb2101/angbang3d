@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..b025d4dd6
+index 000000000..ea86bfdb7
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,771 @@
+@@ -0,0 +1,1017 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -259,16 +259,22 @@ index 000000000..b025d4dd6
 +#include "main.h"
 +#include "message.h"
 +#include "monster.h"
++#include "mon-desc.h"
 +#include "obj-desc.h"
 +#include "obj-gear.h"
 +#include "object.h"
 +#include "player.h"
++#include "player-calcs.h"
++#include "player-timed.h"
++#include "player-util.h"
++#include "ui-display.h"
 +#include "ui-map.h"
 +#include "ui-game.h"
 +#include "ui-input.h"
 +#include "ui-output.h"
 +#include "ui-term.h"
 +#include "bridge-json.h"
++#include "z-color.h"
 +
 +#ifdef USE_BRIDGE
 +
@@ -316,6 +322,17 @@ index 000000000..b025d4dd6
 +		&& square_in_bounds(cave, player->grid);
 +}
 +
++static struct object *bridge_get_equipped_by_type(struct player *p, int type)
++{
++	if (!p || !p->body.slots) return NULL;
++	for (int i = 0; i < p->body.count; i++) {
++		if (p->body.slots[i].type == type && p->body.slots[i].obj) {
++			return p->body.slots[i].obj;
++		}
++	}
++	return NULL;
++}
++
 +
 +/**
 + * ------------------------------------------------------------------------
@@ -346,7 +363,20 @@ index 000000000..b025d4dd6
 +	fputc(',', fp);
 +	bj_kv_int(fp, "level", player->lev);
 +	fputc(',', fp);
++	bj_kv_int(fp, "max_lev", player->max_lev);
++	fputc(',', fp);
++	bj_kv_int(fp, "ht", player->ht);
++	fputc(',', fp);
++	bj_kv_int(fp, "wt", player->wt);
++	fputc(',', fp);
 +	bj_kv_int(fp, "exp", player->exp);
++	fputc(',', fp);
++	bj_kv_int(fp, "exp_max", player->max_exp);
++	fputc(',', fp);
++	long exp_next = (player->lev >= PY_MAX_LEVEL)
++		? (long)player->exp
++		: (long)(player_exp[player->lev - 1] * player->expfact / 100L);
++	bj_kv_int(fp, "exp_next", exp_next);
 +	fputc(',', fp);
 +	bj_kv_int(fp, "gold", player->au);
 +	fputc(',', fp);
@@ -358,17 +388,65 @@ index 000000000..b025d4dd6
 +	fputc(',', fp);
 +	bj_kv_int(fp, "sp_max", player->msp);
 +	fputc(',', fp);
++	bj_kv_int(fp, "ac", player->known_state.ac + player->known_state.to_a);
++	fputc(',', fp);
++	bj_kv_int(fp, "ac_base", player->known_state.ac);
++	fputc(',', fp);
++	bj_kv_int(fp, "ac_to_a", player->known_state.to_a);
++	fputc(',', fp);
++	bj_kv_int(fp, "study", player->upkeep->new_spells);
++	fputc(',', fp);
++	bj_kv_int(fp, "resting", player_is_resting(player) ? player_resting_count(player) : 0);
++	fputc(',', fp);
++	bj_kv_int(fp, "word_recall", player->word_recall);
++	fputc(',', fp);
++	bj_kv_int(fp, "deep_descent", player->deep_descent);
++	fputc(',', fp);
 +	/* Player's own light radius (torch/lantern) - drives client torch. */
 +	bj_kv_int(fp, "light", player->state.cur_light);
 +	fputc(',', fp);
 +	/* Currently equipped light item (if any) */
-+	struct object *light_obj = equipped_item_by_slot_name(player, "light");
++	struct object *light_obj = bridge_get_equipped_by_type(player, EQUIP_LIGHT);
 +	if (light_obj) {
 +		char lbuf[80];
 +		object_desc(lbuf, sizeof(lbuf), light_obj, ODESC_BASE, player);
 +		bj_kv_string(fp, "light_item", lbuf);
 +		fputc(',', fp);
 +		bj_kv_int(fp, "light_fuel", light_obj->timeout);
++		fputc(',', fp);
++	}
++	/* Currently equipped weapon, bow, and shield items */
++	struct object *weap_obj = bridge_get_equipped_by_type(player, EQUIP_WEAPON);
++	if (weap_obj) {
++		char wbuf[80];
++		object_desc(wbuf, sizeof(wbuf), weap_obj, ODESC_BASE, player);
++		bj_kv_string(fp, "weapon_item", wbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "weapon_tval", weap_obj->tval);
++		fputc(',', fp);
++		bj_kv_int(fp, "weapon_sval", weap_obj->sval);
++		fputc(',', fp);
++	}
++	struct object *bow_obj = bridge_get_equipped_by_type(player, EQUIP_BOW);
++	if (bow_obj) {
++		char bbuf[80];
++		object_desc(bbuf, sizeof(bbuf), bow_obj, ODESC_BASE, player);
++		bj_kv_string(fp, "bow_item", bbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "bow_tval", bow_obj->tval);
++		fputc(',', fp);
++		bj_kv_int(fp, "bow_sval", bow_obj->sval);
++		fputc(',', fp);
++	}
++	struct object *shield_obj = bridge_get_equipped_by_type(player, EQUIP_SHIELD);
++	if (shield_obj) {
++		char shbuf[80];
++		object_desc(shbuf, sizeof(shbuf), shield_obj, ODESC_BASE, player);
++		bj_kv_string(fp, "shield_item", shbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "shield_tval", shield_obj->tval);
++		fputc(',', fp);
++		bj_kv_int(fp, "shield_sval", shield_obj->sval);
 +		fputc(',', fp);
 +	}
 +	/*
@@ -388,6 +466,174 @@ index 000000000..b025d4dd6
 +	fputc(',', fp);
 +	/* Non-zero once wizard/debug mode has been used: scores are void. */
 +	bj_kv_int(fp, "noscore", player->noscore);
++	fputc(',', fp);
++
++	/* Stats: STR, INT, WIS, DEX, CON */
++	bj_key(fp, "stats");
++	fputc('{', fp);
++	const char *stat_keys[STAT_MAX] = { "str", "int", "wis", "dex", "con" };
++	for (int i = 0; i < STAT_MAX; i++) {
++		if (i) fputc(',', fp);
++		bj_key(fp, stat_keys[i]);
++		fputc('{', fp);
++		bj_kv_int(fp, "use", player->state.stat_use[i]);
++		fputc(',', fp);
++		bj_kv_int(fp, "max", player->stat_max[i]);
++		fputc(',', fp);
++		bj_kv_int(fp, "top", player->state.stat_top[i]);
++		fputc(',', fp);
++		bj_kv_bool(fp, "reduced", player->stat_cur[i] < player->stat_max[i]);
++		fputc('}', fp);
++	}
++	fputc('}', fp);
++	fputc(',', fp);
++
++	/* Active status condition badges */
++	bj_key(fp, "statuses");
++	fputc('[', fp);
++	bool has_stat = false;
++	for (int i = 0; i < TMD_MAX; i++) {
++		if (player->timed[i]) {
++			struct timed_grade *grade = timed_effects[i].grade;
++			while (grade && player->timed[i] > grade->max) {
++				grade = grade->next;
++			}
++			if (!grade || !grade->name || !grade->name[0]) continue;
++			if (has_stat) fputc(',', fp);
++			has_stat = true;
++			fputc('{', fp);
++			bj_kv_string(fp, "name", grade->name);
++			fputc(',', fp);
++			bj_kv_int(fp, "attr", grade->color);
++			fputc(',', fp);
++			bj_kv_int(fp, "val", player->timed[i]);
++			fputc('}', fp);
++		}
++	}
++	if (player->state.speed != 110) {
++		if (has_stat) fputc(',', fp);
++		has_stat = true;
++		fputc('{', fp);
++		char sbuf[32];
++		if (player->state.speed > 110) {
++			snprintf(sbuf, sizeof(sbuf), "Fast (+%d)", player->state.speed - 110);
++			bj_kv_string(fp, "name", sbuf);
++			fputc(',', fp);
++			bj_kv_int(fp, "attr", COLOUR_L_GREEN);
++		} else {
++			snprintf(sbuf, sizeof(sbuf), "Slow (-%d)", 110 - player->state.speed);
++			bj_kv_string(fp, "name", sbuf);
++			fputc(',', fp);
++			bj_kv_int(fp, "attr", COLOUR_L_UMBER);
++		}
++		fputc(',', fp);
++		bj_kv_int(fp, "val", player->state.speed);
++		fputc('}', fp);
++	}
++	if (player_is_resting(player)) {
++		if (has_stat) fputc(',', fp);
++		has_stat = true;
++		fputc('{', fp);
++		char rbuf[32];
++		int n = player_resting_count(player);
++		if (n == REST_ALL_POINTS) snprintf(rbuf, sizeof(rbuf), "Rest (HP/SP)");
++		else if (n == REST_COMPLETE) snprintf(rbuf, sizeof(rbuf), "Rest (Done)");
++		else if (n > 0) snprintf(rbuf, sizeof(rbuf), "Rest (%d)", n);
++		else snprintf(rbuf, sizeof(rbuf), "Rest");
++		bj_kv_string(fp, "name", rbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "attr", COLOUR_L_TEAL);
++		fputc(',', fp);
++		bj_kv_int(fp, "val", n);
++		fputc('}', fp);
++	}
++	if (player->upkeep->new_spells > 0) {
++		if (has_stat) fputc(',', fp);
++		has_stat = true;
++		fputc('{', fp);
++		char stbuf[32];
++		snprintf(stbuf, sizeof(stbuf), "Study (%d)", player->upkeep->new_spells);
++		bj_kv_string(fp, "name", stbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "attr", COLOUR_L_BLUE);
++		fputc(',', fp);
++		bj_kv_int(fp, "val", player->upkeep->new_spells);
++		fputc('}', fp);
++	}
++	if (player->word_recall > 0) {
++		if (has_stat) fputc(',', fp);
++		has_stat = true;
++		fputc('{', fp);
++		char wbuf[32];
++		snprintf(wbuf, sizeof(wbuf), "Recall (%d)", player->word_recall);
++		bj_kv_string(fp, "name", wbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "attr", COLOUR_WHITE);
++		fputc(',', fp);
++		bj_kv_int(fp, "val", player->word_recall);
++		fputc('}', fp);
++	}
++	if (player->deep_descent > 0) {
++		if (has_stat) fputc(',', fp);
++		has_stat = true;
++		fputc('{', fp);
++		char dbuf[32];
++		snprintf(dbuf, sizeof(dbuf), "Descent (%d)", player->deep_descent);
++		bj_kv_string(fp, "name", dbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "attr", COLOUR_WHITE);
++		fputc(',', fp);
++		bj_kv_int(fp, "val", player->deep_descent);
++		fputc('}', fp);
++	}
++	if (bridge_in_play() && square_isdtrap(cave, player->grid)) {
++		if (has_stat) fputc(',', fp);
++		has_stat = true;
++		fputc('{', fp);
++		bj_kv_string(fp, "name", "DTrap");
++		fputc(',', fp);
++		bj_kv_int(fp, "attr", square_dtrap_edge(cave, player->grid) ? COLOUR_YELLOW : COLOUR_L_GREEN);
++		fputc(',', fp);
++		bj_kv_int(fp, "val", 1);
++		fputc('}', fp);
++	}
++	fputc(']', fp);
++
++	/* Target / Tracked Monster */
++	if (player->upkeep->health_who) {
++		struct monster *mon = player->upkeep->health_who;
++		if (mon && monster_is_visible(mon) && mon->hp >= 0 && !player->timed[TMD_IMAGE]) {
++			fputc(',', fp);
++			bj_key(fp, "target");
++			fputc('{', fp);
++			char mname[80];
++			monster_desc(mname, sizeof(mname), mon, MDESC_STANDARD);
++			bj_kv_string(fp, "name", mname);
++			fputc(',', fp);
++			bj_kv_int(fp, "hp", mon->hp);
++			fputc(',', fp);
++			bj_kv_int(fp, "hp_max", mon->maxhp);
++			fputc(',', fp);
++			bj_kv_int(fp, "pct", (int)(100L * mon->hp / (mon->maxhp ? mon->maxhp : 1)));
++			fputc(',', fp);
++			bj_kv_int(fp, "attr", monster_health_attr());
++			fputc('}', fp);
++		}
++	}
++
++	/* Level Feeling */
++	if (bridge_in_play() && OPT(player, birth_feelings) && player->depth > 0 && cave->feeling_squares >= z_info->feeling_need) {
++		fputc(',', fp);
++		bj_key(fp, "feeling");
++		fputc('{', fp);
++		uint16_t obj_feeling = cave->feeling / 10;
++		uint16_t mon_feeling = cave->feeling - (10 * obj_feeling);
++		bj_kv_int(fp, "obj", obj_feeling);
++		fputc(',', fp);
++		bj_kv_int(fp, "mon", mon_feeling);
++		fputc('}', fp);
++	}
++
 +	fputc('}', fp);
 +}
 +

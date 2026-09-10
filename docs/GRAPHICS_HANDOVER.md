@@ -1,75 +1,59 @@
-# Graphics, Assets & 3D Rendering Handover
+# Graphics, Assets & 3D Rendering Handover & Architecture
 
-**Date**: 2026-09-09  
-**Status**: Smooth monster entity tracking & orientation, spectral materials, specialized non-humanoid 3D creature tokens, solid block masonry, character model/animation resolution, lava blowout fixes, town building facades, orientation-aware doorways, procedural normal mapping, lighting, item/monster resolvers, and asset pipelines complete and verified.
+**Status**: Verified & Feature-Complete across all Core 3D Subsystems: First-Person Viewmodel & Hands, Dynamic Character Scaling, Monster Tracking & Procedural Anatomical Tokens, Kinetic Combat VFX, Corridor Clutter & Sconces, Zero-Allocation Positional Audio, and Dual-Mode Minimap Scaling.
 
 ---
 
 ## 1. Summary of Current State & Accomplishments
 
-### A. Persistent Entity Tracking & Monster Movement Smoothing (`client/scripts/DungeonWorld.cs`, `MonsterModelResolver.cs`)
+### A. Dynamic Character Height & World Scaling Subsystem (`DungeonWorld.cs`, `ViewModel.cs`)
+- **Race & Height Life-Scale Translation**:
+  - Dynamically calculates player eye height ($0.82\text{m} - 2.45\text{m}$) from Angband's rolled height in inches (`ht` property) and race taxonomy.
+  - Halflings/Gnomes (~36-44") gaze up at towering stone arches, doors, and massive monsters from ~0.88m–1.05m eye height.
+  - Humans/Elves (~68-76") navigate dungeons from standard 1.62m–1.76m perspective.
+  - Half-Trolls/High-Elves (~84-104") loom from 1.95m–2.35m with sweeping sightlines.
+- **Perspective FOV & Footstep Pitch Modulation**:
+  - Dynamically scales camera FOV ($86^\circ$ for short races down to $82^\circ$ for giant races).
+  - Modulates footstep audio pitch and walking bob amplitude based on character mass and stride height.
+- **Viewmodel Hand & Weapon Proportion Adaptation**:
+  - Hands, sleeves, and weapon reach adapt their screen scale smoothly based on `CurrentHeightRatio`.
+
+### B. First-Person Viewmodel & Animated Hand Rigs (`ViewModel.cs`)
+- **Articulated Arm & Hand Mesh**: Modeled low-poly sleeves, metal wrist cuffs/bracers, palms, opposable thumbs, and 4 articulated fingers wrapping held grips.
+- **Dynamic Race & Class Skin/Sleeve Tinting**: Hands and sleeves reflect player race skin tones and class robes.
+- **Equipped Wieldable Resolution**: Matches swords, daggers, 2H battleaxes, polearms, bows, crossbows, wands, staves, spellbooks, shields, burning torches, or martial bare fists.
+- **Kinematic First-Person Dynamics**: Walk bobbing, yaw/pitch inertia sway, melee thrust/slash action tweens, spellcasting surges, and damage recoil.
+
+### C. Persistent Entity Tracking & Monster Movement Smoothing (`DungeonWorld.cs`, `MonsterModelResolver.cs`)
 - **Turn-Less Free Camera & Monster Orientation**:
-  - Replaced indiscriminate per-frame monster node destruction with persistent `MonsterEntity` tracking. Free camera turning and status updates no longer cause monsters to spin or rebuild erratically.
-  - Monsters preserve their identity with engine instance IDs (`id`) and interpolate position (`Lerp`) smoothly along their movement vectors between game turns.
-  - Teleportation / blinking (such as thief theft `EAT_ITEM` blink or phase door) immediately snaps positions, preventing unwanted interpolation across player squares.
-  - Movement vectors update monster target facing (`TargetYaw`). Monsters play their `Walk` animations when moving between cells and smoothly face the player when adjacent/idle.
+  - Persistent `MonsterEntity` tracking by instance ID (`id`). Free camera turning does not cause monsters to spin or rebuild.
+  - Monsters interpolate position smoothly (`Lerp`) between discrete game turns; phase doors / blinks snap instantly.
+  - Monsters play `Walk` animations when moving between cells and smoothly face the player when adjacent/idle.
   - Continuous vertical bobbing/floating offset calculation for flying, incorporeal, and hovering entities.
-  - Overhead 3D nameplates and color-coded health brackets dynamically positioned above character heads with bottom vertical alignment and priority depth-testing to prevent mesh clipping.
+  - Overhead 3D nameplates and color-coded health brackets dynamically positioned above character heads.
+- **Role-Accurate Humanoid Equipment**:
+  - Guards wield swords and shields; archers draw crossbows; mages hold glowing staves; thieves wield daggers; beggars fight unarmed.
+- **Procedural 3D Creature Tokens**:
+  - Dedicated anatomical 3D models for rodents, bats, birds, floating eyes, slimes, worms, molds, arachnids, centipedes, dragons, hydras, demons, and elementals with animated body segments, wings, legs, and glowing eyes.
 
-### B. Accurate 3D Model Mappings & Creature Resolvers (`client/scripts/MonsterModelResolver.cs`)
-- **Glyph-First Monster Archetype Taxonomy**:
-  - Primary resolution is strictly categorized by Angband monster glyph (`glyph`) first, eliminating false substring matches (e.g. non-humanoid creatures with "giant" in their name like "giant white mouse" or "giant red ant" previously triggering the Giant Barbarian humanoid model).
-  - Rodents (`r` - mice, rats, giant white mouse), Bats/Birds (`b`, `B`), Insects/Arachnids (`a`, `c`, `S`, `K`, `I`, `F`), Reptiles/Canines/Felines/Quadrupeds (`R`, `J`, `C`, `f`, `q`, `Z`), and Slimes/Worms (`j`, `w`, `i`) resolve to dedicated procedural 3D tokens with accurate scale and feature anatomy.
-  - Giant humanoid models (`P` - Hill, Frost, Fire, Stone, Cloud, Storm giants, Titan, Cyclops, Morgoth) exclusively map to the imposing `Barbarian.glb` ($1.75\text{--}2.0\times$).
-- **Character Skin Tinting & Spectral Material Preservation**:
-  - Preserves base albedo diffuse textures across all character GLBs (`Knight`, `Barbarian`, `Mage`, `Rogue`, `Rogue_Hooded`, `Skeleton_*`) while modulating skin, cloth, and armor tones based on the creature's Angband color (`attr` / `Color`).
-  - Ethereal entities (`G`, `W`) preserve underlying character texture maps with translucent alpha shaders and spectral colored emission glow.
-  - Demons (`U`, `u`) and Maiar/Ainur (`A`) feature fiery or radiant celestial emission maps.
-- **Humanoid & Archetype Model Distribution**:
-  - Skeletons, Liches, Vampires, and Zombies map to distinct class gear: `Skeleton_Warrior`, `Skeleton_Mage`, `Skeleton_Rogue`, `Skeleton_Minion`.
-  - Townspeople (`t`), adventurers, warriors, paladins, rogues, rangers, mages, clerics, barbarians, and mercenaries mapped with scale adjustments (e.g. Halflings/Dwarves $0.65\times$ vs Elves/Humans $0.98\text{--}1.05\times$).
-  - Giants, Balrogs, and Trolls scaled with imposing proportions ($1.3\text{--}1.75\times$).
-- **Specialized 3D Procedural Creature Tokens**:
-  - **Rodents (`r`)**: Compact rodent torso ($0.5\times$ scale), snout, ear meshes, fur modulated to creature color (e.g. white for giant white mouse), and glowing albino red/creature eyes.
-  - **Bats & Birds (`b`, `B`)**: Airborne hovering tokens with angled wing spans and glowing eyes.
-  - **Floating Eye (`e`)**: 3D sclera sphere with illuminated colored iris and dark pupil.
-  - **Slimes, Jellies & Worms (`j`, `i`, `w`)**: Translucent gelatinous dome with glowing pulsating inner nucleus.
-  - **Molds & Mushrooms (`m`, `,`)**: Procedural mushroom clusters with glowing spore caps.
-  - **Arachnids, Centipedes, Insects (`S`, `K`, `a`, `c`, `I`, `F`)**: Multi-segment body shell with glowing multi-eyes.
-  - **Canines & Beasts (`C`, `f`, `q`, `Z`, `R`, `J`)**: Four-legged beast geometry with snout and glowing eye slots.
-  - **Dragons & Hydras (`d`, `D`, `M`)**: Draconic spire with curved horn crests and blazing eyes.
-  - **Elementals & Vortices (`E`, `v`)**: Faceted crystal prism with spinning orbital rings.
-  - **Golems (`g`, `X`, `x`)**: Monolithic stone column with glowing runic visor slit.
-  - **Quylthulgs (`Q`)**: Pulsating otherworldly hovering orb.
+### D. Kinetic Combat VFX & Floating Combat Feedback ("Juice") (`DungeonWorld.cs`)
+- **3D Floating Combat Text**: Floating billboard damage numbers (orange), misses (silver), and critical hits (gold).
+- **Directional Impact Sparks**: Impact particles match monster blood or elemental type (crimson, acid green, spark yellow, void purple).
+- **Death Dissolve VFX**: Slain monsters burst into ethereal dissolve particles and smoke poofs.
+- **Camera Screen Trauma**: High-impact strikes and heavy damage trigger decaying screen shake and viewmodel recoil.
 
-### C. Solid Stone Block Masonry & Architectural Geometry (`client/scripts/DungeonWorld.cs`)
-- **Solid Block Primitives**:
-  - Solid $2.0 \times 3.0 \times 2.0\text{ m}$ Godot `BoxMesh` primitives spanning seamlessly from ground ($Y=0$) to ceiling ($Y=3.0\text{ m}$) with instances positioned at $Y=1.5\text{ m}$.
-  - Outward normals and double-sided rendering prevent backface culling, inverted windings, and hollow wall appearances.
-- **Procedural PBR Textures & Normal Maps**:
-  - High-resolution procedural masonry textures with per-block hue variation, chisel bevel highlights, stone grain, and deep mortar channels.
-  - Normal maps with bevel gradients (`NormalScale = 1.35`) for 3D depth and surface reaction to torchlight.
-  - Distinct procedural textures and emissive maps for **Magma** (`Feat.Magma`, `Feat.MagmaK`) and **Quartz** (`Feat.Quartz`, `Feat.QuartzK`) veins.
-  - Flagstone floor textures and tiled stone ceilings.
-- **Molten Lava Pools (`Feat.Lava`)**:
-  - Dedicated incandescent procedural lava texture and emission map with cooling basalt crust.
-  - Tuned emission multiplier (`1.35f`) and triplanar UV mapping, eliminating white HDR blowouts.
-- **Town Architecture & Outdoor Atmosphere**:
-  - Dedicated half-timbered shop facade textures and framing (`_storeMaterial`) for town shops (`Feat.StoreGeneral` through `Feat.Home`).
-  - Open twilight sky background and ambient lighting for depth 0 (`_outdoors`).
+### E. Procedural PBR Masonry & Corridor Clutter (`DungeonWorld.cs`, `DungeonClutterResolver.cs`)
+- **MultiMesh Batched Draw Pipeline**: High-performance multi-mesh instances for stone walls, flagstone floors, cavern ceilings, magma fissures, quartz veins, and incandescent molten lava.
+- **Orientation-Aware Portals**: Dynamic doorway alignment across corridors (closed, $70^\circ$ open, and broken debris states) and town shopfront facades with heraldic bronze plaques.
+- **Corridor Wall Sconces & Clutter**: Deterministic wall torches with point lights every 6–8 tiles, room corner pillars, and dungeon clutter.
 
-### D. Orientation-Aware Doorways & Portals
-- **Portal Structure**: Composite procedural meshes consisting of stone jamb posts (`X = \pm 0.85\text{ m}`), top stone lintel spanning to the $3.0\text{ m}$ ceiling, and threshold step.
-- **Corridor Alignment**: Dynamic orientation detection evaluating adjacent orthogonal squares to orient doorways across corridor paths (North-South vs East-West).
-- **Door States**:
-  - **Closed**: Sturdy oak plank door panel sealing the doorway, reinforced with top and bottom forged iron straps and handle rings.
-  - **Open**: Open doorway archway with an angled ($70^\circ$) swung-open wooden door leaf on heavy iron hinge brackets, making open corridors clearly passable at a glance in 3D.
-  - **Broken**: Splintered wooden debris and planks scattered across the floor with a broken remnant clinging to the top hinge.
-  - **Floor Underlay**: Automatic floor tile placed beneath all doorway and stair cells.
+### F. Zero-Allocation Positional 3D Audio (`AudioManager.cs`)
+- **Procedural 16-bit PCM Audio Engine**: Generates spatialized footsteps (stone vs outdoor terrain), blade clangs, critical slashes, spell zaps, door creaks, and staircase transitions dynamically with zero external audio assets.
+- **Pre-Allocated Sound Pools**: 8 2D and 12 3D spatial audio players pooled for zero-garbage playback.
 
-### E. Items (`ItemModelResolver.cs`) & Atmosphere
-- 3D item pickups with gentle hover and rotation animations.
-- Godot 4 Volumetric Fog, SSAO, Tonemap (Filmic), warm torch light with soft shadows and ember particles.
+### G. Dual-Mode Minimap & Independent Geometry Scaling (`Overlay.cs`)
+- **Decoupled Minimap Controls**: Adjust physical HUD window dimensions (`Ctrl+PgUp/PgDn` or `[`/`]`) independently from grid tile zoom radius (`PgUp/PgDn` or `+`/`-`).
+- **Full-Screen 2D Tactical Map**: Press `Shift-M` for an instant top-down view with your directional vision cone and fog of memory.
 
 ---
 
@@ -77,13 +61,15 @@
 
 | Path | Purpose |
 |---|---|
-| `client/scripts/DungeonWorld.cs` | 3D rendering pipeline, MultiMesh batches, entity tracking, procedural textures/materials, geometry builders, and torch/camera controllers. |
-| `client/scripts/MonsterModelResolver.cs` | Resolves monster data to animated 3D GLTF models, spectral shaders, or specialized 3D creature tokens with animation controllers. |
+| `client/scripts/DungeonWorld.cs` | 3D rendering pipeline, MultiMesh batches, character height scaling, combat VFX, and camera kinematics. |
+| `client/scripts/ViewModel.cs` | First-person articulated hand rig, racial skin/sleeve styling, wielded weapon matching, and action tweens. |
+| `client/scripts/MonsterModelResolver.cs` | Resolves monster taxonomy to 3D GLTF models, equipment roles, or specialized procedural anatomical creature tokens. |
 | `client/scripts/ItemModelResolver.cs` | Resolves item kinds to 3D pickup models with hover animations. |
-| `client/scripts/Main.cs` | Game lifecycle, menu/terminal routing, input dispatch, and screenshot test hooks. |
-| `client/scripts/Overlay.cs` | 2D HUD, mini-map, status bars, and classic terminal rendering. |
+| `client/scripts/DungeonClutterResolver.cs` | Generates corridor torch sconces with point lights and room props. |
+| `client/scripts/AudioManager.cs` | Positional and procedural sound synthesis and player pooling. |
+| `client/scripts/Overlay.cs` | 2D HUD, resizable mini-map, status bars, and classic terminal rendering. |
+| `client/scripts/Main.cs` | Game lifecycle, menu/terminal routing, and input dispatch. |
 | `client/scripts/BridgeClient.cs` | Engine subprocess IPC via standard streams with JSON protocol. |
-| `tools/fetch_assets.ps1` | PowerShell script downloading CC0 assets into `client/assets/models/`. |
 | `tools/smoke_test.py` | 11-test suite verifying bridge protocol, save/load, menus, and gameplay. |
 
 ---
@@ -107,17 +93,6 @@
   .\play.cmd
   ```
 
----
-
-## 4. Comprehensive 3D Visual Enhancement Blueprint (Next Steps)
-
-### Phase 1: First-Person Viewmodel & Weapon Dynamics
-- **Goal**: Provide physical presence on screen, eliminating the disembodied floating camera.
-- **Node**: Create `client/scripts/ViewModel.cs` attached as a child of `DungeonWorld._camera`.
-- **Existing Assets in `client/assets/models/`**:
-  - `dungeon/torch_lit.gltf.glb` (Torch / Offhand Light)
-  - `characters/sword_1handed.gltf` (Melee Blade)
-  - `characters/shield_badge.gltf` (Shield)
   - `characters/wand.gltf` (Wand / Staff)
   - `characters/spellbook_closed.gltf` (Magic Tome)
 - **Mechanics**:

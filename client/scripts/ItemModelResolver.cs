@@ -59,7 +59,7 @@ public static class ItemModelResolver
             itemName += " (pile)";
         }
 
-        var visual = CreateVisual(glyph, color);
+        var visual = CreateVisual(glyph, color, itemName);
         var rotator = new ItemRotator();
         rotator.Position = new Vector3(0, 0.25f, 0);
         rotator.AddChild(visual);
@@ -75,15 +75,16 @@ public static class ItemModelResolver
         return root;
     }
 
-    private static Node3D CreateVisual(char glyph, Color color)
+    private static Node3D CreateVisual(char glyph, Color color, string itemName = null)
     {
-        if (ModelMappings.TryGetValue(glyph, out var config) && config.ModelPath != null)
+        var modelConfig = ResolveSpecificItemModel(glyph, itemName);
+        if (modelConfig.ModelPath != null)
         {
-            var scene = GetModel(config.ModelPath);
+            var scene = GetModel(modelConfig.ModelPath);
             if (scene != null)
             {
                 var inst = scene.Instantiate<Node3D>();
-                inst.Scale = new Vector3(config.Scale, config.Scale, config.Scale);
+                inst.Scale = new Vector3(modelConfig.Scale, modelConfig.Scale, modelConfig.Scale);
                 return inst;
             }
         }
@@ -97,6 +98,78 @@ public static class ItemModelResolver
             Mesh = mesh,
             MaterialOverride = mat,
         };
+    }
+
+    private static (string ModelPath, float Scale) ResolveSpecificItemModel(char glyph, string itemName)
+    {
+        if (!string.IsNullOrEmpty(itemName))
+        {
+            var lower = itemName.ToLowerInvariant();
+
+            // Daggers & Knives
+            if (lower.Contains("dagger") || lower.Contains("knife") || lower.Contains("rapier") || lower.Contains("stiletto") || lower.Contains("main gauche"))
+            {
+                return ("res://assets/models/characters/dagger.gltf", 0.65f);
+            }
+            // 2H Swords
+            if (lower.Contains("two-handed") || lower.Contains("great sword") || lower.Contains("claymore") || lower.Contains("zweihander") || lower.Contains("bastard"))
+            {
+                return ("res://assets/models/characters/sword_2handed.gltf", 0.65f);
+            }
+            // 2H Battle Axes & Polearms
+            if (lower.Contains("battle axe") || lower.Contains("great axe") || lower.Contains("broad axe") || lower.Contains("halberd") || lower.Contains("poleaxe"))
+            {
+                return ("res://assets/models/characters/axe_2handed.gltf", 0.65f);
+            }
+            // 1H Axes
+            if (lower.Contains("axe") || lower.Contains("cleaver") || lower.Contains("hatchet"))
+            {
+                return ("res://assets/models/characters/axe_1handed.gltf", 0.65f);
+            }
+            // War Hammers & Mattocks
+            if (lower.Contains("hammer") || lower.Contains("mattock"))
+            {
+                return ("res://assets/models/characters/hammer.gltf", 0.65f);
+            }
+            // Maces, Flails, Morning Stars, Clubs, Cudgels, Whips
+            if (lower.Contains("mace") || lower.Contains("flail") || lower.Contains("star") ||
+                lower.Contains("club") || lower.Contains("cudgel") || lower.Contains("whip") ||
+                lower.Contains("ball-and-chain"))
+            {
+                return ("res://assets/models/characters/mace.gltf", 0.65f);
+            }
+            // Staves & Polearms
+            if (lower.Contains("staff") || lower.Contains("spear") || lower.Contains("pike") || lower.Contains("lance") || lower.Contains("trident"))
+            {
+                return ("res://assets/models/characters/staff.gltf", 0.55f);
+            }
+            // Crossbows & Bows
+            if (lower.Contains("crossbow") || lower.Contains("arbalest") || lower.Contains("bow"))
+            {
+                return ("res://assets/models/characters/crossbow_1handed.gltf", 0.60f);
+            }
+            // Shields
+            if (lower.Contains("spiked"))
+            {
+                return ("res://assets/models/characters/shield_spikes.gltf", 0.65f);
+            }
+            if (lower.Contains("round") || lower.Contains("buckler"))
+            {
+                return ("res://assets/models/characters/shield_round.gltf", 0.65f);
+            }
+            // Torches & Lanterns
+            if (lower.Contains("torch") || lower.Contains("lantern"))
+            {
+                return ("res://assets/models/dungeon/torch_lit.gltf.glb", 0.60f);
+            }
+        }
+
+        if (ModelMappings.TryGetValue(glyph, out var config))
+        {
+            return config;
+        }
+
+        return (null, 0.50f);
     }
 
     private static StandardMaterial3D GetPickupMaterial(char glyph, Color color)

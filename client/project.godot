@@ -22,9 +22,14 @@ config/icon="res://icon.svg"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=800
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/mode="maximized"
+window/size/resizable=true
+window/size/window_width_override=1280
+window/size/window_height_override=720
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [dotnet]
 
@@ -32,4 +37,6 @@ project/assembly_name="angband3d"
 
 [rendering]
 
+anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/screen_space_aa=1
 environment/defaults/default_clear_color=Color(0.04, 0.04, 0.05, 1)

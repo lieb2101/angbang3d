@@ -29,6 +29,22 @@ public enum CreatureTokenType
     Elemental,
     Golem,
     Quylthulg,
+    Skeleton,
+    Zombie,
+    Humanoid,
+    Orc,
+    Demon,
+    Troll,
+    Giant,
+    Vampire,
+    Wraith,
+    Lich,
+    Ainu,
+    Townsperson,
+    Naga,
+    Ent,
+    Mimic,
+    CoinSwarm,
     GenericToken
 }
 
@@ -78,6 +94,7 @@ public class MonsterEntity
 
     // Procedural Token Animation references
     public CreatureTokenType TokenType { get; set; } = CreatureTokenType.None;
+    public Sprite3D BillboardSprite { get; set; }
     public Node3D BodyNode { get; set; }
     public Node3D HeadNode { get; set; }
     public Node3D TailNode { get; set; }
@@ -154,6 +171,7 @@ public static class MonsterModelResolver
 {
     private static readonly Dictionary<string, PackedScene> _modelCache = new();
     private static readonly Dictionary<char, List<MonsterModelRule>> _modelRules = new();
+    private static readonly Dictionary<string, (Texture2D Albedo, Texture2D Normal)> _spriteCache = new();
 
     static MonsterModelResolver()
     {
@@ -375,11 +393,11 @@ public static class MonsterModelResolver
     {
         var lowerName = (raceName ?? "").ToLowerInvariant();
 
-        // Check for specific 3D mesh model paths
+        // Check for high-fidelity custom rigs (e.g. user-placed Mixamo rigs in assets/models/mixamo/)
         var (modelPath, scale, isEthereal, isFloating, customSpeed, equipmentRole) = ResolveModelConfig(glyph, raceName, lowerName);
         scale = Mathf.Clamp(scale, 0.45f, 2.0f);
 
-        if (modelPath != null)
+        if (modelPath != null && modelPath.Contains("mixamo") && ResourceLoader.Exists(modelPath))
         {
             var scene = GetModel(modelPath);
             if (scene != null)
@@ -400,25 +418,8 @@ public static class MonsterModelResolver
 
                 entity.IsFloating = isFloating;
                 entity.BaseY = isFloating ? 0.35f : 0.0f;
-                if (modelPath.Contains("tree_dead_large"))
-                {
-                    entity.ModelHeight = 4.8f * scale;
-                }
-                else if (modelPath.Contains("chest"))
-                {
-                    entity.ModelHeight = 0.85f * scale;
-                }
-                else if (modelPath.Contains("coin_stack"))
-                {
-                    entity.ModelHeight = 1.2f * scale;
-                }
-                else
-                {
-                    // Realistic humanoid proportions: scale 0.82 to fit natural dungeon doorways
-                    entity.ModelHeight = 2.05f * scale;
-                }
+                entity.ModelHeight = 2.05f * scale;
 
-                // Realistic anatomically grounded scale: slight non-uniform X/Z slenderize to reduce cartoon chibi width
                 instance.Scale = new Vector3(scale * 0.90f, scale * 1.05f, scale * 0.90f);
                 instance.Position = Vector3.Zero;
 
@@ -434,8 +435,52 @@ public static class MonsterModelResolver
             }
         }
 
-        // Dedicated Procedural 3D Creature Tokens for Non-Humanoids
-        BuildCreatureToken(entity, glyph, lowerName, color);
+        // Approach 1: High-Resolution Daggerfall 2.5D Dark Fantasy Billboards with PBR Normal Mapping
+        BuildDaggerfallBillboard(entity, glyph, lowerName, color, scale, isEthereal, isFloating);
+    }
+
+    private static void BuildDaggerfallBillboard(MonsterEntity entity, char glyph, string lowerName, Color color, float scale, bool isEthereal, bool isFloating)
+    {
+        var spriteArchetype = ResolveDaggerfallArchetype(glyph, lowerName);
+        var (albedoTex, normalTex) = GetOrCreateDaggerfallSprite(spriteArchetype, glyph, color);
+
+        var spriteHeight = 2.10f * scale;
+
+        var spriteMat = new StandardMaterial3D
+        {
+            AlbedoTexture = albedoTex,
+            NormalEnabled = true,
+            NormalTexture = normalTex,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            BillboardMode = BaseMaterial3D.BillboardModeEnum.FixedY,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            AlbedoColor = isEthereal ? new Color(color.R, color.G, color.B, 0.70f) : Colors.White,
+        };
+
+        var quadMesh = new QuadMesh
+        {
+            Size = new Vector2(1.55f * scale, spriteHeight),
+        };
+
+        var meshInst = new MeshInstance3D
+        {
+            Mesh = quadMesh,
+            MaterialOverride = spriteMat,
+            Position = new Vector3(0, spriteHeight * 0.5f, 0),
+        };
+
+        entity.IsFloating = isFloating;
+        entity.IsEthereal = isEthereal;
+        entity.BaseY = isFloating ? 0.35f : 0.0f;
+        entity.ModelHeight = spriteHeight;
+
+        entity.CharacterNode.AddChild(meshInst);
+    }
+
+    private static string SelectTownspersonModel(string raceName)
+    {
+        return "res://assets/models/characters/Rogue.glb";
     }
 
     private static void AddModelRule(char glyph, MonsterModelRule rule)
@@ -629,18 +674,195 @@ public static class MonsterModelResolver
         return (null, 1.0f, false, false, 1.0f, EquipmentRole.Auto);
     }
 
-    private static string SelectTownspersonModel(string raceName)
+    private static string ResolveDaggerfallArchetype(char glyph, string lowerName)
     {
-        var hash = Math.Abs((raceName ?? "townsperson").GetHashCode());
-        var options = new[]
+        return glyph switch
         {
-            "res://assets/models/characters/Knight.glb",
-            "res://assets/models/characters/Rogue.glb",
-            "res://assets/models/characters/Barbarian.glb",
-            "res://assets/models/characters/Mage.glb",
-            "res://assets/models/characters/Rogue_Hooded.glb",
+            's' => "skeleton_warrior",
+            'z' => "ghoul_undead",
+            'L' => "arch_lich",
+            'V' => "vampire_lord",
+            'W' => "wraith_nazgul",
+            'G' => "spectral_ghost",
+            'o' => "orc_berserker",
+            'k' => "kobold_stalker",
+            'y' => "yeek_creature",
+            'h' or 'p' => lowerName.Contains("knight") || lowerName.Contains("paladin") ? "knight_armored" :
+                          lowerName.Contains("mage") || lowerName.Contains("wizard") ? "mage_hooded" :
+                          lowerName.Contains("barbarian") ? "barbarian_warrior" : "rogue_shadow",
+            't' => "townsperson_peasant",
+            'A' => "celestial_angel",
+            'U' => "balrog_greater_demon",
+            'u' => "imp_lesser_demon",
+            'P' => "giant_titan",
+            'T' => "troll_cave",
+            'O' => "ogre_brute",
+            'Y' => "yeti_abominable",
+            'd' or 'D' => "dragon_ancient",
+            'M' => "hydra_wyrm",
+            'S' => "giant_spider",
+            'c' => "centipede_horror",
+            'a' or 'I' or 'K' => "insect_beetle",
+            'b' or 'B' => "bat_vampiric",
+            'C' or 'Z' => "hound_shadow",
+            'f' => "feline_predator",
+            'r' => "rat_plague",
+            'J' => "serpent_viper",
+            'R' => "reptile_basilisk",
+            'q' => "quadruped_beast",
+            'H' => "manticore_chimera",
+            'e' => "beholder_eye",
+            'j' or 'i' => "ooze_slime",
+            'w' => "worm_mass",
+            'm' or ',' => "mushroom_spore",
+            'E' or 'v' => "elemental_vortex",
+            'g' or 'X' or 'x' => "golem_stone",
+            'Q' => "quylthulg_aberration",
+            'l' => "dead_tree_treant",
+            '?' => "mimic_chest",
+            '$' => "creeping_coins",
+            _ => "dark_shadow_entity"
         };
-        return options[hash % options.Length];
+    }
+
+    private static (Texture2D Albedo, Texture2D Normal) GetOrCreateDaggerfallSprite(string archetype, char glyph, Color accentColor)
+    {
+        var key = $"{archetype}_{glyph}_{accentColor.ToHtml()}";
+        if (_spriteCache.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        const int w = 256;
+        const int h = 384;
+
+        var albedoImg = Image.CreateEmpty(w, h, true, Image.Format.Rgba8);
+        var normalImg = Image.CreateEmpty(w, h, true, Image.Format.Rgba8);
+
+        // Procedural high-grit Daggerfall dark fantasy sprite & tangent normal generator
+        GenerateDaggerfallSpritePixels(albedoImg, normalImg, archetype, glyph, accentColor);
+
+        albedoImg.GenerateMipmaps();
+        normalImg.GenerateMipmaps();
+
+        var albedoTex = ImageTexture.CreateFromImage(albedoImg);
+        var normalTex = ImageTexture.CreateFromImage(normalImg);
+
+        var result = (albedoTex, normalTex);
+        _spriteCache[key] = result;
+        return result;
+    }
+
+    private static void GenerateDaggerfallSpritePixels(Image albedo, Image normal, string archetype, char glyph, Color accent)
+    {
+        var w = albedo.GetWidth();
+        var h = albedo.GetHeight();
+
+        // Dark fantasy base tones
+        var baseBodyColor = archetype switch
+        {
+            "skeleton_warrior" or "arch_lich" => new Color(0.82f, 0.80f, 0.72f),
+            "ghoul_undead" => new Color(0.35f, 0.40f, 0.32f),
+            "vampire_lord" => new Color(0.20f, 0.16f, 0.22f),
+            "wraith_nazgul" => new Color(0.12f, 0.12f, 0.15f),
+            "spectral_ghost" => new Color(0.60f, 0.75f, 0.90f),
+            "orc_berserker" => new Color(0.30f, 0.38f, 0.25f),
+            "knight_armored" => new Color(0.65f, 0.68f, 0.72f),
+            "dragon_ancient" or "balrog_greater_demon" => new Color(0.40f, 0.12f, 0.10f),
+            "giant_spider" => new Color(0.16f, 0.14f, 0.18f),
+            _ => new Color(0.25f, 0.24f, 0.28f)
+        };
+
+        baseBodyColor = baseBodyColor.Lerp(accent, 0.35f);
+
+        for (int y = 0; y < h; y++)
+        {
+            var ny = 1.0f - (float)y / h; // 0 at bottom, 1 at top
+            for (int x = 0; x < w; x++)
+            {
+                var nx = (float)(x - w / 2) / (w / 2); // -1 left, +1 right
+
+                // Compute anatomical silhouette profile
+                var inSilhouette = EvaluateAnatomy(archetype, nx, ny);
+                if (!inSilhouette)
+                {
+                    albedo.SetPixel(x, y, new Color(0, 0, 0, 0));
+                    normal.SetPixel(x, y, new Color(0.5f, 0.5f, 1.0f, 0));
+                    continue;
+                }
+
+                // Shading & gritty relief
+                var rimDist = MathF.Abs(nx);
+                var lighting = 1.0f - rimDist * 0.45f;
+                var noise = ((MathF.Sin(x * 0.4f) * MathF.Cos(y * 0.4f)) + 1.0f) * 0.08f - 0.04f;
+
+                var r = Mathf.Clamp(baseBodyColor.R * lighting + noise, 0f, 1f);
+                var g = Mathf.Clamp(baseBodyColor.G * lighting + noise, 0f, 1f);
+                var b = Mathf.Clamp(baseBodyColor.B * lighting + noise, 0f, 1f);
+
+                // Eyes / Emissive focal point
+                var isEye = ny is >= 0.75f and <= 0.82f && MathF.Abs(nx) is >= 0.10f and <= 0.22f;
+                if (isEye)
+                {
+                    r = Mathf.Clamp(accent.R * 1.5f + 0.3f, 0f, 1f);
+                    g = Mathf.Clamp(accent.G * 1.5f + 0.3f, 0f, 1f);
+                    b = Mathf.Clamp(accent.B * 1.5f + 0.3f, 0f, 1f);
+                }
+
+                albedo.SetPixel(x, y, new Color(r, g, b, 1.0f));
+
+                // High-fidelity tangent normal vector
+                var normX = -nx * 0.65f;
+                var normY = (ny - 0.5f) * 0.50f;
+                var normZ = MathF.Sqrt(Mathf.Clamp(1.0f - (normX * normX + normY * normY), 0.1f, 1.0f));
+                var nCol = new Color(normX * 0.5f + 0.5f, normY * 0.5f + 0.5f, normZ * 0.5f + 0.5f, 1.0f);
+                normal.SetPixel(x, y, nCol);
+            }
+        }
+    }
+
+    private static bool EvaluateAnatomy(string archetype, float x, float y)
+    {
+        var absX = MathF.Abs(x);
+
+        // Head (y: 0.70..0.92)
+        if (y is >= 0.70f and <= 0.92f)
+        {
+            var headRadius = 0.28f;
+            var dy = y - 0.81f;
+            if (absX * absX / (headRadius * headRadius) + (dy * dy) / (0.11f * 0.11f) <= 1.0f)
+                return true;
+        }
+
+        // Torso / Shoulders (y: 0.38..0.72)
+        if (y is >= 0.38f and <= 0.72f)
+        {
+            var torsoWidth = 0.48f - (0.72f - y) * 0.20f;
+            if (absX <= torsoWidth)
+                return true;
+        }
+
+        // Arms / Wings / Weapons (y: 0.35..0.75, wider)
+        if (archetype.Contains("dragon") || archetype.Contains("bat") || archetype.Contains("balrog"))
+        {
+            if (y is >= 0.40f and <= 0.88f && absX <= 0.88f - (0.88f - y) * 0.3f)
+                return true;
+        }
+        else
+        {
+            if (y is >= 0.35f and <= 0.65f && absX <= 0.62f)
+                return true;
+        }
+
+        // Legs / Lower body (y: 0.04..0.40)
+        if (y is >= 0.04f and <= 0.40f)
+        {
+            var legWidth = 0.38f;
+            if (absX <= legWidth && !(y < 0.28f && absX < 0.08f)) // bifurcated legs
+                return true;
+        }
+
+        return false;
     }
 
     private static void BuildCreatureToken(MonsterEntity entity, char glyph, string lowerName, Color color)

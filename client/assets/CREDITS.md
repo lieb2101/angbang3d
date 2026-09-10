@@ -12,6 +12,7 @@ Art assets carry their own licences, independent of the project's GPL v2.
 | KayKit Adventures 1.0 | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 | CC0 (Public Domain) | Humanoid, knight, rogue, mage monsters |
 | KayKit Halloween Bits 1.0 | https://github.com/KayKit-Game-Assets/KayKit-Halloween-Bits-1.0 | CC0 (Public Domain) | Crypts, coffins, shrines, skulls, dungeon props |
 | KayKit City Builder Bits 1.0 | https://github.com/KayKit-Game-Assets/KayKit-City-Builder-Bits-1.0 | CC0 (Public Domain) | Town buildings, market stalls, houses |
+| Mixamo Dark Fantasy Rigs | https://www.mixamo.com/ | Free for Game Engines | Realistic Paladins, Death Knights, Wraiths, Necromancers, Ghouls, Mutants, Vampire Lords |
 
 ## Planned sources
 
@@ -19,6 +20,7 @@ Chosen for coherence rather than volume: mixing packs is what makes free-asset
 games look like asset flips, so architecture comes from a single pack and
 creatures come from the same author where possible.
 
+- **Mixamo Dark Fantasy Rigs** (Option 2 / Free for Games) — realistic humanoids, knights, liches, wraiths, ghouls, vampires
 - **KayKit Dungeon Remastered** (CC0) — walls, floors, doors, props
 - **KayKit character packs** (CC0) — creatures, same art style as the dungeon kit
 - **Quaternius**, **Kenney** (CC0) — fill only, run through the unified material treatment

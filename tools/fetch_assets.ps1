@@ -11,10 +11,11 @@ $ErrorActionPreference = "Stop"
 $assetRoot = Join-Path $PSScriptRoot "..\client\assets\models"
 $dungeonDir = Join-Path $assetRoot "dungeon"
 $charDir = Join-Path $assetRoot "characters"
+$mixamoDir = Join-Path $assetRoot "mixamo"
 $townDir = Join-Path $assetRoot "town"
 $propsDir = Join-Path $assetRoot "props"
 
-foreach ($dir in @($dungeonDir, $charDir, $townDir, $propsDir)) {
+foreach ($dir in @($dungeonDir, $charDir, $mixamoDir, $townDir, $propsDir)) {
     if (-not (Test-Path $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }

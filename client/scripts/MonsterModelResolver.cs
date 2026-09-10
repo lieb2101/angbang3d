@@ -450,18 +450,31 @@ public static class MonsterModelResolver
 
     private static void InitModelRules()
     {
-        // 1. Ghosts, Spectres, Poltergeists (G) - Unarmed spectral forms
+        // =========================================================================
+        // Option 2: Mixamo Dark Fantasy High-Fidelity Rig Registry
+        // (Prefers Mixamo rigs when present in assets/models/mixamo/ or assets/models/characters/)
+        // =========================================================================
+
+        // 1. Ghosts, Spectres, Poltergeists (G) - Spectral floating robes
+        AddModelRule('G', new MonsterModelRule("res://assets/models/mixamo/Wraith.glb", 1.0f, isEthereal: true, isFloating: true, speed: 0.85f, equipment: EquipmentRole.Unarmed));
         AddModelRule('G', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 0.90f, isEthereal: true, isFloating: true, speed: 0.8f, equipment: EquipmentRole.Unarmed));
 
         // 2. Wights, Wraiths, Nazgul, Ringwraiths (W)
+        AddModelRule('W', new MonsterModelRule("res://assets/models/mixamo/Wraith.glb", 1.05f, isEthereal: true, isFloating: true, speed: 0.85f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("nazgul") || n.Contains("ringwraith") || n.Contains("wraith")));
+        AddModelRule('W', new MonsterModelRule("res://assets/models/mixamo/DeathKnight.glb", 1.05f, isEthereal: true, isFloating: false, speed: 0.85f, equipment: EquipmentRole.Warrior, matcher: n => n.Contains("wight")));
         AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Skeleton_Warrior.glb", 0.95f, isEthereal: true, isFloating: false, speed: 0.85f, equipment: EquipmentRole.Warrior, matcher: n => n.Contains("wight")));
         AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 0.95f, isEthereal: true, isFloating: true, speed: 0.85f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("nazgul") || n.Contains("ringwraith") || n.Contains("wraith")));
         AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 0.95f, isEthereal: true, isFloating: true, speed: 0.85f, equipment: EquipmentRole.Warrior));
 
         // 3. Liches and Arch-Liches (L)
+        AddModelRule('L', new MonsterModelRule("res://assets/models/mixamo/Necromancer.glb", 1.15f, speed: 0.9f, equipment: EquipmentRole.Mage));
         AddModelRule('L', new MonsterModelRule("res://assets/models/characters/Skeleton_Mage.glb", 1.10f, speed: 0.9f, equipment: EquipmentRole.Mage));
 
         // 4. Skeletons (s)
+        AddModelRule('s', new MonsterModelRule("res://assets/models/mixamo/SkeletonArcher.glb", 0.95f, speed: 1.0f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout") || n.Contains("sniper")));
+        AddModelRule('s', new MonsterModelRule("res://assets/models/mixamo/SkeletonMage.glb", 0.95f, speed: 0.9f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("mage") || n.Contains("sorcerer") || n.Contains("druj")));
+        AddModelRule('s', new MonsterModelRule("res://assets/models/mixamo/SkeletonWarrior.glb", 1.10f, speed: 1.0f, equipment: EquipmentRole.Warrior, matcher: n => n.Contains("lord") || n.Contains("king") || n.Contains("knight") || n.Contains("champion")));
+        AddModelRule('s', new MonsterModelRule("res://assets/models/mixamo/SkeletonWarrior.glb", 0.95f, speed: 1.0f, equipment: EquipmentRole.Warrior));
         AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, speed: 1.0f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout") || n.Contains("sniper")));
         AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Mage.glb", 0.90f, speed: 0.9f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("mage") || n.Contains("sorcerer") || n.Contains("druj")));
         AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.70f, speed: 1.1f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("decayed") || n.Contains("crawler") || n.Contains("broken")));
@@ -469,42 +482,56 @@ public static class MonsterModelResolver
         AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Warrior.glb", 1.20f, speed: 1.0f, equipment: EquipmentRole.Warrior, matcher: n => n.Contains("lord") || n.Contains("king") || n.Contains("knight") || n.Contains("champion")));
         AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Skeleton_Warrior.glb", 0.95f, speed: 1.0f, equipment: EquipmentRole.Warrior));
 
-        // 5. Zombies, Mummies, Ghouls (z) - Unarmed clawing/touching
+        // 5. Zombies, Mummies, Ghouls (z) - Sinewy rotting ghoul & mutant forms
+        AddModelRule('z', new MonsterModelRule("res://assets/models/mixamo/Ghoul.glb", 1.0f, speed: 0.85f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("ghoul") || n.Contains("zombie") || n.Contains("crawler")));
+        AddModelRule('z', new MonsterModelRule("res://assets/models/mixamo/Mummy.glb", 1.05f, speed: 0.75f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("mummy") || n.Contains("pharaoh")));
         AddModelRule('z', new MonsterModelRule("res://assets/models/characters/Skeleton_Warrior.glb", 1.05f, speed: 0.75f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("mummy") || n.Contains("greater") || n.Contains("pharaoh")));
         AddModelRule('z', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.85f, speed: 0.70f, equipment: EquipmentRole.Unarmed));
 
-        // 6. Vampires (V)
+        // 6. Vampires (V) - High-poly gothic vampire lord
+        AddModelRule('V', new MonsterModelRule("res://assets/models/mixamo/Vampire.glb", 1.05f, speed: 1.05f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("lord") || n.Contains("master") || n.Contains("ancient") || n.Contains("nosferatu")));
+        AddModelRule('V', new MonsterModelRule("res://assets/models/mixamo/Vampire.glb", 1.0f, speed: 1.05f, equipment: EquipmentRole.Unarmed));
         AddModelRule('V', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 1.05f, speed: 1.05f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("lord") || n.Contains("master") || n.Contains("ancient") || n.Contains("nosferatu")));
         AddModelRule('V', new MonsterModelRule("res://assets/models/characters/Rogue_Hooded.glb", 1.0f, speed: 1.05f, equipment: EquipmentRole.Unarmed));
 
         // 7. Ainur, Maiar (A)
+        AddModelRule('A', new MonsterModelRule("res://assets/models/mixamo/Paladin.glb", 1.20f, speed: 1.0f, equipment: EquipmentRole.Warrior));
         AddModelRule('A', new MonsterModelRule("res://assets/models/characters/Mage.glb", 1.15f, speed: 1.0f, equipment: EquipmentRole.Mage));
 
-        // 8. Major Demons, Balrogs, Pit Fiends (U)
+        // 8. Major Demons, Balrogs, Pit Fiends (U) - Demonic mutant brute
+        AddModelRule('U', new MonsterModelRule("res://assets/models/mixamo/Brute.glb", 1.65f, speed: 1.0f, equipment: EquipmentRole.TwoHandedAxe));
         AddModelRule('U', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.65f, speed: 1.0f, equipment: EquipmentRole.TwoHandedAxe));
 
         // 9. Minor Demons, Imps, Quasits, Lemures (u)
+        AddModelRule('u', new MonsterModelRule("res://assets/models/mixamo/Mutant.glb", 0.70f, speed: 1.2f, equipment: EquipmentRole.Unarmed));
         AddModelRule('u', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.65f, speed: 1.2f, equipment: EquipmentRole.Unarmed));
 
         // 10. Giants, Titans, Cyclops, Morgoth (P)
+        AddModelRule('P', new MonsterModelRule("res://assets/models/mixamo/Brute.glb", 2.10f, speed: 0.85f, equipment: EquipmentRole.TwoHandedAxe, matcher: n => n.Contains("morgoth")));
+        AddModelRule('P', new MonsterModelRule("res://assets/models/mixamo/Brute.glb", 1.85f, speed: 0.85f, equipment: EquipmentRole.Barbarian));
         AddModelRule('P', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 2.0f, speed: 0.85f, equipment: EquipmentRole.TwoHandedAxe, matcher: n => n.Contains("morgoth")));
         AddModelRule('P', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.75f, speed: 0.85f, equipment: EquipmentRole.Barbarian));
 
         // 11. Trolls (T)
+        AddModelRule('T', new MonsterModelRule("res://assets/models/mixamo/Mutant.glb", 1.45f, speed: 0.90f, equipment: EquipmentRole.Barbarian));
         AddModelRule('T', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.45f, speed: 0.90f, equipment: EquipmentRole.Barbarian));
 
         // 12. Ogres (O)
+        AddModelRule('O', new MonsterModelRule("res://assets/models/mixamo/Mutant.glb", 1.30f, speed: 0.95f, equipment: EquipmentRole.Barbarian));
         AddModelRule('O', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.30f, speed: 0.95f, equipment: EquipmentRole.Barbarian));
 
         // 13. Yetis (Y) - Bare hands
+        AddModelRule('Y', new MonsterModelRule("res://assets/models/mixamo/Brute.glb", 1.35f, speed: 0.90f, equipment: EquipmentRole.Unarmed));
         AddModelRule('Y', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 1.30f, speed: 0.90f, equipment: EquipmentRole.Unarmed));
 
         // 14. Orcs, Goblins, Snagas, Uruks (o)
+        AddModelRule('o', new MonsterModelRule("res://assets/models/mixamo/OrcWarrior.glb", 0.90f, speed: 1.0f, equipment: EquipmentRole.Barbarian));
         AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Skeleton_Mage.glb", 0.85f, speed: 1.0f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("shaman") || n.Contains("mage") || n.Contains("curse")));
         AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Skeleton_Rogue.glb", 0.85f, speed: 1.05f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout") || n.Contains("tracker") || n.Contains("sniper")));
         AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 0.88f, speed: 1.0f, equipment: EquipmentRole.Barbarian));
 
         // 15. Kobolds (k) and Yeeks (y)
+        AddModelRule('k', new MonsterModelRule("res://assets/models/mixamo/Mutant.glb", 0.60f, speed: 1.15f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout")));
         AddModelRule('k', new MonsterModelRule("res://assets/models/characters/Skeleton_Rogue.glb", 0.60f, speed: 1.15f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout")));
         AddModelRule('k', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.60f, speed: 1.15f, equipment: EquipmentRole.Rogue));
         AddModelRule('y', new MonsterModelRule("res://assets/models/characters/Skeleton_Minion.glb", 0.60f, speed: 1.15f, equipment: EquipmentRole.Unarmed));
@@ -534,6 +561,10 @@ public static class MonsterModelResolver
             n.Contains("bandit") || n.Contains("brigand") || n.Contains("ninja") || n.Contains("scout") || n.Contains("stalker");
 
         // Rules for 'h'
+        AddModelRule('h', new MonsterModelRule("res://assets/models/mixamo/Paladin.glb", 1.0f, equipment: EquipmentRole.Warrior, matcher: isKnight));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/mixamo/Barbarian.glb", 1.05f, equipment: EquipmentRole.Barbarian, matcher: isBarb));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/mixamo/Necromancer.glb", 1.0f, speed: 0.95f, equipment: EquipmentRole.Mage, matcher: isMage));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/mixamo/Rogue.glb", 1.0f, speed: 1.05f, equipment: EquipmentRole.Rogue, matcher: isThief));
         AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Knight.glb", 0.90f * 1.05f, equipment: EquipmentRole.Warrior, matcher: isKnight));
         AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 0.90f * 1.10f, equipment: EquipmentRole.Barbarian, matcher: isBarb));
         AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Mage.glb", 0.90f * 0.95f, speed: 0.95f, equipment: EquipmentRole.Mage, matcher: isMage));
@@ -541,6 +572,10 @@ public static class MonsterModelResolver
         AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Rogue.glb", 0.90f));
 
         // Rules for 'p'
+        AddModelRule('p', new MonsterModelRule("res://assets/models/mixamo/Paladin.glb", 1.0f, equipment: EquipmentRole.Warrior, matcher: isKnight));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/mixamo/Barbarian.glb", 1.05f, equipment: EquipmentRole.Barbarian, matcher: isBarb));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/mixamo/Necromancer.glb", 1.0f, speed: 0.95f, equipment: EquipmentRole.Mage, matcher: isMage));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/mixamo/Rogue.glb", 1.0f, speed: 1.05f, equipment: EquipmentRole.Rogue, matcher: isThief));
         AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Knight.glb", 0.95f * 1.05f, equipment: EquipmentRole.Warrior, matcher: isKnight));
         AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Barbarian.glb", 0.95f * 1.10f, equipment: EquipmentRole.Barbarian, matcher: isBarb));
         AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Mage.glb", 0.95f * 0.95f, speed: 0.95f, equipment: EquipmentRole.Mage, matcher: isMage));
@@ -2094,12 +2129,18 @@ public static class MonsterModelResolver
         foreach (var name in anims)
         {
             var s = name.ToString().ToLowerInvariant();
-            if (idle == null && s.Contains("idle")) idle = name;
-            if (walk == null && (s.Contains("walk") || s.Contains("run"))) walk = name;
+            if (idle == null && (s.Contains("idle") || s.Contains("breath") || s.Contains("stand") || s.Contains("take 001") || s.Contains("layer0")))
+            {
+                idle = name;
+            }
+            if (walk == null && (s.Contains("walk") || s.Contains("run") || s.Contains("march") || s.Contains("locomotion")))
+            {
+                walk = name;
+            }
         }
 
         idle ??= anims[0];
-        walk ??= idle;
+        walk ??= (anims.Length > 1 ? anims[1] : idle);
 
         entity.IdleAnim = idle;
         entity.WalkAnim = walk;

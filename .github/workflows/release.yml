@@ -1,0 +1,204 @@
+name: Release Build & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v0.2.0)'
+        required: true
+        default: 'v0.2.0'
+      release_name:
+        description: 'Release Title'
+        required: false
+        default: 'Angband3D Release'
+
+env:
+  ANGBAND_TAG: "4.2.6"
+
+jobs:
+  build-engine-linux:
+    name: Build Engine (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build libncurses-dev
+
+      - name: Reconstruct engine fork
+        run: |
+          git clone --origin upstream --branch "$ANGBAND_TAG" --depth 1 \
+            https://github.com/angband/angband.git engine
+          cd engine
+          git apply --verbose ../engine-patch/0001-bridge-frontend.patch
+
+      - name: Build Engine
+        run: |
+          cmake -G Ninja \
+            -DSUPPORT_BRIDGE_FRONTEND=ON \
+            -DSUPPORT_GCU_FRONTEND=ON \
+            -B engine/build engine
+          cmake --build engine/build
+
+      - name: Upload Linux Engine Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-linux
+          path: |
+            engine/build/game/angband
+            engine/build/game/lib/
+
+  build-engine-windows:
+    name: Build Engine (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pdcurses
+
+      - name: Reconstruct engine fork & Build
+        shell: msys2 {0}
+        run: |
+          git clone --origin upstream --branch "$ANGBAND_TAG" --depth 1 \
+            https://github.com/angband/angband.git engine
+          cd engine
+          git apply --verbose ../engine-patch/0001-bridge-frontend.patch
+          cmake -G Ninja \
+            -DSUPPORT_BRIDGE_FRONTEND=ON \
+            -DSUPPORT_GCU_FRONTEND=ON \
+            -B build .
+          cmake --build build
+
+      - name: Upload Windows Engine Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-windows
+          path: |
+            engine/build/game/angband.exe
+            engine/build/game/lib/
+
+  package-and-release:
+    name: Package & Publish Release
+    needs: [build-engine-linux, build-engine-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build C# Client (Release)
+        run: dotnet build client/angband3d.csproj -c Release
+
+      - name: Download Engine Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # --- Package Windows ---
+      - name: Package Windows ZIP
+        run: |
+          mkdir -p dist/Angband3D-Windows-x64/client
+          mkdir -p dist/Angband3D-Windows-x64/engine/build/game
+
+          # Copy client files & assets
+          cp -r client/Main.tscn client/project.godot client/icon.svg client/assets client/scripts dist/Angband3D-Windows-x64/client/
+          if [ -d client/.godot ]; then cp -r client/.godot dist/Angband3D-Windows-x64/client/; fi
+
+          # Copy engine binaries & gamedata
+          cp artifacts/engine-windows/angband.exe dist/Angband3D-Windows-x64/engine/build/game/
+          cp -r artifacts/engine-windows/lib dist/Angband3D-Windows-x64/engine/build/game/
+          mkdir -p dist/Angband3D-Windows-x64/engine/build/game/lib/save
+
+          # Copy documentation and launchers
+          cp LICENSE README.md play.cmd play.ps1 dist/Angband3D-Windows-x64/
+          cat << 'EOF' > dist/Angband3D-Windows-x64/Play-Angband3D.cmd
+          @echo off
+          setlocal
+          cd /d "%~dp0"
+          call play.cmd %*
+          EOF
+
+          cd dist
+          zip -r Angband3D-Windows-x64.zip Angband3D-Windows-x64
+          cd ..
+
+      # --- Package Linux ---
+      - name: Package Linux ZIP
+        run: |
+          mkdir -p dist/Angband3D-Linux-x64/client
+          mkdir -p dist/Angband3D-Linux-x64/engine/build/game
+
+          # Copy client files & assets
+          cp -r client/Main.tscn client/project.godot client/icon.svg client/assets client/scripts dist/Angband3D-Linux-x64/client/
+          if [ -d client/.godot ]; then cp -r client/.godot dist/Angband3D-Linux-x64/client/; fi
+
+          # Copy engine binaries & gamedata
+          cp artifacts/engine-linux/angband dist/Angband3D-Linux-x64/engine/build/game/
+          chmod +x dist/Angband3D-Linux-x64/engine/build/game/angband
+          cp -r artifacts/engine-linux/lib dist/Angband3D-Linux-x64/engine/build/game/
+          mkdir -p dist/Angband3D-Linux-x64/engine/build/game/lib/save
+
+          # Copy documentation and launchers
+          cp LICENSE README.md dist/Angband3D-Linux-x64/
+          cat << 'EOF' > dist/Angband3D-Linux-x64/play.sh
+          #!/bin/sh
+          cd "$(dirname "$0")"
+          if command -v godot >/dev/null 2>&1; then
+              godot --path client -- "$@"
+          elif command -v godot4 >/dev/null 2>&1; then
+              godot4 --path client -- "$@"
+          else
+              echo "Godot 4 (.NET) was not found in PATH."
+              echo "Playing in text mode (GCU)..."
+              ./engine/build/game/angband -mgcu "$@"
+          fi
+          EOF
+          chmod +x dist/Angband3D-Linux-x64/play.sh
+
+          cd dist
+          zip -r Angband3D-Linux-x64.zip Angband3D-Linux-x64
+          cd ..
+
+      - name: Determine Release Tag
+        id: tag_info
+        run: |
+          if [ -n "${{ inputs.tag_name }}" ]; then
+            echo "tag=${{ inputs.tag_name }}" >> $GITHUB_OUTPUT
+            echo "title=${{ inputs.release_name }}" >> $GITHUB_OUTPUT
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "tag=${TAG}" >> $GITHUB_OUTPUT
+            echo "title=Angband3D ${TAG}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_info.outputs.tag }}
+          name: ${{ steps.tag_info.outputs.title }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist/Angband3D-Windows-x64.zip
+            dist/Angband3D-Linux-x64.zip

@@ -109,6 +109,12 @@ public partial class Main : Node
 
     private static string SaveDir()
     {
+        var exe = FindEngine();
+        if (!string.IsNullOrEmpty(exe))
+        {
+            var dir = System.IO.Path.GetDirectoryName(exe) ?? "";
+            return System.IO.Path.Combine(dir, "lib", "save");
+        }
         var root = ProjectSettings.GlobalizePath("res://").TrimEnd('/', '\\');
         var repo = System.IO.Path.GetDirectoryName(root) ?? "";
         return System.IO.Path.Combine(repo, "engine", "build", "game", "lib", "save");
@@ -371,12 +377,47 @@ public partial class Main : Node
     {
         var root = ProjectSettings.GlobalizePath("res://").TrimEnd('/', '\\');
         var repo = System.IO.Path.GetDirectoryName(root) ?? "";
+        string execDir = null;
+        try
+        {
+            var execPath = OS.GetExecutablePath();
+            if (!string.IsNullOrEmpty(execPath))
+            {
+                execDir = System.IO.Path.GetDirectoryName(execPath);
+            }
+        }
+        catch { }
+
+        var bases = new System.Collections.Generic.List<string> { repo, root };
+        if (!string.IsNullOrEmpty(execDir))
+        {
+            bases.Add(execDir);
+            var parent = System.IO.Path.GetDirectoryName(execDir);
+            if (!string.IsNullOrEmpty(parent))
+            {
+                bases.Add(parent);
+            }
+        }
+
         foreach (var name in new[] { "angband.exe", "angband" })
         {
-            var p = System.IO.Path.Combine(repo, "engine", "build", "game", name);
-            if (System.IO.File.Exists(p))
+            foreach (var b in bases)
             {
-                return p;
+                if (string.IsNullOrEmpty(b)) continue;
+                var candidates = new[]
+                {
+                    System.IO.Path.Combine(b, "engine", "build", "game", name),
+                    System.IO.Path.Combine(b, "engine", name),
+                    System.IO.Path.Combine(b, "game", name),
+                    System.IO.Path.Combine(b, name),
+                };
+                foreach (var p in candidates)
+                {
+                    if (System.IO.File.Exists(p))
+                    {
+                        return p;
+                    }
+                }
             }
         }
         return null;

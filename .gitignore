@@ -15,8 +15,10 @@ __pycache__/
 # Build output
 build/
 build-*/
+dist/
 *.obj
 *.exe
+*.zip
 
 # Editors / OS
 .vscode/

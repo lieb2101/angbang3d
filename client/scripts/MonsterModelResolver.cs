@@ -1118,17 +1118,20 @@ public static class MonsterModelResolver
         entity.TokenType = CreatureTokenType.Eye;
         var container = new Node3D { Position = new Vector3(0, 0.75f, 0) };
 
-        // Sclera (eyeball)
+        // Sclera (central demonic eyeball) with glossy wet specular
         var eyeMesh = new SphereMesh { Radius = 0.32f, Height = 0.64f, RadialSegments = 16, Rings = 8 };
         var eyeMat = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.92f, 0.90f, 0.85f),
-            Roughness = 0.15f,
-            Metallic = 0.1f,
+            AlbedoColor = new Color(0.90f, 0.88f, 0.82f),
+            Roughness = 0.12f,
+            Metallic = 0.05f,
+            RimEnabled = true,
+            Rim = 0.5f,
+            RimTint = 0.3f,
         };
         container.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat });
 
-        // Iris & Pupil attached to an Iris pivot node
+        // Iris & Slit Pupil attached to an Iris pivot node
         var irisPivot = new Node3D { Position = new Vector3(0, 0, 0.30f) };
         container.AddChild(irisPivot);
         entity.IrisNode = irisPivot;
@@ -1139,7 +1142,7 @@ public static class MonsterModelResolver
             AlbedoColor = glowColor,
             EmissionEnabled = true,
             Emission = glowColor,
-            EmissionEnergyMultiplier = 1.4f,
+            EmissionEnergyMultiplier = 1.8f,
         };
         var irisInst = new MeshInstance3D
         {
@@ -1149,7 +1152,7 @@ public static class MonsterModelResolver
         };
         irisPivot.AddChild(irisInst);
 
-        var pupilMesh = new CylinderMesh { TopRadius = 0.08f, BottomRadius = 0.08f, Height = 0.06f, RadialSegments = 12 };
+        var pupilMesh = new BoxMesh { Size = new Vector3(0.04f, 0.22f, 0.06f) }; // Vertical demonic slit pupil
         var pupilMat = new StandardMaterial3D
         {
             AlbedoColor = new Color(0.02f, 0.02f, 0.04f),
@@ -1159,10 +1162,27 @@ public static class MonsterModelResolver
         {
             Mesh = pupilMesh,
             MaterialOverride = pupilMat,
-            Position = new Vector3(0, 0, 0.01f),
-            Rotation = new Vector3(Mathf.DegToRad(90), 0, 0),
+            Position = new Vector3(0, 0, 0.02f),
         };
         irisPivot.AddChild(pupilInst);
+
+        // 4 Writhing Eyestalks emerging around the crown (Beholder / Gazer anatomy)
+        var stalkAngles = new[] { 35f, 125f, -35f, -125f };
+        var stalkMesh = new CylinderMesh { TopRadius = 0.025f, BottomRadius = 0.04f, Height = 0.28f, RadialSegments = 6 };
+        var stalkMat = new StandardMaterial3D { AlbedoColor = new Color(0.40f, 0.32f, 0.38f), Roughness = 0.4f };
+        var miniEyeMesh = new SphereMesh { Radius = 0.045f, Height = 0.09f, RadialSegments = 8, Rings = 4 };
+
+        for (int i = 0; i < stalkAngles.Length; i++)
+        {
+            var stalkNode = new Node3D
+            {
+                Position = new Vector3(Mathf.Cos(Mathf.DegToRad(stalkAngles[i])) * 0.22f, 0.24f, Mathf.Sin(Mathf.DegToRad(stalkAngles[i])) * 0.22f),
+                Rotation = new Vector3(Mathf.DegToRad(20), Mathf.DegToRad(stalkAngles[i]), 0),
+            };
+            stalkNode.AddChild(new MeshInstance3D { Mesh = stalkMesh, MaterialOverride = stalkMat, Position = new Vector3(0, 0.12f, 0) });
+            stalkNode.AddChild(new MeshInstance3D { Mesh = miniEyeMesh, MaterialOverride = irisMat, Position = new Vector3(0, 0.26f, 0) });
+            container.AddChild(stalkNode);
+        }
 
         return container;
     }
@@ -1793,37 +1813,112 @@ public static class MonsterModelResolver
         entity.TokenType = CreatureTokenType.Dragon;
         var container = new Node3D { Position = new Vector3(0, 0, 0), Scale = new Vector3(scale, scale, scale) };
 
-        var bodyNode = new Node3D { Position = new Vector3(0, 0, 0) };
+        var bodyNode = new Node3D { Position = new Vector3(0, 0.45f, 0) };
         container.AddChild(bodyNode);
         entity.BodyNode = bodyNode;
         entity.InitialBodyScale = Vector3.One;
 
-        // Draconic Spire
-        var spireMesh = new CylinderMesh { TopRadius = 0.08f, BottomRadius = 0.40f, Height = 0.95f, RadialSegments = 12 };
-        var spireMat = new StandardMaterial3D
+        var scaleColor = new Color(0.12f, 0.10f, 0.12f).Lerp(glowColor, 0.45f);
+        var scaleMat = new StandardMaterial3D
         {
-            AlbedoColor = new Color(0.18f, 0.12f, 0.14f),
-            Roughness = 0.4f,
-            Metallic = 0.5f,
-            EmissionEnabled = true,
-            Emission = glowColor * 0.4f,
-            EmissionEnergyMultiplier = 0.8f,
+            AlbedoColor = scaleColor,
+            Roughness = 0.38f,
+            Metallic = 0.42f,
+            RimEnabled = true,
+            Rim = 0.4f,
+            RimTint = 0.4f,
         };
-        bodyNode.AddChild(new MeshInstance3D { Mesh = spireMesh, MaterialOverride = spireMat, Position = new Vector3(0, 0.48f, 0) });
+        var underbellyMat = new StandardMaterial3D
+        {
+            AlbedoColor = scaleColor.Lerp(new Color(0.85f, 0.70f, 0.50f), 0.35f),
+            Roughness = 0.55f,
+        };
+        var fireMat = new StandardMaterial3D
+        {
+            AlbedoColor = glowColor,
+            EmissionEnabled = true,
+            Emission = glowColor,
+            EmissionEnergyMultiplier = 2.2f,
+        };
 
-        // Horn Crest
-        var hornMesh = new CylinderMesh { TopRadius = 0.02f, BottomRadius = 0.08f, Height = 0.35f, RadialSegments = 8 };
-        var hornMat = new StandardMaterial3D { AlbedoColor = glowColor, EmissionEnabled = true, Emission = glowColor, EmissionEnergyMultiplier = 1.4f };
+        // Muscular Torso & Chest
+        var chestMesh = new BoxMesh { Size = new Vector3(0.55f, 0.48f, 0.75f) };
+        bodyNode.AddChild(new MeshInstance3D { Mesh = chestMesh, MaterialOverride = scaleMat, Position = new Vector3(0, 0, 0) });
 
-        var hornL = new MeshInstance3D { Mesh = hornMesh, MaterialOverride = hornMat, Position = new Vector3(0.18f, 0.85f, -0.05f), Rotation = new Vector3(0, 0, Mathf.DegToRad(-25)) };
-        var hornR = new MeshInstance3D { Mesh = hornMesh, MaterialOverride = hornMat, Position = new Vector3(-0.18f, 0.85f, -0.05f), Rotation = new Vector3(0, 0, Mathf.DegToRad(25)) };
-        bodyNode.AddChild(hornL);
-        bodyNode.AddChild(hornR);
+        var bellyMesh = new BoxMesh { Size = new Vector3(0.42f, 0.20f, 0.65f) };
+        bodyNode.AddChild(new MeshInstance3D { Mesh = bellyMesh, MaterialOverride = underbellyMat, Position = new Vector3(0, -0.16f, 0) });
+
+        // Serpentine S-curved Neck & Head
+        var neckNode = new Node3D { Position = new Vector3(0, 0.22f, 0.32f) };
+        bodyNode.AddChild(neckNode);
+
+        var neckMesh = new CylinderMesh { TopRadius = 0.16f, BottomRadius = 0.26f, Height = 0.45f, RadialSegments = 8 };
+        neckNode.AddChild(new MeshInstance3D { Mesh = neckMesh, MaterialOverride = scaleMat, Position = new Vector3(0, 0.18f, 0.10f), Rotation = new Vector3(Mathf.DegToRad(35), 0, 0) });
+
+        // Draconic Skull & Snout
+        var headNode = new Node3D { Position = new Vector3(0, 0.36f, 0.22f) };
+        neckNode.AddChild(headNode);
+        entity.HeadNode = headNode;
+
+        var headMesh = new BoxMesh { Size = new Vector3(0.32f, 0.24f, 0.38f) };
+        headNode.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = scaleMat, Position = new Vector3(0, 0, 0) });
+
+        var snoutMesh = new BoxMesh { Size = new Vector3(0.22f, 0.15f, 0.30f) };
+        headNode.AddChild(new MeshInstance3D { Mesh = snoutMesh, MaterialOverride = scaleMat, Position = new Vector3(0, -0.04f, 0.28f) });
+
+        // Glowing Fire Gullet (open maw emission)
+        var mawMesh = new BoxMesh { Size = new Vector3(0.14f, 0.08f, 0.22f) };
+        headNode.AddChild(new MeshInstance3D { Mesh = mawMesh, MaterialOverride = fireMat, Position = new Vector3(0, -0.06f, 0.26f) });
+
+        // Curved Horns
+        var hornMesh = new CylinderMesh { TopRadius = 0.02f, BottomRadius = 0.07f, Height = 0.42f, RadialSegments = 6 };
+        headNode.AddChild(new MeshInstance3D { Mesh = hornMesh, MaterialOverride = fireMat, Position = new Vector3(0.15f, 0.20f, -0.12f), Rotation = new Vector3(Mathf.DegToRad(-30), 0, Mathf.DegToRad(-25)) });
+        headNode.AddChild(new MeshInstance3D { Mesh = hornMesh, MaterialOverride = fireMat, Position = new Vector3(-0.15f, 0.20f, -0.12f), Rotation = new Vector3(Mathf.DegToRad(-30), 0, Mathf.DegToRad(25)) });
 
         // Blazing Draconic Eyes
-        var eyeMesh = new SphereMesh { Radius = 0.06f, Height = 0.12f, RadialSegments = 8, Rings = 4 };
-        bodyNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = hornMat, Position = new Vector3(0.10f, 0.70f, 0.20f) });
-        bodyNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = hornMat, Position = new Vector3(-0.10f, 0.70f, 0.20f) });
+        var eyeMesh = new SphereMesh { Radius = 0.045f, Height = 0.09f, RadialSegments = 8, Rings = 4 };
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = fireMat, Position = new Vector3(0.12f, 0.06f, 0.10f) });
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = fireMat, Position = new Vector3(-0.12f, 0.06f, 0.10f) });
+
+        // Articulated Wings (Left & Right)
+        var wingMesh = new BoxMesh { Size = new Vector3(0.95f, 0.02f, 0.55f) };
+        var leftWing = new Node3D { Position = new Vector3(0.24f, 0.18f, 0) };
+        leftWing.AddChild(new MeshInstance3D { Mesh = wingMesh, MaterialOverride = scaleMat, Position = new Vector3(0.45f, 0.15f, 0), Rotation = new Vector3(0, 0, Mathf.DegToRad(25)) });
+        bodyNode.AddChild(leftWing);
+        entity.LeftWingNode = leftWing;
+
+        var rightWing = new Node3D { Position = new Vector3(-0.24f, 0.18f, 0) };
+        rightWing.AddChild(new MeshInstance3D { Mesh = wingMesh, MaterialOverride = scaleMat, Position = new Vector3(-0.45f, 0.15f, 0), Rotation = new Vector3(0, 0, Mathf.DegToRad(-25)) });
+        bodyNode.AddChild(rightWing);
+        entity.RightWingNode = rightWing;
+
+        // Long Spiked Tail
+        var tailNode = new Node3D { Position = new Vector3(0, -0.05f, -0.38f) };
+        bodyNode.AddChild(tailNode);
+        entity.TailNode = tailNode;
+
+        var tailMesh1 = new CylinderMesh { TopRadius = 0.10f, BottomRadius = 0.18f, Height = 0.55f, RadialSegments = 6 };
+        tailNode.AddChild(new MeshInstance3D { Mesh = tailMesh1, MaterialOverride = scaleMat, Position = new Vector3(0, 0.06f, -0.24f), Rotation = new Vector3(Mathf.DegToRad(-75), 0, 0) });
+
+        var tailMesh2 = new CylinderMesh { TopRadius = 0.03f, BottomRadius = 0.10f, Height = 0.55f, RadialSegments = 6 };
+        tailNode.AddChild(new MeshInstance3D { Mesh = tailMesh2, MaterialOverride = scaleMat, Position = new Vector3(0, 0.22f, -0.68f), Rotation = new Vector3(Mathf.DegToRad(-60), 0, 0) });
+
+        // 4 Clawed Legs
+        var legPositions = new[]
+        {
+            new Vector3(0.26f, -0.30f, 0.25f),
+            new Vector3(-0.26f, -0.30f, 0.25f),
+            new Vector3(0.26f, -0.30f, -0.25f),
+            new Vector3(-0.26f, -0.30f, -0.25f)
+        };
+        var legUpperMesh = new CylinderMesh { TopRadius = 0.10f, BottomRadius = 0.08f, Height = 0.35f, RadialSegments = 6 };
+        foreach (var pos in legPositions)
+        {
+            var legNode = new Node3D { Position = pos };
+            legNode.AddChild(new MeshInstance3D { Mesh = legUpperMesh, MaterialOverride = scaleMat });
+            bodyNode.AddChild(legNode);
+            entity.Legs.Add(legNode);
+        }
 
         return container;
     }

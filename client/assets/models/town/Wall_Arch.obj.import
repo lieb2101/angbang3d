@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://ccqsf7407tkaf"
+path="res://.godot/imported/Wall_Arch.obj-06102bec55f3c320b73a563422e75a29.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Wall_Arch.obj-06102bec55f3c320b73a563422e75a29.mesh"]
+
+source_file="res://assets/models/town/Wall_Arch.obj"
+dest_files=["res://.godot/imported/Wall_Arch.obj-06102bec55f3c320b73a563422e75a29.mesh", "res://.godot/imported/Wall_Arch.obj-06102bec55f3c320b73a563422e75a29.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

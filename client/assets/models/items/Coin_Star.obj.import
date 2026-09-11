@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://1ybgohoel66p"
+path="res://.godot/imported/Coin_Star.obj-c638197523c8eee4f80107ffee4fdb9e.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Coin_Star.obj-c638197523c8eee4f80107ffee4fdb9e.mesh"]
+
+source_file="res://assets/models/items/Coin_Star.obj"
+dest_files=["res://.godot/imported/Coin_Star.obj-c638197523c8eee4f80107ffee4fdb9e.mesh", "res://.godot/imported/Coin_Star.obj-c638197523c8eee4f80107ffee4fdb9e.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

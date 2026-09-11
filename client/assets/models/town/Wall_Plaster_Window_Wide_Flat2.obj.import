@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://demspykwl7hng"
+path="res://.godot/imported/Wall_Plaster_Window_Wide_Flat2.obj-5d4bdf9ecb60f2538da11c90e4562803.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Wall_Plaster_Window_Wide_Flat2.obj-5d4bdf9ecb60f2538da11c90e4562803.mesh"]
+
+source_file="res://assets/models/town/Wall_Plaster_Window_Wide_Flat2.obj"
+dest_files=["res://.godot/imported/Wall_Plaster_Window_Wide_Flat2.obj-5d4bdf9ecb60f2538da11c90e4562803.mesh", "res://.godot/imported/Wall_Plaster_Window_Wide_Flat2.obj-5d4bdf9ecb60f2538da11c90e4562803.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

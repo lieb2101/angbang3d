@@ -119,6 +119,7 @@ public partial class DungeonWorld : Node3D
     private Camera3D _camera;
     private ViewModel _viewModel;
     private OmniLight3D _torch;
+    private DirectionalLight3D _sunLight;
     private Godot.Environment _env;
     private Node3D _entities;
     private Node3D _terrainLabels;
@@ -428,14 +429,28 @@ public partial class DungeonWorld : Node3D
         _viewModel = new ViewModel { Name = "ViewModel" };
         _camera.AddChild(_viewModel);
 
-        // Realistic warm torch with smooth wide-angle illumination and clean non-distracting shadows
+        _sunLight = new DirectionalLight3D
+        {
+            Name = "TownSunLight",
+            LightColor = new Color(0.70f, 0.80f, 0.98f),
+            LightEnergy = 1.35f,
+            ShadowEnabled = true,
+            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits,
+            RotationDegrees = new Vector3(-55, 38, 0),
+            Visible = false,
+        };
+        AddChild(_sunLight);
+
+        // Realistic warm torch with smooth wide-angle illumination and clean soft shadows
         _torch = new OmniLight3D
         {
             LightColor = _currentBiome.TorchLightColor,
             LightEnergy = _currentBiome.TorchLightEnergy,
             OmniRange = 12.5f,
             OmniAttenuation = 0.70f,
-            ShadowEnabled = false,
+            ShadowEnabled = true,
+            ShadowBias = 0.05f,
+            ShadowNormalBias = 1.2f,
             Position = new Vector3(-0.25f, -0.05f, -0.28f),
         };
         _camera.AddChild(_torch);
@@ -535,27 +550,24 @@ public partial class DungeonWorld : Node3D
             FogEnabled = true,
             FogLightColor = b.FogLightColor,
             FogDensity = b.FogDensity,
-            VolumetricFogEnabled = true,
-            VolumetricFogDensity = b.VolumetricFogDensity,
-            VolumetricFogAlbedo = b.VolumetricFogAlbedo,
-            VolumetricFogEmission = b.VolumetricFogEmission,
-            VolumetricFogLength = 28.0f,
+            VolumetricFogEnabled = false,
             SsaoEnabled = true,
-            SsaoRadius = 1.5f,
-            SsaoIntensity = 1.6f,
-            SsaoPower = 1.4f,
-            SsaoDetail = 0.5f,
-            SsrEnabled = true,
-            SsrMaxSteps = 64,
-            SsrFadeIn = 0.15f,
-            SsrFadeOut = 2.0f,
-            SsrDepthTolerance = 0.2f,
+            SsaoRadius = 1.2f,
+            SsaoIntensity = 1.4f,
+            SsaoPower = 1.5f,
+            SsaoDetail = 0.0f,
+            SsrEnabled = false,
+            SsilEnabled = false,
+            SdfgiEnabled = false,
             GlowEnabled = true,
-            GlowIntensity = 0.50f,
-            GlowBloom = 0.08f,
+            GlowIntensity = 0.5f,
+            GlowBloom = 0.10f,
             GlowBlendMode = Godot.Environment.GlowBlendModeEnum.Softlight,
             TonemapMode = Godot.Environment.ToneMapper.Filmic,
             TonemapExposure = b.TonemapExposure,
+            AdjustmentEnabled = true,
+            AdjustmentContrast = 1.06f,
+            AdjustmentSaturation = 1.05f,
         };
     }
 
@@ -612,14 +624,20 @@ public partial class DungeonWorld : Node3D
 
     private static ImageTexture CreateTexture(int width, int height, Func<int, int, Color> pixelFunc, bool generateMipmaps = true)
     {
-        var img = Image.CreateEmpty(width, height, generateMipmaps, Image.Format.Rgba8);
+        var data = new byte[width * height * 4];
+        var idx = 0;
         for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)
             {
-                img.SetPixel(x, y, pixelFunc(x, y));
+                var c = pixelFunc(x, y);
+                data[idx++] = (byte)Mathf.Clamp((int)(c.R * 255f + 0.5f), 0, 255);
+                data[idx++] = (byte)Mathf.Clamp((int)(c.G * 255f + 0.5f), 0, 255);
+                data[idx++] = (byte)Mathf.Clamp((int)(c.B * 255f + 0.5f), 0, 255);
+                data[idx++] = (byte)Mathf.Clamp((int)(c.A * 255f + 0.5f), 0, 255);
             }
         }
+        var img = Image.CreateFromData(width, height, false, Image.Format.Rgba8, data);
         if (generateMipmaps)
         {
             img.GenerateMipmaps();
@@ -629,56 +647,60 @@ public partial class DungeonWorld : Node3D
 
     private static ImageTexture CreateStoneWallTexture()
     {
-        const int size = 512;
+        const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
+            // 2 block rows per 256px tile (128px high per row)
             var row = y / 128;
             var yInRow = y % 128;
             var distY = Math.Min(yInRow, 127 - yInRow);
-            var xOff = (row % 2 == 1) ? 128 : 0;
-            var xInRow = (x + size - xOff) % 256;
-            var distX = Math.Min(xInRow, 255 - xInRow);
+            var xOff = (row % 2 == 1) ? 64 : 0;
+            var xInRow = (x + size - xOff) % 128;
+            var distX = Math.Min(xInRow, 127 - xInRow);
             var mortarDist = Math.Min(distX, distY);
 
-            // Natural dark mortar joints with realistic deep grit
+            // Clean dark recessed mortar joints (width ~5px)
             if (mortarDist <= 4)
             {
-                var mn = SmoothNoise(x * 0.15f, y * 0.15f, 101) * 0.05f - 0.025f;
-                return new Color(0.11f + mn, 0.11f + mn, 0.12f + mn);
+                var mn = SmoothNoise(x * 0.25f, y * 0.25f, 101) * 0.04f - 0.02f;
+                return new Color(0.12f + mn, 0.12f + mn, 0.14f + mn);
             }
 
-            // Stone block tonal variation
-            var blockId = row * 4 + ((x + size - xOff) / 256);
+            // Subtle block tonal variation
+            var blockId = row * 2 + ((x + size - xOff) / 128);
             var blockHue = Hash(blockId, 0, 77);
-            var rBase = 0.33f + (blockHue - 0.5f) * 0.06f;
-            var gBase = 0.33f + (blockHue - 0.5f) * 0.05f;
-            var bBase = 0.35f + (0.5f - blockHue) * 0.05f;
+            var rBase = 0.44f + (blockHue - 0.5f) * 0.05f;
+            var gBase = 0.44f + (blockHue - 0.5f) * 0.04f;
+            var bBase = 0.46f + (0.5f - blockHue) * 0.04f;
 
-            // Soft bevel from mortar to block face
-            var bevel = Mathf.Clamp((mortarDist - 4) / 12.0f, 0.55f, 1.0f);
+            // Soft 3D chiseled bevel lighting (top-left highlight, bottom-right shadow)
+            var bevelX = (xInRow < 64) ? (xInRow - 4) / 16.0f : (123 - xInRow) / 16.0f;
+            var bevelY = (yInRow < 64) ? (yInRow - 4) / 16.0f : (123 - yInRow) / 16.0f;
+            var bevel = Mathf.Clamp(Math.Min(bevelX, bevelY), 0.0f, 1.0f);
+            var lightGradient = ((64 - xInRow) + (64 - yInRow)) * 0.0008f;
 
-            // Natural multi-scale stone grain & mineral texture
-            var grain = (FractalNoise(x * 0.05f, y * 0.05f, 4, 1) - 0.5f) * 0.14f;
-            var microGrain = (SmoothNoise(x * 0.25f, y * 0.25f, 88) - 0.5f) * 0.04f;
+            // Fine stone grain and chiseled striations
+            var grain = (SmoothNoise(x * 0.12f, y * 0.12f, 1) - 0.5f) * 0.08f;
+            var chisel = (SmoothNoise(x * 0.35f, y * 0.08f, 14) - 0.5f) * 0.03f;
 
-            var r = Mathf.Clamp(rBase * bevel + grain + microGrain, 0f, 1f);
-            var g = Mathf.Clamp(gBase * bevel + grain + microGrain, 0f, 1f);
-            var b = Mathf.Clamp(bBase * bevel + grain + microGrain, 0f, 1f);
+            var r = Mathf.Clamp(rBase * (0.80f + bevel * 0.20f) + lightGradient + grain + chisel, 0f, 1f);
+            var g = Mathf.Clamp(gBase * (0.80f + bevel * 0.20f) + lightGradient + grain + chisel, 0f, 1f);
+            var b = Mathf.Clamp(bBase * (0.80f + bevel * 0.20f) + lightGradient + grain + chisel, 0f, 1f);
             return new Color(r, g, b);
         });
     }
 
     private static ImageTexture CreateStoneWallNormal()
     {
-        const int size = 512;
+        const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
             var row = y / 128;
             var yInRow = y % 128;
             var distY = Math.Min(yInRow, 127 - yInRow);
-            var xOff = (row % 2 == 1) ? 128 : 0;
-            var xInRow = (x + size - xOff) % 256;
-            var distX = Math.Min(xInRow, 255 - xInRow);
+            var xOff = (row % 2 == 1) ? 64 : 0;
+            var xInRow = (x + size - xOff) % 128;
+            var distX = Math.Min(xInRow, 127 - xInRow);
             var mortarDist = Math.Min(distX, distY);
 
             if (mortarDist <= 4)
@@ -686,63 +708,86 @@ public partial class DungeonWorld : Node3D
                 return new Color(0.5f, 0.5f, 1.0f);
             }
 
-            var dx = (xInRow < 128) ? (1.0f - xInRow / 20.0f) : -(1.0f - (255 - xInRow) / 20.0f);
-            var dy = (yInRow < 64) ? (1.0f - yInRow / 20.0f) : -(1.0f - (127 - yInRow) / 20.0f);
+            var dx = (xInRow < 64) ? (1.0f - xInRow / 16.0f) : -(1.0f - (127 - xInRow) / 16.0f);
+            var dy = (yInRow < 64) ? (1.0f - yInRow / 16.0f) : -(1.0f - (127 - yInRow) / 16.0f);
             dx = Mathf.Clamp(dx, -1f, 1f);
             dy = Mathf.Clamp(dy, -1f, 1f);
 
-            var microBump = (FractalNoise(x * 0.06f, y * 0.06f, 3, 50) - 0.5f) * 0.35f;
+            var microBump = (SmoothNoise(x * 0.15f, y * 0.15f, 50) - 0.5f) * 0.15f;
             var norm = new Vector3((dx + microBump) * 0.55f, -(dy + microBump) * 0.55f, 1.0f).Normalized();
             return new Color(norm.X * 0.5f + 0.5f, norm.Y * 0.5f + 0.5f, norm.Z * 0.5f + 0.5f);
         });
     }
 
-    private static ImageTexture CreateFloorTexture()
+    private static ImageTexture CreateStoneWallRoughness()
     {
-        const int size = 512;
+        const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            // 2x2 large paving flagstones (256x256 each) with staggered sub-tiles
-            var tileX = x / 256;
-            var tileY = y / 256;
-            var inTileX = x % 256;
-            var inTileY = y % 256;
-            var distX = Math.Min(inTileX, 255 - inTileX);
-            var distY = Math.Min(inTileY, 255 - inTileY);
+            var row = y / 128;
+            var yInRow = y % 128;
+            var distY = Math.Min(yInRow, 127 - yInRow);
+            var xOff = (row % 2 == 1) ? 64 : 0;
+            var xInRow = (x + size - xOff) % 128;
+            var distX = Math.Min(xInRow, 127 - xInRow);
             var mortarDist = Math.Min(distX, distY);
 
             if (mortarDist <= 4)
             {
-                var mn = SmoothNoise(x * 0.15f, y * 0.15f, 202) * 0.04f - 0.02f;
-                return new Color(0.09f + mn, 0.09f + mn, 0.10f + mn);
+                return new Color(0.96f, 0.96f, 0.96f);
+            }
+
+            var grain = (SmoothNoise(x * 0.15f, y * 0.15f, 11) - 0.5f) * 0.08f;
+            var r = Mathf.Clamp(0.78f + grain, 0.65f, 0.90f);
+            return new Color(r, r, r);
+        });
+    }
+
+    private static ImageTexture CreateFloorTexture()
+    {
+        const int size = 256;
+        return CreateTexture(size, size, (x, y) =>
+        {
+            // 2x2 large paving flagstones (128x128 each)
+            var tileX = x / 128;
+            var tileY = y / 128;
+            var inTileX = x % 128;
+            var inTileY = y % 128;
+            var distX = Math.Min(inTileX, 127 - inTileX);
+            var distY = Math.Min(inTileY, 127 - inTileY);
+            var mortarDist = Math.Min(distX, distY);
+
+            if (mortarDist <= 4)
+            {
+                var mn = SmoothNoise(x * 0.25f, y * 0.25f, 202) * 0.03f - 0.015f;
+                return new Color(0.10f + mn, 0.10f + mn, 0.11f + mn);
             }
 
             var tileId = tileY * 2 + tileX;
             var tileHue = Hash(tileId, 0, 99);
-            var rBase = 0.24f + (tileHue - 0.5f) * 0.05f;
-            var gBase = 0.25f + (tileHue - 0.5f) * 0.04f;
-            var bBase = 0.27f + (0.5f - tileHue) * 0.04f;
+            var rBase = 0.38f + (tileHue - 0.5f) * 0.04f;
+            var gBase = 0.39f + (tileHue - 0.5f) * 0.03f;
+            var bBase = 0.41f + (0.5f - tileHue) * 0.03f;
 
-            var bevel = Mathf.Clamp((mortarDist - 4) / 16.0f, 0.65f, 1.0f);
-            var grain = (FractalNoise(x * 0.05f, y * 0.05f, 4, 3) - 0.5f) * 0.12f;
-            var microGrain = (SmoothNoise(x * 0.22f, y * 0.22f, 102) - 0.5f) * 0.03f;
+            var bevel = Mathf.Clamp((mortarDist - 4) / 16.0f, 0.75f, 1.0f);
+            var grain = (SmoothNoise(x * 0.12f, y * 0.12f, 3) - 0.5f) * 0.06f;
 
-            var r = Mathf.Clamp(rBase * bevel + grain + microGrain, 0f, 1f);
-            var g = Mathf.Clamp(gBase * bevel + grain + microGrain, 0f, 1f);
-            var b = Mathf.Clamp(bBase * bevel + grain + microGrain, 0f, 1f);
+            var r = Mathf.Clamp(rBase * bevel + grain, 0f, 1f);
+            var g = Mathf.Clamp(gBase * bevel + grain, 0f, 1f);
+            var b = Mathf.Clamp(bBase * bevel + grain, 0f, 1f);
             return new Color(r, g, b);
         });
     }
 
     private static ImageTexture CreateFloorNormal()
     {
-        const int size = 512;
+        const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            var inTileX = x % 256;
-            var inTileY = y % 256;
-            var distX = Math.Min(inTileX, 255 - inTileX);
-            var distY = Math.Min(inTileY, 255 - inTileY);
+            var inTileX = x % 128;
+            var inTileY = y % 128;
+            var distX = Math.Min(inTileX, 127 - inTileX);
+            var distY = Math.Min(inTileY, 127 - inTileY);
             var mortarDist = Math.Min(distX, distY);
 
             if (mortarDist <= 4)
@@ -750,14 +795,38 @@ public partial class DungeonWorld : Node3D
                 return new Color(0.5f, 0.5f, 1.0f);
             }
 
-            var dx = (inTileX < 128) ? (1.0f - inTileX / 24.0f) : -(1.0f - (255 - inTileX) / 24.0f);
-            var dy = (inTileY < 128) ? (1.0f - inTileY / 24.0f) : -(1.0f - (255 - inTileY) / 24.0f);
+            var dx = (inTileX < 64) ? (1.0f - inTileX / 18.0f) : -(1.0f - (127 - inTileX) / 18.0f);
+            var dy = (inTileY < 64) ? (1.0f - inTileY / 18.0f) : -(1.0f - (127 - inTileY) / 18.0f);
             dx = Mathf.Clamp(dx, -1f, 1f);
             dy = Mathf.Clamp(dy, -1f, 1f);
 
-            var microBump = (FractalNoise(x * 0.06f, y * 0.06f, 3, 60) - 0.5f) * 0.30f;
-            var norm = new Vector3((dx + microBump) * 0.50f, -(dy + microBump) * 0.50f, 1.0f).Normalized();
+            var norm = new Vector3(dx * 0.45f, -dy * 0.45f, 1.0f).Normalized();
             return new Color(norm.X * 0.5f + 0.5f, norm.Y * 0.5f + 0.5f, norm.Z * 0.5f + 0.5f);
+        });
+    }
+
+    private static ImageTexture CreateFloorRoughness()
+    {
+        const int size = 256;
+        return CreateTexture(size, size, (x, y) =>
+        {
+            var inTileX = x % 128;
+            var inTileY = y % 128;
+            var distX = Math.Min(inTileX, 127 - inTileX);
+            var distY = Math.Min(inTileY, 127 - inTileY);
+            var mortarDist = Math.Min(distX, distY);
+
+            if (mortarDist <= 4)
+            {
+                return new Color(0.92f, 0.92f, 0.92f);
+            }
+
+            // Smooth foot-worn flagstone centers
+            var centerDist = Math.Sqrt((inTileX - 64) * (inTileX - 64) + (inTileY - 64) * (inTileY - 64));
+            var wear = Mathf.Clamp((float)(1.0 - centerDist / 80.0), 0f, 1f) * 0.12f;
+            var grain = (SmoothNoise(x * 0.15f, y * 0.15f, 14) - 0.5f) * 0.05f;
+            var r = Mathf.Clamp(0.72f - wear + grain, 0.55f, 0.88f);
+            return new Color(r, r, r);
         });
     }
 
@@ -766,10 +835,10 @@ public partial class DungeonWorld : Node3D
         const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            var rBase = 0.15f;
-            var gBase = 0.16f;
-            var bBase = 0.18f;
-            var grain = (FractalNoise(x * 0.06f, y * 0.06f, 3, 5) - 0.5f) * 0.08f;
+            var rBase = 0.22f;
+            var gBase = 0.23f;
+            var bBase = 0.25f;
+            var grain = (SmoothNoise(x * 0.12f, y * 0.12f, 5) - 0.5f) * 0.06f;
 
             var r = Mathf.Clamp(rBase + grain, 0f, 1f);
             var g = Mathf.Clamp(gBase + grain, 0f, 1f);
@@ -778,38 +847,38 @@ public partial class DungeonWorld : Node3D
         });
     }
 
+    private static ImageTexture CreateCeilingNormal()
+    {
+        const int size = 256;
+        return CreateTexture(size, size, (x, y) =>
+        {
+            var bumpX = (SmoothNoise(x * 0.15f + 10f, y * 0.15f, 55) - 0.5f) * 0.30f;
+            var bumpY = (SmoothNoise(x * 0.15f, y * 0.15f + 10f, 56) - 0.5f) * 0.30f;
+            var norm = new Vector3(bumpX, bumpY, 1.0f).Normalized();
+            return new Color(norm.X * 0.5f + 0.5f, norm.Y * 0.5f + 0.5f, norm.Z * 0.5f + 0.5f);
+        });
+    }
+
     private static ImageTexture CreateMagmaTexture()
     {
         const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            var row = y / 64;
-            var yInRow = y % 64;
-            var distY = Math.Min(yInRow, 63 - yInRow);
-            var xOff = (row % 2 == 1) ? 64 : 0;
-            var xInRow = (x + size - xOff) % 128;
-            var distX = Math.Min(xInRow, 127 - xInRow);
-            var mortarDist = Math.Min(distX, distY);
-
-            // Natural branching volcanic fissures
+            // Volcanic fissures in dark basalt
             var vein = (FractalNoise(x * 0.04f, y * 0.04f, 3, 77) - 0.5f) * 2.0f;
-            var isVein = Math.Abs(vein) < 0.28f || mortarDist <= 2;
+            var isVein = Math.Abs(vein) < 0.24f;
 
             if (isVein)
             {
-                var heat = 1.0f - Mathf.Clamp(Math.Abs(vein) / 0.28f, 0f, 1f);
-                var r = 0.90f + heat * 0.10f;
-                var g = 0.28f + heat * 0.44f;
-                var b = 0.03f + heat * 0.15f;
+                var heat = 1.0f - Mathf.Clamp(Math.Abs(vein) / 0.24f, 0f, 1f);
+                var r = 0.94f + heat * 0.06f;
+                var g = 0.32f + heat * 0.44f;
+                var b = 0.04f + heat * 0.12f;
                 return new Color(r, g, b);
             }
 
-            // Dark igneous basalt rock
-            var rockGrain = (FractalNoise(x * 0.08f, y * 0.08f, 2, 88) - 0.5f) * 0.06f;
-            var br = 0.18f + rockGrain;
-            var bg = 0.17f + rockGrain;
-            var bb = 0.18f + rockGrain;
-            return new Color(br, bg, bb);
+            var rockGrain = (SmoothNoise(x * 0.15f, y * 0.15f, 88) - 0.5f) * 0.05f;
+            return new Color(0.24f + rockGrain, 0.22f + rockGrain, 0.24f + rockGrain);
         });
     }
 
@@ -818,23 +887,12 @@ public partial class DungeonWorld : Node3D
         const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            var row = y / 64;
-            var yInRow = y % 64;
-            var distY = Math.Min(yInRow, 63 - yInRow);
-            var xOff = (row % 2 == 1) ? 64 : 0;
-            var xInRow = (x + size - xOff) % 128;
-            var distX = Math.Min(xInRow, 127 - xInRow);
-            var mortarDist = Math.Min(distX, distY);
-
             var vein = (FractalNoise(x * 0.04f, y * 0.04f, 3, 77) - 0.5f) * 2.0f;
-            var isVein = Math.Abs(vein) < 0.28f || mortarDist <= 2;
-
-            if (isVein)
+            if (Math.Abs(vein) < 0.24f)
             {
-                var heat = 1.0f - Mathf.Clamp(Math.Abs(vein) / 0.28f, 0f, 1f);
-                return new Color(0.95f, 0.32f + heat * 0.40f, 0.04f + heat * 0.14f);
+                var heat = 1.0f - Mathf.Clamp(Math.Abs(vein) / 0.24f, 0f, 1f);
+                return new Color(0.96f, 0.34f + heat * 0.40f, 0.04f + heat * 0.12f);
             }
-
             return Colors.Black;
         });
     }
@@ -844,29 +902,16 @@ public partial class DungeonWorld : Node3D
         const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            var row = y / 64;
-            var yInRow = y % 64;
-            var distY = Math.Min(yInRow, 63 - yInRow);
-            var xOff = (row % 2 == 1) ? 64 : 0;
-            var xInRow = (x + size - xOff) % 128;
-            var distX = Math.Min(xInRow, 127 - xInRow);
-            var mortarDist = Math.Min(distX, distY);
-
-            // Natural crystalline quartz seam
+            // Crystalline quartz seam
             var crystalVein = (FractalNoise((x * 1.2f - y * 0.8f) * 0.05f, (x * 0.5f + y) * 0.05f, 3, 44) - 0.5f) * 2.0f;
             if (Math.Abs(crystalVein) < 0.22f)
             {
-                var glint = SmoothNoise(x * 0.3f, y * 0.3f, 12) * 0.12f;
-                return new Color(0.68f + glint, 0.72f + glint, 0.76f + glint);
+                var glint = SmoothNoise(x * 0.4f, y * 0.4f, 12) * 0.12f;
+                return new Color(0.74f + glint, 0.80f + glint, 0.86f + glint);
             }
 
-            if (mortarDist <= 2)
-            {
-                return new Color(0.14f, 0.14f, 0.15f);
-            }
-
-            var grain = (FractalNoise(x * 0.08f, y * 0.08f, 2, 9) - 0.5f) * 0.08f;
-            return new Color(0.30f + grain, 0.31f + grain, 0.33f + grain);
+            var grain = (SmoothNoise(x * 0.15f, y * 0.15f, 9) - 0.5f) * 0.06f;
+            return new Color(0.40f + grain, 0.41f + grain, 0.43f + grain);
         });
     }
 
@@ -910,24 +955,24 @@ public partial class DungeonWorld : Node3D
 
         return CreateTexture(size, size, (x, y) =>
         {
-            // Vertical rich dark oak planks (5 planks across 256px)
-            var plankIdx = x / 51;
-            var inPlankX = x % 51;
-            var seamDist = Math.Min(inPlankX, 50 - inPlankX);
+            // Vertical oak planks (4 planks across 256px, 64px each)
+            var plankIdx = x / 64;
+            var inPlankX = x % 64;
+            var seamDist = Math.Min(inPlankX, 63 - inPlankX);
 
             // Horizontal forged-iron reinforcement straps at y ~ 44..62 and y ~ 194..212
             var isIronStrap = (y >= 44 && y <= 62) || (y >= 194 && y <= 212);
             if (isIronStrap)
             {
-                var rivetX = inPlankX - 25;
+                var rivetX = inPlankX - 32;
                 var rivetY = (y < 100) ? (y - 53) : (y - 203);
                 var isRivet = rivetX * rivetX + rivetY * rivetY <= 16;
                 if (isRivet)
                 {
-                    return new Color(0.38f, 0.38f, 0.40f);
+                    return new Color(0.48f, 0.48f, 0.52f);
                 }
                 var ironGrain = (SmoothNoise(x * 0.2f, y * 0.2f, 31) - 0.5f) * 0.04f;
-                return new Color(0.18f + ironGrain, 0.18f + ironGrain, 0.20f + ironGrain);
+                return new Color(0.20f + ironGrain, 0.20f + ironGrain, 0.22f + ironGrain);
             }
 
             // Central Emblazoned Heraldic Shield / Plaque at (128, 128)
@@ -944,84 +989,46 @@ public partial class DungeonWorld : Node3D
                 var isShieldRim = (dy <= -42 || absDx >= 40 || (dy > 0 && absDx >= 40 - (dy * dy) / 58f));
                 if (isShieldRim)
                 {
-                    // Gilded brass / bronze rim with metallic bevel
-                    var bevel = (dx < 0 || dy < -38) ? 0.15f : -0.10f;
-                    return new Color(0.85f + bevel, 0.70f + bevel, 0.25f + bevel);
+                    // Gilded brass rim
+                    var bevel = (dx < 0 || dy < -38) ? 0.14f : -0.10f;
+                    return new Color(0.88f + bevel, 0.74f + bevel, 0.28f + bevel);
                 }
 
-                // Decorative corner rivets on the shield rim
-                var isCornerRivet = ((absDx - 34) * (absDx - 34) + (dy + 34) * (dy + 34) <= 9);
-                if (isCornerRivet)
-                {
-                    return new Color(0.98f, 0.88f, 0.40f);
-                }
-
-                // Check for the emblazoned digit inside the shield
+                // Check for the emblazoned digit inside the shield (5x7 grid, 6px per cell)
                 if (pattern != null)
                 {
-                    // Center the 5x7 digit inside the shield (width: 5 * 8 = 40px, height: 7 * 8 = 56px)
-                    // Grid origin: x = 108, y = 100
-                    var gx = (x - 108) / 8;
-                    var gy = (y - 100) / 8;
-                    var cellX = (x - 108) % 8;
-                    var cellY = (y - 100) % 8;
+                    var gx = (x - 113) / 6;
+                    var gy = (y - 107) / 6;
 
                     if (gx >= 0 && gx < 5 && gy >= 0 && gy < 7)
                     {
                         var isBit = (pattern[gy] & (1 << (4 - gx))) != 0;
                         if (isBit)
                         {
-                            // Emblazoned Gilded Numeral with 3D specular highlight
-                            var specular = (cellX <= 2 && cellY <= 2) ? 0.18f : (cellX >= 6 || cellY >= 6) ? -0.12f : 0.05f;
-                            return new Color(0.98f + specular, 0.86f + specular, 0.28f + specular);
-                        }
-
-                        // Check 1px shadow/emboss around digit
-                        var shadowNear = false;
-                        for (var sy = -1; sy <= 1 && !shadowNear; sy++)
-                        {
-                            for (var sx = -1; sx <= 1; sx++)
-                            {
-                                var ngx = gx + sx;
-                                var ngy = gy + sy;
-                                if (ngx >= 0 && ngx < 5 && ngy >= 0 && ngy < 7)
-                                {
-                                    if ((pattern[ngy] & (1 << (4 - ngx))) != 0)
-                                    {
-                                        shadowNear = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (shadowNear)
-                        {
-                            return new Color(0.10f, 0.08f, 0.04f);
+                            return new Color(1.0f, 0.90f, 0.35f);
                         }
                     }
                 }
 
                 // Shield background inlay: Rich burnished heraldic enamel
-                var heraldicGrain = (SmoothNoise(x * 0.1f, y * 0.1f, 77 + shopNum) - 0.5f) * 0.05f;
-                var bgR = Mathf.Clamp(heraldicColor.R * 0.40f + 0.12f + heraldicGrain, 0f, 1f);
-                var bgG = Mathf.Clamp(heraldicColor.G * 0.40f + 0.10f + heraldicGrain, 0f, 1f);
-                var bgB = Mathf.Clamp(heraldicColor.B * 0.40f + 0.08f + heraldicGrain, 0f, 1f);
+                var bgR = Mathf.Clamp(heraldicColor.R * 0.48f + 0.10f, 0f, 1f);
+                var bgG = Mathf.Clamp(heraldicColor.G * 0.48f + 0.08f, 0f, 1f);
+                var bgB = Mathf.Clamp(heraldicColor.B * 0.48f + 0.06f, 0f, 1f);
                 return new Color(bgR, bgG, bgB);
             }
 
             // Dark plank seam
-            if (seamDist <= 1)
+            if (seamDist <= 2)
             {
                 return new Color(0.10f, 0.07f, 0.04f);
             }
 
-            // Natural dark oak wood grain for door panel
-            var woodGrain = Mathf.Sin(y * 0.25f + SmoothNoise(x * 0.1f, y * 0.05f, 55) * 3.0f) * 0.025f + (SmoothNoise(x * 0.15f, y * 0.15f, 66) - 0.5f) * 0.03f;
+            // Natural oak wood grain
+            var woodGrain = (SmoothNoise(x * 0.15f, y * 0.08f, 55) - 0.5f) * 0.04f;
             var plankHue = Hash(plankIdx, 0, 88 + shopNum);
-            var r = Mathf.Clamp(0.26f + (plankHue - 0.5f) * 0.03f + woodGrain, 0f, 1f);
-            var g = Mathf.Clamp(0.17f + (plankHue - 0.5f) * 0.02f + woodGrain * 0.8f, 0f, 1f);
-            var b = Mathf.Clamp(0.10f + (plankHue - 0.5f) * 0.02f + woodGrain * 0.5f, 0f, 1f);
+            var r = Mathf.Clamp(0.32f + (plankHue - 0.5f) * 0.03f + woodGrain, 0f, 1f);
+            var g = Mathf.Clamp(0.22f + (plankHue - 0.5f) * 0.02f + woodGrain * 0.8f, 0f, 1f);
+            var b = Mathf.Clamp(0.14f + (plankHue - 0.5f) * 0.02f + woodGrain * 0.5f, 0f, 1f);
             return new Color(r, g, b);
         });
     }
@@ -1031,40 +1038,68 @@ public partial class DungeonWorld : Node3D
         const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            // Vertical oak planks (5 planks across 256px)
-            var plankIdx = x / 51;
-            var inPlankX = x % 51;
-            var seamDist = Math.Min(inPlankX, 50 - inPlankX);
+            var plankIdx = x / 64;
+            var inPlankX = x % 64;
+            var seamDist = Math.Min(inPlankX, 63 - inPlankX);
 
-            // Horizontal forged-iron reinforcement straps at y ~ 50..70 and y ~ 185..205
-            var isIronStrap = (y >= 50 && y <= 68) || (y >= 186 && y <= 204);
+            // Horizontal forged-iron reinforcement straps
+            var isIronStrap = (y >= 50 && y <= 68) || (y >= 188 && y <= 206);
             if (isIronStrap)
             {
-                // Round iron rivets every 51px
-                var rivetX = inPlankX - 25;
-                var rivetY = (y < 100) ? (y - 59) : (y - 195);
+                var rivetX = inPlankX - 32;
+                var rivetY = (y < 100) ? (y - 59) : (y - 197);
                 var isRivet = rivetX * rivetX + rivetY * rivetY <= 16;
                 if (isRivet)
                 {
-                    return new Color(0.32f, 0.32f, 0.35f);
+                    return new Color(0.44f, 0.44f, 0.48f);
                 }
                 var ironGrain = (SmoothNoise(x * 0.2f, y * 0.2f, 31) - 0.5f) * 0.04f;
-                return new Color(0.17f + ironGrain, 0.17f + ironGrain, 0.19f + ironGrain);
+                return new Color(0.20f + ironGrain, 0.20f + ironGrain, 0.22f + ironGrain);
             }
 
-            // Dark plank seam
-            if (seamDist <= 1)
+            if (seamDist <= 2)
             {
                 return new Color(0.10f, 0.07f, 0.04f);
             }
 
-            // Natural oak wood grain
-            var woodGrain = Mathf.Sin(y * 0.25f + SmoothNoise(x * 0.1f, y * 0.05f, 55) * 3.0f) * 0.025f + (SmoothNoise(x * 0.15f, y * 0.15f, 66) - 0.5f) * 0.03f;
+            var woodGrain = (SmoothNoise(x * 0.15f, y * 0.08f, 55) - 0.5f) * 0.04f;
             var plankHue = Hash(plankIdx, 0, 88);
-            var r = Mathf.Clamp(0.28f + (plankHue - 0.5f) * 0.04f + woodGrain, 0f, 1f);
-            var g = Mathf.Clamp(0.19f + (plankHue - 0.5f) * 0.03f + woodGrain * 0.8f, 0f, 1f);
-            var b = Mathf.Clamp(0.12f + (plankHue - 0.5f) * 0.02f + woodGrain * 0.5f, 0f, 1f);
+            var r = Mathf.Clamp(0.34f + (plankHue - 0.5f) * 0.03f + woodGrain, 0f, 1f);
+            var g = Mathf.Clamp(0.24f + (plankHue - 0.5f) * 0.02f + woodGrain * 0.8f, 0f, 1f);
+            var b = Mathf.Clamp(0.15f + (plankHue - 0.5f) * 0.02f + woodGrain * 0.5f, 0f, 1f);
             return new Color(r, g, b);
+        });
+    }
+
+    private static ImageTexture CreateWoodDoorNormal()
+    {
+        const int size = 256;
+        return CreateTexture(size, size, (x, y) =>
+        {
+            var inPlankX = x % 64;
+            var isIronStrap = (y >= 50 && y <= 68) || (y >= 188 && y <= 206);
+            if (isIronStrap)
+            {
+                var rivetX = inPlankX - 32;
+                var rivetY = (y < 100) ? (y - 59) : (y - 197);
+                if (rivetX * rivetX + rivetY * rivetY <= 16)
+                {
+                    var rNorm = new Vector3(rivetX / 4f, rivetY / 4f, 1.0f).Normalized();
+                    return new Color(rNorm.X * 0.5f + 0.5f, rNorm.Y * 0.5f + 0.5f, rNorm.Z * 0.5f + 0.5f);
+                }
+                return new Color(0.5f, 0.5f, 1.0f);
+            }
+
+            var seamDist = Math.Min(inPlankX, 63 - inPlankX);
+            if (seamDist <= 2)
+            {
+                var sNorm = (inPlankX < 32) ? -0.35f : 0.35f;
+                return new Color(sNorm * 0.5f + 0.5f, 0.5f, 0.88f);
+            }
+
+            var grainBump = (SmoothNoise(x * 0.2f, y * 0.1f, 66) - 0.5f) * 0.12f;
+            var norm = new Vector3(grainBump, 0, 1.0f).Normalized();
+            return new Color(norm.X * 0.5f + 0.5f, norm.Y * 0.5f + 0.5f, norm.Z * 0.5f + 0.5f);
         });
     }
 
@@ -1073,20 +1108,19 @@ public partial class DungeonWorld : Node3D
         const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            // Medieval half-timbered shop facade with dark oak beams and plaster infill
+            // Medieval half-timbered shop facade with dark oak beams and warm plaster infill
             var isBorderBeam = x < 18 || x > 237 || y < 18 || y > 237;
-            var isCrossBeam = Math.Abs(x - 128) < 9 || Math.Abs(y - 128) < 9;
-            var isDiagonal = Math.Abs((x - y) % 128) < 7 || Math.Abs((x + y) % 128) < 7;
+            var isCrossBeam = Math.Abs(x - 128) < 10 || Math.Abs(y - 128) < 10;
+            var isDiagonal = Math.Abs((x - y) % 128) < 8 || Math.Abs((x + y) % 128) < 8;
 
             if (isBorderBeam || isCrossBeam || isDiagonal)
             {
                 var woodGrain = (SmoothNoise(x * 0.15f, y * 0.15f, 12) - 0.5f) * 0.04f;
-                return new Color(0.22f + woodGrain, 0.15f + woodGrain * 0.7f, 0.10f + woodGrain * 0.5f);
+                return new Color(0.24f + woodGrain, 0.16f + woodGrain * 0.7f, 0.11f + woodGrain * 0.5f);
             }
 
-            // Warm aged stucco / plaster wall infill
-            var plasterGrain = (FractalNoise(x * 0.08f, y * 0.08f, 2, 22) - 0.5f) * 0.06f;
-            return new Color(0.56f + plasterGrain, 0.53f + plasterGrain, 0.47f + plasterGrain);
+            var plasterGrain = (SmoothNoise(x * 0.15f, y * 0.15f, 22) - 0.5f) * 0.04f;
+            return new Color(0.65f + plasterGrain, 0.62f + plasterGrain, 0.56f + plasterGrain);
         });
     }
 
@@ -1095,30 +1129,27 @@ public partial class DungeonWorld : Node3D
         const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            var pattern = (FractalNoise(x * 0.03f, y * 0.03f, 3, 301) - 0.5f) * 2.0f;
+            var pattern = (FractalNoise(x * 0.04f, y * 0.04f, 3, 301) - 0.5f) * 2.0f;
 
-            if (pattern > 0.12f)
+            if (pattern > 0.10f)
             {
-                // Molten magma core
-                var heat = Mathf.Clamp((pattern - 0.12f) / 0.88f, 0f, 1f);
-                var r = 0.95f + heat * 0.05f;
-                var g = 0.35f + heat * 0.35f;
-                var b = 0.02f + heat * 0.08f;
+                var heat = Mathf.Clamp((pattern - 0.10f) / 0.90f, 0f, 1f);
+                var r = 0.96f + heat * 0.04f;
+                var g = 0.40f + heat * 0.36f;
+                var b = 0.03f + heat * 0.08f;
                 return new Color(r, g, b);
             }
             if (pattern > -0.20f)
             {
-                // Burning crust transition
-                var heat = Mathf.Clamp((pattern + 0.20f) / 0.32f, 0f, 1f);
-                var r = 0.70f + heat * 0.25f;
-                var g = 0.12f + heat * 0.23f;
-                var b = 0.01f + heat * 0.01f;
+                var heat = Mathf.Clamp((pattern + 0.20f) / 0.30f, 0f, 1f);
+                var r = 0.74f + heat * 0.22f;
+                var g = 0.15f + heat * 0.25f;
+                var b = 0.01f + heat * 0.02f;
                 return new Color(r, g, b);
             }
 
-            // Cooling obsidian crust
-            var crustGrain = (SmoothNoise(x * 0.1f, y * 0.1f, 303) - 0.5f) * 0.04f;
-            return new Color(0.14f + crustGrain, 0.08f + crustGrain * 0.5f, 0.06f + crustGrain * 0.3f);
+            var crustGrain = (SmoothNoise(x * 0.15f, y * 0.15f, 303) - 0.5f) * 0.04f;
+            return new Color(0.18f + crustGrain, 0.10f + crustGrain * 0.5f, 0.08f + crustGrain * 0.3f);
         });
     }
 
@@ -1127,19 +1158,17 @@ public partial class DungeonWorld : Node3D
         const int size = 256;
         return CreateTexture(size, size, (x, y) =>
         {
-            var pattern = (FractalNoise(x * 0.03f, y * 0.03f, 3, 301) - 0.5f) * 2.0f;
-
-            if (pattern > 0.12f)
+            var pattern = (FractalNoise(x * 0.04f, y * 0.04f, 3, 301) - 0.5f) * 2.0f;
+            if (pattern > 0.10f)
             {
-                var heat = Mathf.Clamp((pattern - 0.12f) / 0.88f, 0f, 1f);
-                return new Color(0.95f, 0.35f + heat * 0.32f, 0.03f + heat * 0.08f);
+                var heat = Mathf.Clamp((pattern - 0.10f) / 0.90f, 0f, 1f);
+                return new Color(0.98f, 0.40f + heat * 0.35f, 0.04f + heat * 0.08f);
             }
             if (pattern > -0.20f)
             {
-                var heat = Mathf.Clamp((pattern + 0.20f) / 0.32f, 0f, 1f);
-                return new Color(0.55f + heat * 0.35f, 0.08f + heat * 0.25f, 0.01f);
+                var heat = Mathf.Clamp((pattern + 0.20f) / 0.30f, 0f, 1f);
+                return new Color(0.60f + heat * 0.38f, 0.10f + heat * 0.30f, 0.01f);
             }
-
             return Colors.Black;
         });
     }
@@ -1153,13 +1182,17 @@ public partial class DungeonWorld : Node3D
 
         var wallTex = CreateStoneWallTexture();
         var wallNormal = CreateStoneWallNormal();
+        var wallRoughness = CreateStoneWallRoughness();
         var floorTex = CreateFloorTexture();
         var floorNormal = CreateFloorNormal();
+        var floorRoughness = CreateFloorRoughness();
         var ceilingTex = CreateCeilingTexture();
+        var ceilingNormal = CreateCeilingNormal();
         var magmaTex = CreateMagmaTexture();
         var magmaEmission = CreateMagmaEmission();
         var quartzTex = CreateQuartzTexture();
         var woodDoorTex = CreateWoodDoorTexture();
+        var woodDoorNormal = CreateWoodDoorNormal();
         var storeTex = CreateStoreTexture();
         var lavaTex = CreateLavaTexture();
         var lavaEmission = CreateLavaEmission();
@@ -1170,19 +1203,14 @@ public partial class DungeonWorld : Node3D
             AlbedoTexture = wallTex,
             NormalEnabled = true,
             NormalTexture = wallNormal,
-            NormalScale = 0.95f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            NormalScale = 0.85f,
+            RoughnessTexture = wallRoughness,
+            Roughness = 0.80f,
+            Metallic = 0.02f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             Uv1Triplanar = true,
             Uv1WorldTriplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
-            Roughness = 0.82f,
-            Metallic = 0.04f,
-            HeightmapEnabled = true,
-            HeightmapDeepParallax = true,
-            HeightmapMinLayers = 8,
-            HeightmapMaxLayers = 32,
-            HeightmapScale = 0.04f,
-            HeightmapTexture = wallNormal,
         };
 
         _floorMaterial = new StandardMaterial3D
@@ -1191,19 +1219,14 @@ public partial class DungeonWorld : Node3D
             AlbedoTexture = floorTex,
             NormalEnabled = true,
             NormalTexture = floorNormal,
-            NormalScale = 0.90f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            NormalScale = 0.80f,
+            RoughnessTexture = floorRoughness,
+            Roughness = 0.74f,
+            Metallic = 0.04f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             Uv1Triplanar = true,
             Uv1WorldTriplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
-            Roughness = 0.76f,
-            Metallic = 0.05f,
-            HeightmapEnabled = true,
-            HeightmapDeepParallax = true,
-            HeightmapMinLayers = 8,
-            HeightmapMaxLayers = 32,
-            HeightmapScale = 0.035f,
-            HeightmapTexture = floorNormal,
         };
 
         _ceilingMaterial = new StandardMaterial3D
@@ -1211,9 +1234,9 @@ public partial class DungeonWorld : Node3D
             VertexColorUseAsAlbedo = true,
             AlbedoTexture = ceilingTex,
             NormalEnabled = true,
-            NormalTexture = wallNormal,
+            NormalTexture = ceilingNormal,
             NormalScale = 0.55f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             Uv1Triplanar = true,
             Uv1WorldTriplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
@@ -1228,8 +1251,8 @@ public partial class DungeonWorld : Node3D
             EmissionEnabled = true,
             EmissionTexture = magmaEmission,
             Emission = new Color(1.0f, 0.40f, 0.06f),
-            EmissionEnergyMultiplier = 1.15f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            EmissionEnergyMultiplier = 1.25f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             Uv1Triplanar = true,
             Uv1WorldTriplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
@@ -1243,13 +1266,13 @@ public partial class DungeonWorld : Node3D
             AlbedoTexture = quartzTex,
             NormalEnabled = true,
             NormalTexture = wallNormal,
-            NormalScale = 0.70f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            NormalScale = 0.75f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             Uv1Triplanar = true,
             Uv1WorldTriplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
-            Roughness = 0.55f,
-            Metallic = 0.08f,
+            Roughness = 0.50f,
+            Metallic = 0.10f,
         };
 
         _storeMaterial = new StandardMaterial3D
@@ -1258,8 +1281,8 @@ public partial class DungeonWorld : Node3D
             AlbedoTexture = storeTex,
             NormalEnabled = true,
             NormalTexture = wallNormal,
-            NormalScale = 0.60f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            NormalScale = 0.65f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             Uv1Triplanar = true,
             Uv1WorldTriplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
@@ -1273,8 +1296,8 @@ public partial class DungeonWorld : Node3D
             AlbedoTexture = wallTex,
             NormalEnabled = true,
             NormalTexture = wallNormal,
-            NormalScale = 0.70f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            NormalScale = 0.75f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             Roughness = 0.88f,
             Metallic = 0.02f,
@@ -1284,9 +1307,12 @@ public partial class DungeonWorld : Node3D
         {
             VertexColorUseAsAlbedo = true,
             AlbedoTexture = woodDoorTex,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            NormalEnabled = true,
+            NormalTexture = woodDoorNormal,
+            NormalScale = 0.80f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            Roughness = 0.78f,
+            Roughness = 0.75f,
             Metallic = 0.10f,
         };
 
@@ -1298,10 +1324,13 @@ public partial class DungeonWorld : Node3D
             {
                 VertexColorUseAsAlbedo = true,
                 AlbedoTexture = shopTex,
-                TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+                NormalEnabled = true,
+                NormalTexture = woodDoorNormal,
+                NormalScale = 0.75f,
+                TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                Roughness = 0.70f,
-                Metallic = 0.12f,
+                Roughness = 0.68f,
+                Metallic = 0.15f,
             };
         }
 
@@ -1311,8 +1340,8 @@ public partial class DungeonWorld : Node3D
             AlbedoTexture = wallTex,
             NormalEnabled = true,
             NormalTexture = wallNormal,
-            NormalScale = 0.65f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            NormalScale = 0.70f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             Roughness = 0.85f,
             Metallic = 0.02f,
@@ -1324,8 +1353,8 @@ public partial class DungeonWorld : Node3D
             AlbedoTexture = wallTex,
             NormalEnabled = true,
             NormalTexture = wallNormal,
-            NormalScale = 0.75f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            NormalScale = 0.80f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             Roughness = 0.92f,
             Metallic = 0.02f,
@@ -1338,8 +1367,8 @@ public partial class DungeonWorld : Node3D
             EmissionEnabled = true,
             EmissionTexture = lavaEmission,
             Emission = new Color(1.0f, 0.40f, 0.06f),
-            EmissionEnergyMultiplier = 1.15f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmaps,
+            EmissionEnergyMultiplier = 1.25f,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
             Uv1Triplanar = true,
             Uv1WorldTriplanar = true,
             Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
@@ -1754,22 +1783,21 @@ public partial class DungeonWorld : Node3D
             _levelKey = depthKey;
             _outdoors = depth == 0;
 
+            if (_sunLight != null)
+            {
+                _sunLight.Visible = _outdoors;
+                _sunLight.LightEnergy = _outdoors ? 1.35f : 0.0f;
+            }
+
             // Transition to new depth biome profile
             _targetBiome = BiomeProfile.GetForDepth(depth);
-            _currentBiome ??= _targetBiome;
-            if (isInitial)
-            {
-                _currentBiome = _targetBiome;
-                _env.BackgroundColor = _targetBiome.BackgroundColor;
-                _env.AmbientLightColor = _targetBiome.AmbientLightColor;
-                _env.AmbientLightEnergy = _targetBiome.AmbientLightEnergy;
-                _env.FogLightColor = _targetBiome.FogLightColor;
-                _env.FogDensity = _targetBiome.FogDensity;
-                _env.VolumetricFogDensity = _targetBiome.VolumetricFogDensity;
-                _env.VolumetricFogAlbedo = _targetBiome.VolumetricFogAlbedo;
-                _env.VolumetricFogEmission = _targetBiome.VolumetricFogEmission;
-                _env.TonemapExposure = _targetBiome.TonemapExposure;
-            }
+            _currentBiome = _targetBiome;
+            _env.BackgroundColor = _targetBiome.BackgroundColor;
+            _env.AmbientLightColor = _targetBiome.AmbientLightColor;
+            _env.AmbientLightEnergy = _targetBiome.AmbientLightEnergy;
+            _env.FogLightColor = _targetBiome.FogLightColor;
+            _env.FogDensity = _targetBiome.FogDensity;
+            _env.TonemapExposure = _targetBiome.TonemapExposure;
 
             if (_floorMaterial != null)
             {
@@ -1795,7 +1823,9 @@ public partial class DungeonWorld : Node3D
 
             if (_clutterRoot != null)
             {
-                foreach (var c in _clutterRoot.GetChildren()) c.QueueFree();
+                var mapH = map.GetProperty("h").GetInt32();
+                var mapW = map.GetProperty("w").GetInt32();
+                DungeonClutterResolver.PopulateClutter(_clutterRoot, map, mapH, mapW, px, py, _outdoors, IsWallOrVoid, IsWalkable, FeatAt);
             }
 
             if (!isInitial)
@@ -1855,11 +1885,6 @@ public partial class DungeonWorld : Node3D
         RebuildEntities(frame);
         _viewModel?.UpdateEquipment(player, depth, CurrentHeightRatio);
         ProcessCombatEvents(frame);
-
-        // Populate atmospheric corridor wall sconces, room clutter, and banners
-        var mapH = map.GetProperty("h").GetInt32();
-        var mapW = map.GetProperty("w").GetInt32();
-        DungeonClutterResolver.PopulateClutter(_clutterRoot, map, mapH, mapW, px, py, _outdoors, IsWallOrVoid, IsWalkable, FeatAt);
     }
 
     /// <summary>
@@ -2572,7 +2597,7 @@ public partial class DungeonWorld : Node3D
 
                         if (entity.AnimPlayer != null && entity.WalkAnim != null)
                         {
-                            MonsterModelResolver.PlayWalkAnimation(entity.CharacterNode);
+                            MonsterModelResolver.PlayWalkAnimation(entity);
                         }
                     }
 
@@ -3050,21 +3075,6 @@ public partial class DungeonWorld : Node3D
         // Update first-person viewmodel motion, bobbing & inertia sway
         _viewModel?.ProcessMotion(delta, isMoving, yawDelta, 0f);
 
-        // Smooth depth biome atmospheric environment transition
-        if (_targetBiome != null && _env != null)
-        {
-            var lerpSpeed = (float)Math.Min(1.0, delta * 3.0);
-            _env.BackgroundColor = _env.BackgroundColor.Lerp(_targetBiome.BackgroundColor, lerpSpeed);
-            _env.AmbientLightColor = _env.AmbientLightColor.Lerp(_targetBiome.AmbientLightColor, lerpSpeed);
-            _env.AmbientLightEnergy = Mathf.Lerp(_env.AmbientLightEnergy, _targetBiome.AmbientLightEnergy, lerpSpeed);
-            _env.FogLightColor = _env.FogLightColor.Lerp(_targetBiome.FogLightColor, lerpSpeed);
-            _env.FogDensity = Mathf.Lerp(_env.FogDensity, _targetBiome.FogDensity, lerpSpeed);
-            _env.VolumetricFogDensity = Mathf.Lerp(_env.VolumetricFogDensity, _targetBiome.VolumetricFogDensity, lerpSpeed);
-            _env.VolumetricFogAlbedo = _env.VolumetricFogAlbedo.Lerp(_targetBiome.VolumetricFogAlbedo, lerpSpeed);
-            _env.VolumetricFogEmission = _env.VolumetricFogEmission.Lerp(_targetBiome.VolumetricFogEmission, lerpSpeed);
-            _env.TonemapExposure = Mathf.Lerp(_env.TonemapExposure, _targetBiome.TonemapExposure, lerpSpeed);
-        }
-
         // Keep atmospheric particulate emitter anchored to camera view
         if (_biomeParticles != null)
         {
@@ -3164,7 +3174,7 @@ public partial class DungeonWorld : Node3D
                 monster.CurrentPos = monster.TargetPos;
                 if (monster.AnimPlayer != null)
                 {
-                    MonsterModelResolver.PlayIdleAnimation(monster.CharacterNode);
+                    MonsterModelResolver.PlayIdleAnimation(monster);
                 }
 
                 var toPlayer = _targetPos - monster.CurrentPos;

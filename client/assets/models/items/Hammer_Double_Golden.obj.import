@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://xx4fyhoij5ju"
+path="res://.godot/imported/Hammer_Double_Golden.obj-6f8eecce794a7a9270f5da98ee9fce9b.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Hammer_Double_Golden.obj-6f8eecce794a7a9270f5da98ee9fce9b.mesh"]
+
+source_file="res://assets/models/items/Hammer_Double_Golden.obj"
+dest_files=["res://.godot/imported/Hammer_Double_Golden.obj-6f8eecce794a7a9270f5da98ee9fce9b.mesh", "res://.godot/imported/Hammer_Double_Golden.obj-6f8eecce794a7a9270f5da98ee9fce9b.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

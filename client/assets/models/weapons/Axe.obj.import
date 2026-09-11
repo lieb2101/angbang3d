@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://3f2vd61vlrx6"
+path="res://.godot/imported/Axe.obj-c87e7c085484e18ff165ac8ab09d0028.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Axe.obj-c87e7c085484e18ff165ac8ab09d0028.mesh"]
+
+source_file="res://assets/models/weapons/Axe.obj"
+dest_files=["res://.godot/imported/Axe.obj-c87e7c085484e18ff165ac8ab09d0028.mesh", "res://.godot/imported/Axe.obj-c87e7c085484e18ff165ac8ab09d0028.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

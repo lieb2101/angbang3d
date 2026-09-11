@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://b2e1sipupquk6"
+path="res://.godot/imported/HoleCover_90Angle.obj-88532b60694a69030e008270c3a75ebf.mesh"
+
+[deps]
+
+files=["res://.godot/imported/HoleCover_90Angle.obj-88532b60694a69030e008270c3a75ebf.mesh"]
+
+source_file="res://assets/models/town/HoleCover_90Angle.obj"
+dest_files=["res://.godot/imported/HoleCover_90Angle.obj-88532b60694a69030e008270c3a75ebf.mesh", "res://.godot/imported/HoleCover_90Angle.obj-88532b60694a69030e008270c3a75ebf.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

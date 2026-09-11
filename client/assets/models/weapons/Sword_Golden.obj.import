@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://bbn3t1xbxey8u"
+path="res://.godot/imported/Sword_Golden.obj-76be9abecf100b2633fccdf69228790e.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Sword_Golden.obj-76be9abecf100b2633fccdf69228790e.mesh"]
+
+source_file="res://assets/models/weapons/Sword_Golden.obj"
+dest_files=["res://.godot/imported/Sword_Golden.obj-76be9abecf100b2633fccdf69228790e.mesh", "res://.godot/imported/Sword_Golden.obj-76be9abecf100b2633fccdf69228790e.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

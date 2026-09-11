@@ -20,6 +20,9 @@ dist/
 *.exe
 *.zip
 
+# Local asset packages & raw resources
+/resources/
+
 # Editors / OS
 .vscode/
 .idea/

@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://mnj6d4aolsh5"
+path="res://.godot/imported/Stairs_Exterior_PlatformU.obj-f50d0c2d653a8c609db919626f3714b4.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Stairs_Exterior_PlatformU.obj-f50d0c2d653a8c609db919626f3714b4.mesh"]
+
+source_file="res://assets/models/town/Stairs_Exterior_PlatformU.obj"
+dest_files=["res://.godot/imported/Stairs_Exterior_PlatformU.obj-f50d0c2d653a8c609db919626f3714b4.mesh", "res://.godot/imported/Stairs_Exterior_PlatformU.obj-f50d0c2d653a8c609db919626f3714b4.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

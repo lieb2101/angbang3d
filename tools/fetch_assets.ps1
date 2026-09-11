@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Downloads and installs CC0 3D models for Angband3D automatically with zero manual steps.
+    Installs and syncs high-fidelity 3D resources for Angband3D from the resources folder.
 #>
 [CmdletBinding()]
 param(
@@ -8,12 +8,20 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$assetRoot = Join-Path $PSScriptRoot "..\client\assets\models"
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$assetRoot = Join-Path $scriptDir "..\client\assets\models"
 $dungeonDir = Join-Path $assetRoot "dungeon"
 $charDir = Join-Path $assetRoot "characters"
 $mixamoDir = Join-Path $assetRoot "mixamo"
 $townDir = Join-Path $assetRoot "town"
 $propsDir = Join-Path $assetRoot "props"
+$deployScript = Join-Path $scriptDir "deploy_assets.ps1"
+$resourcesDir = Join-Path $scriptDir "..\resources"
+
+if ((Test-Path $deployScript) -and (Test-Path $resourcesDir)) {
+    Write-Host "Local resources detected. Running deploy_assets.ps1..." -ForegroundColor Cyan
+    & $deployScript
+}
 
 foreach ($dir in @($dungeonDir, $charDir, $mixamoDir, $townDir, $propsDir)) {
     if (-not (Test-Path $dir)) {

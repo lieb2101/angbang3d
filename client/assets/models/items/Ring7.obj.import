@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://cy6na4hk4qh2q"
+path="res://.godot/imported/Ring7.obj-0fd989eb5bc15db394e9ad195f8931f8.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Ring7.obj-0fd989eb5bc15db394e9ad195f8931f8.mesh"]
+
+source_file="res://assets/models/items/Ring7.obj"
+dest_files=["res://.godot/imported/Ring7.obj-0fd989eb5bc15db394e9ad195f8931f8.mesh", "res://.godot/imported/Ring7.obj-0fd989eb5bc15db394e9ad195f8931f8.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

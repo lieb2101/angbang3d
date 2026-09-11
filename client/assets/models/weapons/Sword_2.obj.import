@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://bho2eq8oiac1k"
+path="res://.godot/imported/Sword_2.obj-70712f8d4532bb2c52799db51c7fcbfa.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Sword_2.obj-70712f8d4532bb2c52799db51c7fcbfa.mesh"]
+
+source_file="res://assets/models/weapons/Sword_2.obj"
+dest_files=["res://.godot/imported/Sword_2.obj-70712f8d4532bb2c52799db51c7fcbfa.mesh", "res://.godot/imported/Sword_2.obj-70712f8d4532bb2c52799db51c7fcbfa.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

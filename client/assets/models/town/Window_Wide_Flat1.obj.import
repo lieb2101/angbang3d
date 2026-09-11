@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://dajoxi21w8xip"
+path="res://.godot/imported/Window_Wide_Flat1.obj-3d96d2a01aeb24c9823b370ec1808fdf.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Window_Wide_Flat1.obj-3d96d2a01aeb24c9823b370ec1808fdf.mesh"]
+
+source_file="res://assets/models/town/Window_Wide_Flat1.obj"
+dest_files=["res://.godot/imported/Window_Wide_Flat1.obj-3d96d2a01aeb24c9823b370ec1808fdf.mesh", "res://.godot/imported/Window_Wide_Flat1.obj-3d96d2a01aeb24c9823b370ec1808fdf.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://hmlf1qox1iyx"
+path="res://.godot/imported/Overhang_Side_Plaster_Short_R.obj-e1d290cd80f95b60e1f288b57ba5554c.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Overhang_Side_Plaster_Short_R.obj-e1d290cd80f95b60e1f288b57ba5554c.mesh"]
+
+source_file="res://assets/models/town/Overhang_Side_Plaster_Short_R.obj"
+dest_files=["res://.godot/imported/Overhang_Side_Plaster_Short_R.obj-e1d290cd80f95b60e1f288b57ba5554c.mesh", "res://.godot/imported/Overhang_Side_Plaster_Short_R.obj-e1d290cd80f95b60e1f288b57ba5554c.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

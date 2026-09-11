@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://cbncaqnppjcaj"
+path="res://.godot/imported/Prop_Brick4.obj-1d76a363478dcf794aa7776a6dbaca98.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Prop_Brick4.obj-1d76a363478dcf794aa7776a6dbaca98.mesh"]
+
+source_file="res://assets/models/town/Prop_Brick4.obj"
+dest_files=["res://.godot/imported/Prop_Brick4.obj-1d76a363478dcf794aa7776a6dbaca98.mesh", "res://.godot/imported/Prop_Brick4.obj-1d76a363478dcf794aa7776a6dbaca98.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

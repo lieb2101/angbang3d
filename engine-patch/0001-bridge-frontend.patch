@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..ea86bfdb7
+index 000000000..1de3de69a
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,1017 @@
+@@ -0,0 +1,1060 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -260,6 +260,7 @@ index 000000000..ea86bfdb7
 +#include "message.h"
 +#include "monster.h"
 +#include "mon-desc.h"
++#include "mon-timed.h"
 +#include "obj-desc.h"
 +#include "obj-gear.h"
 +#include "object.h"
@@ -267,6 +268,7 @@ index 000000000..ea86bfdb7
 +#include "player-calcs.h"
 +#include "player-timed.h"
 +#include "player-util.h"
++#include "target.h"
 +#include "ui-display.h"
 +#include "ui-map.h"
 +#include "ui-game.h"
@@ -449,6 +451,28 @@ index 000000000..ea86bfdb7
 +		bj_kv_int(fp, "shield_sval", shield_obj->sval);
 +		fputc(',', fp);
 +	}
++	struct object *body_obj = bridge_get_equipped_by_type(player, EQUIP_BODY_ARMOR);
++	if (body_obj) {
++		char armbuf[80];
++		object_desc(armbuf, sizeof(armbuf), body_obj, ODESC_BASE, player);
++		bj_kv_string(fp, "body_armor_item", armbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "body_armor_tval", body_obj->tval);
++		fputc(',', fp);
++		bj_kv_int(fp, "body_armor_sval", body_obj->sval);
++		fputc(',', fp);
++	}
++	struct object *gloves_obj = bridge_get_equipped_by_type(player, EQUIP_GLOVES);
++	if (gloves_obj) {
++		char glbuf[80];
++		object_desc(glbuf, sizeof(glbuf), gloves_obj, ODESC_BASE, player);
++		bj_kv_string(fp, "gloves_item", glbuf);
++		fputc(',', fp);
++		bj_kv_int(fp, "gloves_tval", gloves_obj->tval);
++		fputc(',', fp);
++		bj_kv_int(fp, "gloves_sval", gloves_obj->sval);
++		fputc(',', fp);
++	}
 +	/*
 +	 * Ambient light of the square the player stands on. Every grid-relative
 +	 * lookup must go through bridge_in_play(): during birth and level
@@ -600,25 +624,28 @@ index 000000000..ea86bfdb7
 +	fputc(']', fp);
 +
 +	/* Target / Tracked Monster */
-+	if (player->upkeep->health_who) {
-+		struct monster *mon = player->upkeep->health_who;
-+		if (mon && monster_is_visible(mon) && mon->hp >= 0 && !player->timed[TMD_IMAGE]) {
-+			fputc(',', fp);
-+			bj_key(fp, "target");
-+			fputc('{', fp);
-+			char mname[80];
-+			monster_desc(mname, sizeof(mname), mon, MDESC_STANDARD);
-+			bj_kv_string(fp, "name", mname);
-+			fputc(',', fp);
-+			bj_kv_int(fp, "hp", mon->hp);
-+			fputc(',', fp);
-+			bj_kv_int(fp, "hp_max", mon->maxhp);
-+			fputc(',', fp);
-+			bj_kv_int(fp, "pct", (int)(100L * mon->hp / (mon->maxhp ? mon->maxhp : 1)));
-+			fputc(',', fp);
-+			bj_kv_int(fp, "attr", monster_health_attr());
-+			fputc('}', fp);
-+		}
++	struct monster *target_mon = player->upkeep->health_who;
++	if (!target_mon && target_is_set()) {
++		target_mon = target_get_monster();
++	}
++	if (target_mon && monster_is_visible(target_mon) && target_mon->hp >= 0 && !player->timed[TMD_IMAGE]) {
++		fputc(',', fp);
++		bj_key(fp, "target");
++		fputc('{', fp);
++		bj_kv_int(fp, "id", target_mon->midx);
++		fputc(',', fp);
++		char mname[80];
++		monster_desc(mname, sizeof(mname), target_mon, MDESC_STANDARD);
++		bj_kv_string(fp, "name", mname);
++		fputc(',', fp);
++		bj_kv_int(fp, "hp", target_mon->hp);
++		fputc(',', fp);
++		bj_kv_int(fp, "hp_max", target_mon->maxhp);
++		fputc(',', fp);
++		bj_kv_int(fp, "pct", (int)(100L * target_mon->hp / (target_mon->maxhp ? target_mon->maxhp : 1)));
++		fputc(',', fp);
++		bj_kv_int(fp, "attr", monster_health_attr());
++		fputc('}', fp);
 +	}
 +
 +	/* Level Feeling */
@@ -778,6 +805,22 @@ index 000000000..ea86bfdb7
 +			bj_kv_int(fp, "hp", mon->hp);
 +			fputc(',', fp);
 +			bj_kv_int(fp, "hp_max", mon->maxhp);
++			if (mon->m_timed[MON_TMD_SLEEP] > 0) {
++				fputc(',', fp);
++				bj_kv_bool(fp, "asleep", true);
++			}
++			if (mon->m_timed[MON_TMD_FEAR] > 0 || rf_has(mon->race->flags, RF_FRIGHTENED)) {
++				fputc(',', fp);
++				bj_kv_bool(fp, "afraid", true);
++			}
++			if (mon->m_timed[MON_TMD_CONF] > 0) {
++				fputc(',', fp);
++				bj_kv_bool(fp, "confused", true);
++			}
++			if (mon->m_timed[MON_TMD_STUN] > 0) {
++				fputc(',', fp);
++				bj_kv_bool(fp, "stunned", true);
++			}
 +		}
 +		fputc('}', fp);
 +	}

@@ -35,3 +35,7 @@ Thumbs.db
 
 # Debug screenshots
 /shot*.png
+/*shot*.png
+/test*.png
+/screenshot*.png
+/*.png

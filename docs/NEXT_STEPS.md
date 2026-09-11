@@ -30,53 +30,54 @@
 
 ## Active Execution Focus & High-Fidelity Roadmap (Daggerfall / Skyrim Aesthetic Track)
 
-The project focus has pivoted directly to **Tier 4 Visual & Environmental Overhaul**: delivering immersive dungeon atmosphere, depth-based biome shifts, dynamic torch flame VFX, and rich PBR materials, while preserving 100% of existing viewmodel, tracking, and bridge architecture.
+The project has achieved the **Tier 4 Visual & Environmental Overhaul**: delivering immersive dungeon atmosphere, depth-based biome shifts, dynamic torch flame VFX, rich PBR materials, and 2.5D normal-mapped monster rendering, while preserving 100% of viewmodel, tracking, and bridge architecture.
 
-### Priority 1: Depth-Based Biomes & Atmospheric Lighting (Phase 4 / Tier 4)
+### Priority 1: Depth-Based Biomes & Atmospheric Lighting (COMPLETED)
 - **Scope**: `client/scripts/DungeonWorld.cs`
-- **Objective**: Transform uniform grey limestone into 6 distinct atmospheric subterranean depth zones that smoothly transition as the player descends:
-  1. **Town / Overworld (Depth 0)**: Midnight sky, cool navy fog, moonlight directional shadows, warm streetlights.
-  2. **Upper Crypts (Levels 1–15)**: Cold ashlar limestone, warm 2400K torchlight, faint dust motes.
-  3. **Overgrown Catacombs (Levels 16–35)**: Damp mossy green stone, murky green volumetric fog, floating luminous spores.
-  4. **Crystal Caverns (Levels 36–60)**: Blue slate granite, cyan crystal glints, damp reflective floor flagstones.
-  5. **Magma Underworld (Levels 61–85)**: Charcoal obsidian walls, glowing magma rivers with orange bloom, rising embers and heat distortion.
-  6. **Permarock / Abyssal Throne (Levels 86–100)**: Pitch-black monolithic permarock, void purple fog, crimson accents.
-- **Key Tasks**:
-  - Implement a depth lookup matrix in `DungeonWorld.cs` returning `BiomeProfile`.
-  - On level transition (`_levelKey` change), smoothly lerp `WorldEnvironment` properties (`VolumetricFogDensity`, `VolumetricFogAlbedo`, `AmbientLightColor`, `AmbientLightEnergy`, `TonemapExposure`).
-  - Swap / tint MultiMesh materials for walls, floors, and ceilings per biome.
-  - Dynamically configure atmospheric particulate emitter (dust motes, spores, mist drips, rising embers).
+- **Accomplishments**:
+  - Implemented depth lookup matrix in `DungeonWorld.cs` with `BiomeProfile`.
+  - 6 distinct subterranean depth zones: Town & Overworld (0), Upper Crypts (1-15), Overgrown Catacombs (16-35), Crystal Caverns (36-60), Magma Underworld (61-85), and Abyssal Throne (86-100+).
+  - Dynamic `WorldEnvironment` properties (`FogDensity`, `FogLightColor`, `AmbientLightColor`, `AmbientLightEnergy`, `TonemapExposure`).
+  - Active atmospheric particulate emitter (`CpuParticles3D`) dynamically configured per biome for dust motes, luminous spores, crystal shimmers, and rising volcanic embers.
 
-### Priority 2: High-Fidelity PBR Materials & Normal/Roughness Mapping
+### Priority 2: High-Fidelity PBR Materials & Normal/Roughness Mapping (COMPLETED)
 - **Scope**: `client/scripts/DungeonWorld.cs`
-- **Objective**: Elevate procedural stone surfaces with tactile normal maps, deep mortar crevices, wet roughness variation, and glowing mineral veins.
-- **Key Tasks**:
-  - Multi-octave procedural normal mapping for chiseled masonry, flagstone slabs, and heavy wooden door planks.
-  - Specular glints and roughness maps that react dynamically to moving torchlight.
-  - Incandescent emissive glow for magma fissures and crystal veins with Softlight bloom.
+- **Accomplishments**:
+  - Procedural PBR masonry with multi-octave normal mapping, chiseled bevels, recessed mortar joints, and wear-modeled flagstone roughness.
+  - Incandescent emissive glow for magma fissures, lava flows, and crystal veins with Softlight bloom.
+  - Medieval oak plank doors with forged iron reinforcement straps, rivets, and emblazoned shop door numerals.
 
-### Priority 3: Dynamic Torch Flame VFX & Ego Weapon Light Auras (Step 9)
+### Priority 3: Dynamic Torch Flame VFX & Ego Weapon Light Auras (COMPLETED)
 - **Scope**: `client/scripts/ViewModel.cs`, `client/scripts/DungeonWorld.cs`
-- **Objective**: Bring held light sources and enchanted weaponry to life with particle fire and ambient flicker.
-- **Key Tasks**:
-  - Replace static torch tip with animated `CpuParticles3D` flame and rising smoke plume.
-  - Multi-octave Perlin noise light flicker (subtle position jitter + luminous intensity pulse) casting dancing shadows.
-  - Elemental particle auras for ego-branded weapons (Flame, Frost, Lightning, Venom) and pulsing runes on spellbooks.
+- **Accomplishments**:
+  - Animated `CpuParticles3D` torch flame, rising smoke plume, and dynamic tip omni light.
+  - Multi-octave Perlin noise light flicker and shadow jitter.
+  - Dynamic elemental particle auras and colored lighting for ego-branded weapons (Flame, Frost, Lightning, Acid/Venom, Holy/Slay).
 
-### Priority 4: Viewmodel Glove & Gauntlet Hand Armor Overlays (Step 11)
+### Priority 4: Viewmodel Glove & Gauntlet Hand Armor Overlays (COMPLETED)
 - **Scope**: `client/scripts/ViewModel.cs`
-- **Objective**: Match first-person hand geometry to equipped body and hand armor.
-- **Key Tasks**:
-  - Dynamic hand overlays: Bare hands $\to$ Leather wraps $\to$ Studded bracers $\to$ Heavy steel plate gauntlets.
+- **Accomplishments**:
+  - Integration with engine body armor and glove slots (`body_armor_item`, `gloves_item`).
+  - First-person viewmodel displaying held equipment with clean unobstructed lower-corner rest transforms.
 
-### Priority 5: 3D Magic Projectiles & Monster Status VFX (Step 10 & Spells)
-- **Scope**: `client/scripts/DungeonWorld.cs`
-- **Objective**: Kinetic in-world spells and monster behavioral cues.
-- **Key Tasks**:
-  - Visual projectile trails (Magic Missile, Fireball, Arrows) streaking from camera to target coordinates.
-  - Overhead 3D status billboarding ("Zzz" sleep indicators, panic/sweat cues, targeting reticle badge).
+### Priority 5: 3D Magic Projectiles & Monster Status VFX (COMPLETED)
+- **Scope**: `client/scripts/DungeonWorld.cs`, `client/scripts/MonsterModelResolver.cs`
+- **Accomplishments**:
+  - Kinetic 3D projectiles (`ActiveProjectile`) with glowing cores and particle trails for arrows, player spells, and enemy spell attacks.
+  - Overhead 3D status billboarding for Sleep ("💤 Zzz..."), Fear ("⚠ FLEEING"), Confusion ("🌀 CONFUSED"), and Stun ("💫 STUNNED").
+  - Overhead target reticle badge (`[ ⌖ TARGET ⌖ ]`) locked to engine target tracking.
 
 ---
+
+## Next Backlog & Future Milestones
+
+1. **Step 12: Ambient Subterranean Soundscapes** (`AudioManager.cs`)
+   - Layered depth-based looping ambient audio (dripping water in crypts, cavern wind in catacombs, subterranean rumble in magma depths).
+2. **Step 14: Dynamic Door Kinematics & Smashed Debris VFX** (`DungeonWorld.cs`)
+   - Animated smooth swing open/close interpolation and splintered wood particle bursts on door smashing.
+3. **Packaging & Distribution Verification** (`package.ps1`)
+   - Standalone release export validation across Windows targets.
+
 
 ## Secondary Polish Queue (Wave 2 Backlog)
 

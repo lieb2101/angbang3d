@@ -37,10 +37,10 @@ public partial class ViewModel : Node3D
     private string _currentRightModel = "";
 
     // Rest transforms (relative to sway root) - calibrated to clean, natural lower corners
-    private Vector3 _leftRestPos = new(-0.34f, -0.26f, -0.46f);
-    private Vector3 _leftRestRot = new(Mathf.DegToRad(-6), Mathf.DegToRad(18), Mathf.DegToRad(-14));
-    private Vector3 _rightRestPos = new(0.34f, -0.26f, -0.46f);
-    private Vector3 _rightRestRot = new(Mathf.DegToRad(26), Mathf.DegToRad(-20), Mathf.DegToRad(10));
+    private Vector3 _leftRestPos = new(-0.26f, -0.32f, -0.45f);
+    private Vector3 _leftRestRot = new(Mathf.DegToRad(14), Mathf.DegToRad(16), Mathf.DegToRad(-8));
+    private Vector3 _rightRestPos = new(0.26f, -0.32f, -0.45f);
+    private Vector3 _rightRestRot = new(Mathf.DegToRad(18), Mathf.DegToRad(-16), Mathf.DegToRad(10));
 
     // Motion & sway state
     private float _bobTimer;
@@ -67,22 +67,23 @@ public partial class ViewModel : Node3D
         _leftItemSlot = new Node3D { Name = "LeftItemSlot" };
         _leftHandSlot.AddChild(_leftItemSlot);
 
-        // Torch Flame particle emitter
+        // Torch Flame particle emitter - subtle compact steady flame
         _leftTorchFlame = new CpuParticles3D
         {
             Name = "TorchFlameVfx",
-            Amount = 24,
-            Lifetime = 0.35f,
+            Amount = 8,
+            Lifetime = 0.25f,
+            LocalCoords = true,
             EmissionShape = CpuParticles3D.EmissionShapeEnum.Sphere,
-            EmissionSphereRadius = 0.035f,
+            EmissionSphereRadius = 0.015f,
             Direction = Vector3.Up,
-            Spread = 20f,
-            InitialVelocityMin = 0.35f,
-            InitialVelocityMax = 0.85f,
-            Gravity = new Vector3(0, 0.4f, 0),
-            ScaleAmountMin = 0.035f,
-            ScaleAmountMax = 0.075f,
-            Color = new Color(1.0f, 0.70f, 0.15f, 0.95f),
+            Spread = 10f,
+            InitialVelocityMin = 0.15f,
+            InitialVelocityMax = 0.35f,
+            Gravity = new Vector3(0, 0.25f, 0),
+            ScaleAmountMin = 0.015f,
+            ScaleAmountMax = 0.030f,
+            Color = new Color(1.0f, 0.72f, 0.18f, 0.90f),
             MaterialOverride = new StandardMaterial3D
             {
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -90,33 +91,36 @@ public partial class ViewModel : Node3D
                 Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
                 AlbedoColor = new Color(1.0f, 0.75f, 0.20f),
             },
+            Position = new Vector3(0, 0.30f, 0),
             Visible = false,
         };
         _leftItemSlot.AddChild(_leftTorchFlame);
 
-        // Torch Smoke particle emitter
+        // Torch Smoke particle emitter - faint subtle rising wisp
         _leftTorchSmoke = new CpuParticles3D
         {
             Name = "TorchSmokeVfx",
-            Amount = 14,
-            Lifetime = 0.75f,
+            Amount = 4,
+            Lifetime = 0.40f,
+            LocalCoords = true,
             EmissionShape = CpuParticles3D.EmissionShapeEnum.Sphere,
-            EmissionSphereRadius = 0.03f,
+            EmissionSphereRadius = 0.015f,
             Direction = Vector3.Up,
-            Spread = 30f,
-            InitialVelocityMin = 0.25f,
-            InitialVelocityMax = 0.60f,
-            Gravity = new Vector3(0, 0.2f, 0),
-            ScaleAmountMin = 0.04f,
-            ScaleAmountMax = 0.10f,
-            Color = new Color(0.20f, 0.20f, 0.22f, 0.35f),
+            Spread = 15f,
+            InitialVelocityMin = 0.08f,
+            InitialVelocityMax = 0.18f,
+            Gravity = new Vector3(0, 0.15f, 0),
+            ScaleAmountMin = 0.018f,
+            ScaleAmountMax = 0.035f,
+            Color = new Color(0.25f, 0.25f, 0.25f, 0.12f),
             MaterialOverride = new StandardMaterial3D
             {
                 ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
                 VertexColorUseAsAlbedo = true,
                 Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                AlbedoColor = new Color(0.35f, 0.35f, 0.38f, 0.4f),
+                AlbedoColor = new Color(0.35f, 0.35f, 0.38f, 0.20f),
             },
+            Position = new Vector3(0, 0.34f, 0),
             Visible = false,
         };
         _leftItemSlot.AddChild(_leftTorchSmoke);
@@ -124,11 +128,12 @@ public partial class ViewModel : Node3D
         _leftTorchLight = new OmniLight3D
         {
             Name = "TorchTipLight",
-            LightColor = new Color(1.0f, 0.82f, 0.50f),
-            LightEnergy = 1.4f,
-            OmniRange = 2.2f,
-            OmniAttenuation = 1.2f,
+            LightColor = new Color(1.0f, 0.80f, 0.45f),
+            LightEnergy = 0.0f,
+            OmniRange = 1.0f,
+            OmniAttenuation = 1.0f,
             ShadowEnabled = false,
+            Position = new Vector3(0, 0.30f, 0),
             Visible = false,
         };
         _leftItemSlot.AddChild(_leftTorchLight);
@@ -147,7 +152,7 @@ public partial class ViewModel : Node3D
             Amount = 26,
             Lifetime = 0.40f,
             EmissionShape = CpuParticles3D.EmissionShapeEnum.Box,
-            EmissionBoxExtents = new Vector3(0.04f, 0.18f, 0.04f),
+            EmissionBoxExtents = new Vector3(0.04f, 0.22f, 0.04f),
             Direction = Vector3.Up,
             Spread = 35f,
             InitialVelocityMin = 0.15f,
@@ -181,6 +186,140 @@ public partial class ViewModel : Node3D
     }
 
     /// <summary>
+    /// Creates a dedicated, high-fidelity 3D handheld wooden torch with tapered shaft,
+    /// leather wrap, wrought iron collar, and glowing embers head.
+    /// </summary>
+    public static Node3D CreateHandheldTorchNode()
+    {
+        var root = new Node3D { Name = "HandheldTorch" };
+
+        // 1. Tapered Wooden Shaft (octagonal cylinder from Y = -0.16m to Y = +0.26m)
+        var shaftMesh = new CylinderMesh
+        {
+            TopRadius = 0.018f,
+            BottomRadius = 0.013f,
+            Height = 0.42f,
+            RadialSegments = 8,
+            Rings = 1,
+        };
+        var woodMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.34f, 0.22f, 0.13f),
+            Roughness = 0.85f,
+            Metallic = 0.0f,
+        };
+        var shaftInst = new MeshInstance3D
+        {
+            Name = "Shaft",
+            Mesh = shaftMesh,
+            MaterialOverride = woodMat,
+            Position = new Vector3(0, 0.05f, 0),
+        };
+        root.AddChild(shaftInst);
+
+        // 2. Leather Grip Wrap (around center grip Y = -0.02m to +0.10m)
+        var gripMesh = new CylinderMesh
+        {
+            TopRadius = 0.019f,
+            BottomRadius = 0.017f,
+            Height = 0.12f,
+            RadialSegments = 8,
+            Rings = 1,
+        };
+        var gripMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.22f, 0.13f, 0.07f),
+            Roughness = 0.90f,
+            Metallic = 0.0f,
+        };
+        var gripInst = new MeshInstance3D
+        {
+            Name = "Grip",
+            Mesh = gripMesh,
+            MaterialOverride = gripMat,
+            Position = new Vector3(0, 0.04f, 0),
+        };
+        root.AddChild(gripInst);
+
+        // 3. Wrought Iron Collar & Crown (at Y = 0.24m)
+        var collarMesh = new CylinderMesh
+        {
+            TopRadius = 0.028f,
+            BottomRadius = 0.020f,
+            Height = 0.06f,
+            RadialSegments = 8,
+            Rings = 1,
+        };
+        var ironMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.18f, 0.18f, 0.20f),
+            Roughness = 0.35f,
+            Metallic = 0.85f,
+        };
+        var collarInst = new MeshInstance3D
+        {
+            Name = "IronCollar",
+            Mesh = collarMesh,
+            MaterialOverride = ironMat,
+            Position = new Vector3(0, 0.24f, 0),
+        };
+        root.AddChild(collarInst);
+
+        // 4. Burning Pitch & Wrapped Linen Head (at Y = 0.27m)
+        var headMesh = new CylinderMesh
+        {
+            TopRadius = 0.027f,
+            BottomRadius = 0.023f,
+            Height = 0.06f,
+            RadialSegments = 8,
+            Rings = 1,
+        };
+        var emberMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.12f, 0.08f, 0.06f),
+            EmissionEnabled = true,
+            Emission = new Color(1.0f, 0.35f, 0.05f),
+            EmissionEnergyMultiplier = 2.2f,
+            Roughness = 0.75f,
+        };
+        var headInst = new MeshInstance3D
+        {
+            Name = "PitchHead",
+            Mesh = headMesh,
+            MaterialOverride = emberMat,
+            Position = new Vector3(0, 0.27f, 0),
+        };
+        root.AddChild(headInst);
+
+        // 5. Glowing Hot Embers Top Dome (top cap at Y = 0.30m)
+        var domeMesh = new SphereMesh
+        {
+            Radius = 0.024f,
+            Height = 0.028f,
+            RadialSegments = 8,
+            Rings = 4,
+        };
+        var coreMat = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(1.0f, 0.50f, 0.10f),
+            EmissionEnabled = true,
+            Emission = new Color(1.0f, 0.70f, 0.15f),
+            EmissionEnergyMultiplier = 3.5f,
+            Roughness = 0.5f,
+        };
+        var domeInst = new MeshInstance3D
+        {
+            Name = "GlowingCore",
+            Mesh = domeMesh,
+            MaterialOverride = coreMat,
+            Position = new Vector3(0, 0.30f, 0),
+        };
+        root.AddChild(domeInst);
+
+        return root;
+    }
+
+    /// <summary>
     /// Updates player equipment and held 3D models based on bridge JSON frame data.
     /// </summary>
     public void UpdateEquipment(JsonElement player, int depth, float heightRatio = 1.0f)
@@ -189,6 +328,8 @@ public partial class ViewModel : Node3D
         var pClass = player.TryGetProperty("class", out var cProp) ? cProp.GetString() ?? "" : "";
         var lightRadius = player.TryGetProperty("light", out var lProp) ? lProp.GetInt32() : 0;
         var hasLightItem = player.TryGetProperty("light_item", out var liProp) && !string.IsNullOrEmpty(liProp.GetString());
+        var lightItemName = hasLightItem ? liProp.GetString() ?? "" : "";
+        var lowerLight = lightItemName.ToLowerInvariant();
 
         var weaponItem = player.TryGetProperty("weapon_item", out var wiProp) ? wiProp.GetString() : null;
         var weaponTval = player.TryGetProperty("weapon_tval", out var wtProp) ? wtProp.GetInt32() : 0;
@@ -196,11 +337,27 @@ public partial class ViewModel : Node3D
         var bowTval = player.TryGetProperty("bow_tval", out var btProp) ? btProp.GetInt32() : 0;
         var shieldItem = player.TryGetProperty("shield_item", out var siProp) ? siProp.GetString() : null;
 
-        // Left Hand: Torch when lit/in dungeon, otherwise equipped shield or spellbook/class item
+        // Left Hand: Light source (Torch, Lantern, Phial, Star) when equipped or in dungeon,
+        // otherwise equipped shield or spellbook/class item
         var leftModelPath = "";
-        if (lightRadius > 0 || hasLightItem || (depth > 0 && lightRadius >= 0))
+        if (!string.IsNullOrEmpty(lowerLight))
         {
-            leftModelPath = "res://assets/models/props/Torch_Metal.fbx";
+            if (lowerLight.Contains("lantern") || lowerLight.Contains("lamp"))
+            {
+                leftModelPath = "res://assets/models/props/lantern_standing.gltf";
+            }
+            else if (lowerLight.Contains("phial") || lowerLight.Contains("star") || lowerLight.Contains("arkenstone") || lowerLight.Contains("crystal"))
+            {
+                leftModelPath = "res://assets/models/items/Crystal1.fbx";
+            }
+            else
+            {
+                leftModelPath = "__torch_handheld__";
+            }
+        }
+        else if (lightRadius > 0 || (depth > 0 && lightRadius >= 0))
+        {
+            leftModelPath = "__torch_handheld__";
         }
         else if (!string.IsNullOrEmpty(shieldItem))
         {
@@ -225,7 +382,7 @@ public partial class ViewModel : Node3D
         var (leftScale, leftPos, leftRot, leftItemOffset) = GetModelTransform(leftModelPath, true);
         var (rightScale, rightPos, rightRot, rightItemOffset) = GetModelTransform(rightModelPath, false);
 
-        float posScaleFactor = Mathf.Clamp(Mathf.Pow(heightRatio, 0.35f), 0.80f, 1.18f);
+        float posScaleFactor = Mathf.Clamp(Mathf.Pow(heightRatio, 0.25f), 0.85f, 1.15f);
 
         // Slot rest transforms
         _leftRestPos = new Vector3(leftPos.X * posScaleFactor, leftPos.Y * posScaleFactor, leftPos.Z * posScaleFactor);
@@ -240,24 +397,64 @@ public partial class ViewModel : Node3D
         SetSlotModel(_leftItemSlot, ref _currentLeftModel, leftModelPath, leftScale);
         SetSlotModel(_rightItemSlot, ref _currentRightModel, rightModelPath, rightScale);
 
-        // Dynamic Torch Flame VFX (Priority 3)
-        var isTorch = !string.IsNullOrEmpty(leftModelPath) && leftModelPath.ToLowerInvariant().Contains("torch");
+        // Dynamic Light Source VFX (Subtle compact flame / Lantern glow / Phial sparkle)
+        var isTorch = leftModelPath == "__torch_handheld__" || leftModelPath.ToLowerInvariant().Contains("torch");
+        var isLantern = leftModelPath.ToLowerInvariant().Contains("lantern");
+        var isCrystal = leftModelPath.ToLowerInvariant().Contains("crystal") || leftModelPath.ToLowerInvariant().Contains("star");
+
         if (_leftTorchFlame != null)
         {
-            _leftTorchFlame.Visible = isTorch;
-            _leftTorchFlame.Position = new Vector3(0, 0.22f, 0);
-            if (isTorch && !_leftTorchFlame.Emitting) _leftTorchFlame.Emitting = true;
+            if (isTorch)
+            {
+                _leftTorchFlame.Visible = true;
+                _leftTorchFlame.Position = new Vector3(0, 0.30f, 0);
+                _leftTorchFlame.ScaleAmountMin = 0.015f;
+                _leftTorchFlame.ScaleAmountMax = 0.030f;
+                _leftTorchFlame.Color = new Color(1.0f, 0.72f, 0.18f, 0.90f);
+                if (!_leftTorchFlame.Emitting) _leftTorchFlame.Emitting = true;
+            }
+            else if (isLantern)
+            {
+                _leftTorchFlame.Visible = true;
+                _leftTorchFlame.Position = new Vector3(0, 0.12f, 0);
+                _leftTorchFlame.ScaleAmountMin = 0.010f;
+                _leftTorchFlame.ScaleAmountMax = 0.020f;
+                _leftTorchFlame.Color = new Color(1.0f, 0.80f, 0.25f, 0.85f);
+                if (!_leftTorchFlame.Emitting) _leftTorchFlame.Emitting = true;
+            }
+            else if (isCrystal)
+            {
+                _leftTorchFlame.Visible = true;
+                _leftTorchFlame.Position = new Vector3(0, 0.08f, 0);
+                _leftTorchFlame.ScaleAmountMin = 0.012f;
+                _leftTorchFlame.ScaleAmountMax = 0.025f;
+                _leftTorchFlame.Color = new Color(0.65f, 0.85f, 1.0f, 0.80f);
+                if (!_leftTorchFlame.Emitting) _leftTorchFlame.Emitting = true;
+            }
+            else
+            {
+                _leftTorchFlame.Visible = false;
+            }
         }
+
         if (_leftTorchSmoke != null)
         {
-            _leftTorchSmoke.Visible = isTorch;
-            _leftTorchSmoke.Position = new Vector3(0, 0.24f, 0);
-            if (isTorch && !_leftTorchSmoke.Emitting) _leftTorchSmoke.Emitting = true;
+            if (isTorch)
+            {
+                _leftTorchSmoke.Visible = true;
+                _leftTorchSmoke.Position = new Vector3(0, 0.33f, 0);
+                if (!_leftTorchSmoke.Emitting) _leftTorchSmoke.Emitting = true;
+            }
+            else
+            {
+                _leftTorchSmoke.Visible = false;
+            }
         }
+
+        // Keep secondary light disabled - DungeonWorld._torch provides the single unified light source
         if (_leftTorchLight != null)
         {
-            _leftTorchLight.Visible = isTorch;
-            _leftTorchLight.Position = new Vector3(0, 0.22f, 0);
+            _leftTorchLight.Visible = false;
         }
 
         // Dynamic Weapon Elemental Ego Aura (Priority 3)
@@ -333,8 +530,8 @@ public partial class ViewModel : Node3D
             {
                 return (
                     1f,
-                    new Vector3(-0.34f, -0.26f, -0.46f),
-                    new Vector3(Mathf.DegToRad(-6), Mathf.DegToRad(18), Mathf.DegToRad(-14)),
+                    new Vector3(-0.24f, -0.22f, -0.38f),
+                    new Vector3(Mathf.DegToRad(10), Mathf.DegToRad(18), Mathf.DegToRad(-10)),
                     Vector3.Zero
                 );
             }
@@ -342,8 +539,8 @@ public partial class ViewModel : Node3D
             {
                 return (
                     1f,
-                    new Vector3(0.34f, -0.26f, -0.46f),
-                    new Vector3(Mathf.DegToRad(26), Mathf.DegToRad(-20), Mathf.DegToRad(10)),
+                    new Vector3(0.24f, -0.22f, -0.38f),
+                    new Vector3(Mathf.DegToRad(26), Mathf.DegToRad(-18), Mathf.DegToRad(10)),
                     Vector3.Zero
                 );
             }
@@ -353,101 +550,190 @@ public partial class ViewModel : Node3D
 
         if (isLeft)
         {
-            if (lower.Contains("torch"))
+            if (modelPath == "__torch_handheld__" || lower.Contains("torch"))
             {
+                // Handheld wooden torch with burning ember head (scale 1.0 = real-world meters: ~0.48m tall)
                 return (
-                    0.16f,
-                    new Vector3(-0.35f, -0.27f, -0.46f),
-                    new Vector3(Mathf.DegToRad(-6), Mathf.DegToRad(18), Mathf.DegToRad(-14)),
-                    new Vector3(0f, 0f, 0f)
+                    1.0f,
+                    new Vector3(-0.26f, -0.30f, -0.42f),
+                    new Vector3(Mathf.DegToRad(14), Mathf.DegToRad(16), Mathf.DegToRad(-8)),
+                    Vector3.Zero
+                );
+            }
+            if (lower.Contains("lantern"))
+            {
+                // Handheld standing brass lantern
+                return (
+                    0.28f,
+                    new Vector3(-0.26f, -0.28f, -0.40f),
+                    new Vector3(Mathf.DegToRad(6), Mathf.DegToRad(12), Mathf.DegToRad(-4)),
+                    new Vector3(0f, -0.08f, 0f)
+                );
+            }
+            if (lower.Contains("crystal") || lower.Contains("star") || lower.Contains("phial"))
+            {
+                // Radiant starlight crystal / phial artifact
+                return (
+                    0.22f,
+                    new Vector3(-0.25f, -0.26f, -0.38f),
+                    new Vector3(Mathf.DegToRad(12), Mathf.DegToRad(16), Mathf.DegToRad(-8)),
+                    Vector3.Zero
+                );
+            }
+            if (lower.Contains("shield_round"))
+            {
+                // Round buckler shield (~0.38m diameter)
+                return (
+                    0.19f,
+                    new Vector3(-0.27f, -0.27f, -0.40f),
+                    new Vector3(Mathf.DegToRad(12), Mathf.DegToRad(20), Mathf.DegToRad(-6)),
+                    Vector3.Zero
+                );
+            }
+            if (lower.Contains("shield_heater_2"))
+            {
+                // Heavy / Tower heater shield (~0.51m height)
+                return (
+                    0.20f,
+                    new Vector3(-0.28f, -0.28f, -0.42f),
+                    new Vector3(Mathf.DegToRad(8), Mathf.DegToRad(18), Mathf.DegToRad(-6)),
+                    Vector3.Zero
+                );
+            }
+            if (lower.Contains("shield_celtic") || lower.Contains("shield_golden"))
+            {
+                // Elaborate Celtic / Golden kite shield (~0.60m height)
+                return (
+                    0.14f,
+                    new Vector3(-0.28f, -0.28f, -0.42f),
+                    new Vector3(Mathf.DegToRad(8), Mathf.DegToRad(18), Mathf.DegToRad(-6)),
+                    Vector3.Zero
                 );
             }
             if (lower.Contains("shield"))
             {
+                // Knight's heater shield (~0.49m height, 0.38m width)
                 return (
-                    0.20f,
-                    new Vector3(-0.36f, -0.28f, -0.46f),
-                    new Vector3(Mathf.DegToRad(10), Mathf.DegToRad(22), Mathf.DegToRad(-8)),
-                    new Vector3(0f, 0f, 0f)
+                    0.19f,
+                    new Vector3(-0.27f, -0.27f, -0.40f),
+                    new Vector3(Mathf.DegToRad(10), Mathf.DegToRad(18), Mathf.DegToRad(-6)),
+                    Vector3.Zero
                 );
             }
             if (lower.Contains("book") || lower.Contains("spellbook"))
             {
+                // Handheld spellbook / tome (~0.29m height)
                 return (
-                    0.20f,
-                    new Vector3(-0.34f, -0.26f, -0.45f),
-                    new Vector3(Mathf.DegToRad(16), Mathf.DegToRad(18), Mathf.DegToRad(-10)),
-                    new Vector3(0f, 0f, 0f)
+                    0.36f,
+                    new Vector3(-0.26f, -0.26f, -0.38f),
+                    new Vector3(Mathf.DegToRad(18), Mathf.DegToRad(16), Mathf.DegToRad(-8)),
+                    Vector3.Zero
                 );
             }
             return (
-                0.18f,
-                new Vector3(-0.35f, -0.28f, -0.46f),
+                0.14f,
+                new Vector3(-0.26f, -0.28f, -0.40f),
                 new Vector3(Mathf.DegToRad(10), Mathf.DegToRad(16), Mathf.DegToRad(-8)),
                 Vector3.Zero
             );
         }
         else
         {
-            if (lower.Contains("staff") || lower.Contains("spear"))
+            // 2H Greatswords & Claymores (~0.92m total length)
+            if (lower.Contains("claymore") || lower.Contains("sword_big"))
             {
                 return (
-                    0.15f,
-                    new Vector3(0.36f, -0.30f, -0.48f),
-                    new Vector3(Mathf.DegToRad(22), Mathf.DegToRad(-18), Mathf.DegToRad(8)),
-                    new Vector3(0f, -0.02f, 0f)
+                    0.14f,
+                    new Vector3(0.28f, -0.30f, -0.44f),
+                    new Vector3(Mathf.DegToRad(24), Mathf.DegToRad(-16), Mathf.DegToRad(8)),
+                    new Vector3(0f, -0.04f, 0f)
                 );
             }
+            // 2H Battleaxes & Double Axes (~0.83m length)
+            if (lower.Contains("axe_double"))
+            {
+                return (
+                    0.13f,
+                    new Vector3(0.27f, -0.29f, -0.42f),
+                    new Vector3(Mathf.DegToRad(22), Mathf.DegToRad(-18), Mathf.DegToRad(10)),
+                    Vector3.Zero
+                );
+            }
+            // 2H Heavy War Hammers & Mattocks (~0.70m length)
+            if (lower.Contains("hammer_double"))
+            {
+                return (
+                    0.14f,
+                    new Vector3(0.27f, -0.29f, -0.40f),
+                    new Vector3(Mathf.DegToRad(24), Mathf.DegToRad(-18), Mathf.DegToRad(10)),
+                    new Vector3(0f, -0.04f, 0f)
+                );
+            }
+            // Staves, Spears, Polearms, Scythes (~1.26m length)
+            if (lower.Contains("staff") || lower.Contains("spear") || lower.Contains("scythe"))
+            {
+                return (
+                    0.13f,
+                    new Vector3(0.28f, -0.30f, -0.44f),
+                    new Vector3(Mathf.DegToRad(18), Mathf.DegToRad(-14), Mathf.DegToRad(8)),
+                    new Vector3(0f, -0.20f, 0f)
+                );
+            }
+            // Bows & Crossbows (~0.71m height)
             if (lower.Contains("crossbow") || lower.Contains("bow"))
             {
                 return (
-                    0.16f,
-                    new Vector3(0.33f, -0.24f, -0.44f),
-                    new Vector3(Mathf.DegToRad(8), Mathf.DegToRad(-14), Mathf.DegToRad(6)),
+                    0.13f,
+                    new Vector3(0.26f, -0.26f, -0.38f),
+                    new Vector3(Mathf.DegToRad(12), Mathf.DegToRad(-14), Mathf.DegToRad(8)),
                     Vector3.Zero
                 );
             }
-            if (lower.Contains("wand"))
-            {
-                return (
-                    0.18f,
-                    new Vector3(0.33f, -0.25f, -0.44f),
-                    new Vector3(Mathf.DegToRad(26), Mathf.DegToRad(-16), Mathf.DegToRad(8)),
-                    Vector3.Zero
-                );
-            }
+            // Daggers & Small Blades (~0.36m length, blade 0.28m)
             if (lower.Contains("dagger"))
             {
                 return (
-                    0.18f,
-                    new Vector3(0.33f, -0.25f, -0.44f),
-                    new Vector3(Mathf.DegToRad(30), Mathf.DegToRad(-18), Mathf.DegToRad(10)),
+                    0.14f,
+                    new Vector3(0.25f, -0.26f, -0.38f),
+                    new Vector3(Mathf.DegToRad(30), Mathf.DegToRad(-14), Mathf.DegToRad(10)),
                     Vector3.Zero
                 );
             }
+            // 1-Handed Axes & Cleavers (~0.68m length)
             if (lower.Contains("axe"))
             {
                 return (
-                    0.18f,
-                    new Vector3(0.35f, -0.27f, -0.46f),
-                    new Vector3(Mathf.DegToRad(26), Mathf.DegToRad(-20), Mathf.DegToRad(10)),
-                    Vector3.Zero
+                    0.13f,
+                    new Vector3(0.26f, -0.28f, -0.40f),
+                    new Vector3(Mathf.DegToRad(24), Mathf.DegToRad(-18), Mathf.DegToRad(10)),
+                    new Vector3(0f, -0.06f, 0f)
                 );
             }
+            // Small Hammers, Maces, Flails, Clubs (~0.56m length)
             if (lower.Contains("mace") || lower.Contains("hammer"))
             {
                 return (
-                    0.18f,
-                    new Vector3(0.35f, -0.27f, -0.46f),
-                    new Vector3(Mathf.DegToRad(26), Mathf.DegToRad(-20), Mathf.DegToRad(10)),
-                    Vector3.Zero
+                    0.13f,
+                    new Vector3(0.26f, -0.28f, -0.40f),
+                    new Vector3(Mathf.DegToRad(24), Mathf.DegToRad(-18), Mathf.DegToRad(10)),
+                    new Vector3(0f, -0.05f, 0f)
                 );
             }
-            // Default sword / weapon
+            // Wands & Rods
+            if (lower.Contains("wand") || lower.Contains("rod"))
+            {
+                return (
+                    0.13f,
+                    new Vector3(0.25f, -0.27f, -0.38f),
+                    new Vector3(Mathf.DegToRad(26), Mathf.DegToRad(-16), Mathf.DegToRad(8)),
+                    new Vector3(0f, -0.15f, 0f)
+                );
+            }
+            // 1-Handed Swords (Standard 1H sword: ~0.74m total length, 0.62m blade)
             return (
-                0.18f,
-                new Vector3(0.35f, -0.27f, -0.46f),
-                new Vector3(Mathf.DegToRad(26), Mathf.DegToRad(-20), Mathf.DegToRad(10)),
+                0.135f,
+                new Vector3(0.26f, -0.28f, -0.40f),
+                new Vector3(Mathf.DegToRad(24), Mathf.DegToRad(-18), Mathf.DegToRad(8)),
                 Vector3.Zero
             );
         }
@@ -506,16 +792,26 @@ public partial class ViewModel : Node3D
             }
 
             // 1-Handed Axes & Cleavers & Hatchets
-            if (lowerW.Contains("axe") || lowerW.Contains("cleaver") || lowerW.Contains("hatchet") ||
+            if (lowerW.Contains("small axe") || lowerW.Contains("hatchet"))
+            {
+                return "res://assets/models/weapons/Axe_Small.fbx";
+            }
+            if (lowerW.Contains("axe") || lowerW.Contains("cleaver") ||
                 lowerW.Contains("sickle") || lowerW.Contains("tomahawk"))
             {
                 return "res://assets/models/weapons/Axe.fbx";
             }
 
+            // Scythes
+            if (lowerW.Contains("scythe"))
+            {
+                return "res://assets/models/weapons/Scythe.fbx";
+            }
+
             // Staves, Quarterstaves, Polearms, Spears, Lances, Tridents
             if (lowerW.Contains("staff") || lowerW.Contains("quarterstaff") || lowerW.Contains("spear") ||
                 lowerW.Contains("pike") || lowerW.Contains("lance") || lowerW.Contains("trident") ||
-                lowerW.Contains("glaive") || lowerW.Contains("scythe") || lowerW.Contains("awl-pike") ||
+                lowerW.Contains("glaive") || lowerW.Contains("awl-pike") ||
                 lowerW.Contains("lucerne") || lowerW.Contains("naginata"))
             {
                 return "res://assets/models/weapons/Spear.fbx";
@@ -598,21 +894,31 @@ public partial class ViewModel : Node3D
         {
             try
             {
-                if (!_sceneCache.TryGetValue(newPath, out var scene) || scene == null)
+                if (newPath == "__torch_handheld__")
                 {
-                    scene = GD.Load<PackedScene>(newPath);
-                    if (scene != null)
-                    {
-                        _sceneCache[newPath] = scene;
-                    }
-                }
-
-                if (scene != null)
-                {
-                    modelNode = scene.Instantiate<Node3D>();
+                    modelNode = CreateHandheldTorchNode();
                     modelNode.Scale = Vector3.One * scale;
                     slot.AddChild(modelNode);
                     _modelCache[cacheKey] = modelNode;
+                }
+                else
+                {
+                    if (!_sceneCache.TryGetValue(newPath, out var scene) || scene == null)
+                    {
+                        scene = GD.Load<PackedScene>(newPath);
+                        if (scene != null)
+                        {
+                            _sceneCache[newPath] = scene;
+                        }
+                    }
+
+                    if (scene != null)
+                    {
+                        modelNode = scene.Instantiate<Node3D>();
+                        modelNode.Scale = Vector3.One * scale;
+                        slot.AddChild(modelNode);
+                        _modelCache[cacheKey] = modelNode;
+                    }
                 }
             }
             catch (Exception ex)

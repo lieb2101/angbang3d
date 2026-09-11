@@ -21,29 +21,29 @@ public static class ItemModelResolver
     /// </summary>
     public static readonly Dictionary<char, (string ModelPath, float Scale)> ModelMappings = new()
     {
-        { '$', ("res://assets/models/items/Chest_Closed.fbx", 0.45f) },
-        { '!', ("res://assets/models/items/Potion1_Filled.fbx", 0.45f) },
-        { '?', ("res://assets/models/items/Parchment.fbx", 0.45f) },
-        { ')', ("res://assets/models/weapons/Sword.fbx", 0.55f) },
-        { '[', ("res://assets/models/items/Armor_Metal.fbx", 0.50f) },
-        { ']', ("res://assets/models/items/Armor_Metal2.fbx", 0.50f) },
-        { '(', ("res://assets/models/weapons/Shield_Heater.fbx", 0.55f) },
-        { '/', ("res://assets/models/weapons/Spear.fbx", 0.55f) },
-        { '_', ("res://assets/models/weapons/Spear.fbx", 0.55f) },
-        { '|', ("res://assets/models/weapons/Spear.fbx", 0.50f) },
-        { ',', ("res://assets/models/items/ChickenLeg.fbx", 0.45f) },
-        { '"', ("res://assets/models/items/Necklace1.fbx", 0.45f) },
-        { '=', ("res://assets/models/items/Ring1.fbx", 0.45f) },
-        { '*', ("res://assets/models/items/Crystal1.fbx", 0.40f) },
-        { '~', ("res://assets/models/props/Torch_Metal.fbx", 0.45f) },
-        { '{', ("res://assets/models/weapons/Arrow.fbx", 0.50f) },
-        { '}', ("res://assets/models/weapons/Bow_Wooden.fbx", 0.55f) },
+        { '$', ("res://assets/models/items/Chest_Closed.fbx", 0.20f) },
+        { '!', ("res://assets/models/items/Potion1_Filled.fbx", 0.18f) },
+        { '?', ("res://assets/models/items/Parchment.fbx", 0.18f) },
+        { ')', ("res://assets/models/weapons/Sword.fbx", 0.22f) },
+        { '[', ("res://assets/models/items/Armor_Metal.fbx", 0.22f) },
+        { ']', ("res://assets/models/items/Armor_Metal2.fbx", 0.22f) },
+        { '(', ("res://assets/models/weapons/Shield_Heater.fbx", 0.22f) },
+        { '/', ("res://assets/models/weapons/Spear.fbx", 0.22f) },
+        { '_', ("res://assets/models/weapons/Spear.fbx", 0.22f) },
+        { '|', ("res://assets/models/weapons/Spear.fbx", 0.20f) },
+        { ',', ("res://assets/models/items/ChickenLeg.fbx", 0.18f) },
+        { '"', ("res://assets/models/items/Necklace1.fbx", 0.18f) },
+        { '=', ("res://assets/models/items/Ring1.fbx", 0.16f) },
+        { '*', ("res://assets/models/items/Crystal1.fbx", 0.18f) },
+        { '~', ("res://assets/models/props/lantern_standing.gltf", 0.28f) },
+        { '{', ("res://assets/models/weapons/Arrow.fbx", 0.20f) },
+        { '}', ("res://assets/models/weapons/Bow_Wooden.fbx", 0.22f) },
     };
 
     /// <summary>
     /// Register or override a 3D model mapping for an item glyph.
     /// </summary>
-    public static void RegisterItemModel(char glyph, string modelPath, float scale = 0.50f)
+    public static void RegisterItemModel(char glyph, string modelPath, float scale = 0.20f)
     {
         ModelMappings[glyph] = (modelPath, scale);
     }
@@ -65,14 +65,14 @@ public static class ItemModelResolver
 
         var visual = CreateVisual(glyph, color, itemName);
         var rotator = new ItemRotator();
-        rotator.Position = new Vector3(0, 0.25f, 0);
+        rotator.Position = new Vector3(0, 0.12f, 0);
         rotator.AddChild(visual);
         root.AddChild(rotator);
 
         if (!string.IsNullOrEmpty(itemName))
         {
-            var caption = CreateCaption(itemName, new Vector3(0, 0.85f, 0),
-                new Color(0.88f, 0.88f, 0.82f), 38);
+            var caption = CreateCaption(itemName, new Vector3(0, 0.45f, 0),
+                new Color(0.88f, 0.88f, 0.82f), 34);
             root.AddChild(caption);
         }
 
@@ -81,6 +81,14 @@ public static class ItemModelResolver
 
     private static Node3D CreateVisual(char glyph, Color color, string itemName = null)
     {
+        var isTorch = (glyph == '~' || (!string.IsNullOrEmpty(itemName) && itemName.ToLowerInvariant().Contains("torch")));
+        if (isTorch && (string.IsNullOrEmpty(itemName) || !itemName.ToLowerInvariant().Contains("lantern")))
+        {
+            var torch = ViewModel.CreateHandheldTorchNode();
+            torch.Scale = Vector3.One * 0.75f;
+            return torch;
+        }
+
         var modelConfig = ResolveSpecificItemModel(glyph, itemName);
         if (modelConfig.ModelPath != null)
         {
@@ -89,6 +97,7 @@ public static class ItemModelResolver
             {
                 var inst = scene.Instantiate<Node3D>();
                 inst.Scale = new Vector3(modelConfig.Scale, modelConfig.Scale, modelConfig.Scale);
+                UpgradeItemMaterials(inst, glyph, color, itemName);
                 return inst;
             }
         }
@@ -104,6 +113,36 @@ public static class ItemModelResolver
         };
     }
 
+    private static void UpgradeItemMaterials(Node node, char glyph, Color color, string itemName)
+    {
+        if (node is MeshInstance3D mi)
+        {
+            var count = mi.Mesh != null ? mi.Mesh.GetSurfaceCount() : 1;
+            for (int i = 0; i < count; i++)
+            {
+                if (mi.GetActiveMaterial(i) is BaseMaterial3D orig)
+                {
+                    var mat = (BaseMaterial3D)orig.Duplicate();
+                    mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic;
+                    mat.Roughness = Mathf.Clamp(mat.Roughness, 0.25f, 0.85f);
+
+                    if (color != Colors.White && color.A > 0)
+                    {
+                        mat.RimEnabled = true;
+                        mat.Rim = 0.40f;
+                        mat.RimTint = 0.40f;
+                    }
+                    mi.SetSurfaceOverrideMaterial(i, mat);
+                }
+            }
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            UpgradeItemMaterials(child, glyph, color, itemName);
+        }
+    }
+
     private static (string ModelPath, float Scale) ResolveSpecificItemModel(char glyph, string itemName)
     {
         if (!string.IsNullOrEmpty(itemName))
@@ -113,169 +152,173 @@ public static class ItemModelResolver
             // Daggers & Knives
             if (lower.Contains("dagger") || lower.Contains("knife") || lower.Contains("rapier") || lower.Contains("stiletto") || lower.Contains("main gauche"))
             {
-                return ("res://assets/models/weapons/Dagger.fbx", 0.50f);
+                return ("res://assets/models/weapons/Dagger.fbx", 0.18f);
             }
             // 2H Swords & Greatswords
             if (lower.Contains("two-handed") || lower.Contains("great sword") || lower.Contains("claymore") || lower.Contains("zweihander") || lower.Contains("bastard") || lower.Contains("executioner"))
             {
-                return ("res://assets/models/weapons/Claymore.fbx", 0.60f);
+                return ("res://assets/models/weapons/Claymore.fbx", 0.24f);
             }
             // 1H Swords
             if (lower.Contains("sword") || lower.Contains("blade") || lower.Contains("scimitar") || lower.Contains("sabre") || lower.Contains("katana") || lower.Contains("cutlass"))
             {
                 if (lower.Contains("golden") || lower.Contains("holy") || lower.Contains("radiant"))
                 {
-                    return ("res://assets/models/weapons/Sword_Golden.fbx", 0.55f);
+                    return ("res://assets/models/weapons/Sword_Golden.fbx", 0.22f);
                 }
-                return ("res://assets/models/weapons/Sword.fbx", 0.55f);
+                return ("res://assets/models/weapons/Sword.fbx", 0.22f);
             }
             // 2H Battle Axes & Polearms
             if (lower.Contains("battle axe") || lower.Contains("great axe") || lower.Contains("broad axe") || lower.Contains("halberd") || lower.Contains("poleaxe"))
             {
-                return ("res://assets/models/weapons/Axe_Double.fbx", 0.55f);
+                return ("res://assets/models/weapons/Axe_Double.fbx", 0.22f);
             }
             // 1H Axes
             if (lower.Contains("axe") || lower.Contains("cleaver") || lower.Contains("hatchet"))
             {
-                return ("res://assets/models/weapons/Axe.fbx", 0.50f);
+                return ("res://assets/models/weapons/Axe.fbx", 0.20f);
             }
             // War Hammers & Mattocks
             if (lower.Contains("war hammer") || lower.Contains("great hammer") || lower.Contains("mattock"))
             {
-                return ("res://assets/models/weapons/Hammer_Double.fbx", 0.55f);
+                return ("res://assets/models/weapons/Hammer_Double.fbx", 0.20f);
             }
             // Maces, Flails, Morning Stars, Clubs, Cudgels, Whips
             if (lower.Contains("hammer") || lower.Contains("mace") || lower.Contains("flail") || lower.Contains("star") ||
                 lower.Contains("club") || lower.Contains("cudgel") || lower.Contains("whip") ||
                 lower.Contains("ball-and-chain"))
             {
-                return ("res://assets/models/weapons/Hammer_Small.fbx", 0.50f);
+                return ("res://assets/models/weapons/Hammer_Small.fbx", 0.20f);
             }
             // Staves & Polearms
             if (lower.Contains("staff") || lower.Contains("spear") || lower.Contains("pike") || lower.Contains("lance") || lower.Contains("trident"))
             {
-                return ("res://assets/models/weapons/Spear.fbx", 0.55f);
+                return ("res://assets/models/weapons/Spear.fbx", 0.22f);
             }
             // Scythes
             if (lower.Contains("scythe"))
             {
-                return ("res://assets/models/weapons/Scythe.fbx", 0.55f);
+                return ("res://assets/models/weapons/Scythe.fbx", 0.22f);
             }
             // Bows & Crossbows
             if (lower.Contains("crossbow") || lower.Contains("arbalest") || lower.Contains("bow") || lower.Contains("sling"))
             {
-                if (lower.Contains("golden")) return ("res://assets/models/weapons/Bow_Golden.fbx", 0.55f);
-                if (lower.Contains("evil") || lower.Contains("dark")) return ("res://assets/models/weapons/Bow_Evil.fbx", 0.55f);
-                return ("res://assets/models/weapons/Bow_Wooden.fbx", 0.55f);
+                if (lower.Contains("golden")) return ("res://assets/models/weapons/Bow_Golden.fbx", 0.22f);
+                if (lower.Contains("evil") || lower.Contains("dark")) return ("res://assets/models/weapons/Bow_Evil.fbx", 0.22f);
+                return ("res://assets/models/weapons/Bow_Wooden.fbx", 0.22f);
             }
             // Arrows & Missiles
             if (lower.Contains("arrow") || lower.Contains("bolt") || lower.Contains("shot") || lower.Contains("pebble"))
             {
-                return ("res://assets/models/weapons/Arrow.fbx", 0.50f);
+                return ("res://assets/models/weapons/Arrow.fbx", 0.18f);
             }
             // Shields
             if (lower.Contains("shield") || lower.Contains("buckler") || lower.Contains("targe"))
             {
                 if (lower.Contains("golden") || lower.Contains("celtic"))
                 {
-                    return ("res://assets/models/weapons/Shield_Celtic_Golden.fbx", 0.55f);
+                    return ("res://assets/models/weapons/Shield_Celtic_Golden.fbx", 0.22f);
                 }
                 if (lower.Contains("round") || lower.Contains("small"))
                 {
-                    return ("res://assets/models/weapons/Shield_Round.fbx", 0.55f);
+                    return ("res://assets/models/weapons/Shield_Round.fbx", 0.20f);
                 }
-                return ("res://assets/models/weapons/Shield_Heater.fbx", 0.55f);
+                return ("res://assets/models/weapons/Shield_Heater.fbx", 0.22f);
             }
             // Body Armor & Clothes
             if (lower.Contains("plate") || lower.Contains("chain") || lower.Contains("mail") || lower.Contains("armor") || lower.Contains("cuirass") || lower.Contains("corselet"))
             {
                 if (lower.Contains("leather") || lower.Contains("soft") || lower.Contains("padded") || lower.Contains("robe") || lower.Contains("cloak"))
                 {
-                    return ("res://assets/models/items/Armor_Leather.fbx", 0.50f);
+                    return ("res://assets/models/items/Armor_Leather.fbx", 0.20f);
                 }
                 if (lower.Contains("gold") || lower.Contains("shining") || lower.Contains("mithril"))
                 {
-                    return ("res://assets/models/items/Armor_Golden.fbx", 0.50f);
+                    return ("res://assets/models/items/Armor_Golden.fbx", 0.20f);
                 }
                 if (lower.Contains("black") || lower.Contains("dark") || lower.Contains("shadow"))
                 {
-                    return ("res://assets/models/items/Armor_Black.fbx", 0.50f);
+                    return ("res://assets/models/items/Armor_Black.fbx", 0.20f);
                 }
-                return ("res://assets/models/items/Armor_Metal.fbx", 0.50f);
+                return ("res://assets/models/items/Armor_Metal.fbx", 0.20f);
             }
             // Helmets & Crowns
             if (lower.Contains("crown") || lower.Contains("coronet") || lower.Contains("helm") || lower.Contains("cap") || lower.Contains("hat"))
             {
-                return ("res://assets/models/items/Crown.fbx", 0.50f);
+                return ("res://assets/models/items/Crown.fbx", 0.20f);
             }
             // Gloves & Gauntlets
             if (lower.Contains("glove") || lower.Contains("gauntlet") || lower.Contains("cesta") || lower.Contains("bracer"))
             {
-                return ("res://assets/models/items/Glove.fbx", 0.50f);
+                return ("res://assets/models/items/Glove.fbx", 0.18f);
             }
             // Potions
             if (lower.Contains("potion") || lower.Contains("draught") || lower.Contains("flask") || lower.Contains("elixir"))
             {
-                return ("res://assets/models/items/Potion1_Filled.fbx", 0.45f);
+                return ("res://assets/models/items/Potion1_Filled.fbx", 0.18f);
             }
             // Books & Spellbooks
             if (lower.Contains("book") || lower.Contains("tome") || lower.Contains("grimoire") || lower.Contains("incantations") || lower.Contains("prayers") || lower.Contains("sorcery") || lower.Contains("magic"))
             {
-                return ("res://assets/models/items/Book1_Closed.fbx", 0.45f);
+                return ("res://assets/models/items/Book1_Closed.fbx", 0.18f);
             }
             // Scrolls
             if (lower.Contains("scroll") || lower.Contains("parchment") || lower.Contains("paper"))
             {
-                return ("res://assets/models/items/Scroll.fbx", 0.45f);
+                return ("res://assets/models/items/Scroll.fbx", 0.18f);
             }
             // Rings
             if (lower.Contains("ring") || lower.Contains("band"))
             {
-                return ("res://assets/models/items/Ring1.fbx", 0.45f);
+                return ("res://assets/models/items/Ring1.fbx", 0.16f);
             }
             // Amulets & Necklaces
             if (lower.Contains("amulet") || lower.Contains("necklace") || lower.Contains("pendant") || lower.Contains("medallion") || lower.Contains("periapt") || lower.Contains("talisman"))
             {
-                return ("res://assets/models/items/Necklace1.fbx", 0.45f);
+                return ("res://assets/models/items/Necklace1.fbx", 0.18f);
             }
             // Gems & Crystals
             if (lower.Contains("gem") || lower.Contains("crystal") || lower.Contains("diamond") || lower.Contains("ruby") || lower.Contains("emerald") || lower.Contains("sapphire") || lower.Contains("mineral") || lower.Contains("opal") || lower.Contains("garnet"))
             {
-                return ("res://assets/models/items/Crystal1.fbx", 0.40f);
+                return ("res://assets/models/items/Crystal1.fbx", 0.16f);
             }
             // Chests & Gold
             if (lower.Contains("chest") || lower.Contains("coffer") || lower.Contains("box"))
             {
-                return ("res://assets/models/items/Chest_Closed.fbx", 0.45f);
+                return ("res://assets/models/items/Chest_Closed.fbx", 0.20f);
             }
             if (lower.Contains("gold") || lower.Contains("coin") || lower.Contains("copper") || lower.Contains("silver") || lower.Contains("mithril coin"))
             {
-                return ("res://assets/models/items/Gold_Ingots.fbx", 0.45f);
+                return ("res://assets/models/items/Gold_Ingots.fbx", 0.18f);
             }
             // Food
             if (lower.Contains("ration") || lower.Contains("food") || lower.Contains("meat") || lower.Contains("bread") || lower.Contains("mushroom") || lower.Contains("apple") || lower.Contains("slime mold"))
             {
-                return ("res://assets/models/items/ChickenLeg.fbx", 0.45f);
+                return ("res://assets/models/items/ChickenLeg.fbx", 0.18f);
             }
             // Remains & Skulls
             if (lower.Contains("skull") || lower.Contains("bone") || lower.Contains("skeleton"))
             {
-                return ("res://assets/models/items/Skull.fbx", 0.45f);
+                return ("res://assets/models/items/Skull.fbx", 0.18f);
             }
-            // Torches & Lanterns
-            if (lower.Contains("torch") || lower.Contains("lantern"))
+            // Torches & Lanterns & Light Artifacts
+            if (lower.Contains("lantern") || lower.Contains("lamp"))
             {
-                return ("res://assets/models/props/Torch_Metal.fbx", 0.45f);
+                return ("res://assets/models/props/lantern_standing.gltf", 0.28f);
+            }
+            if (lower.Contains("phial") || lower.Contains("star of") || lower.Contains("arkenstone"))
+            {
+                return ("res://assets/models/items/Crystal1.fbx", 0.22f);
             }
             // Bags & Backpacks
             if (lower.Contains("bag") || lower.Contains("pouch") || lower.Contains("pack") || lower.Contains("sack"))
             {
-                return ("res://assets/models/items/Backpack.fbx", 0.45f);
+                return ("res://assets/models/items/Backpack.fbx", 0.20f);
             }
             // Keys & Lockpicks
             if (lower.Contains("key") || lower.Contains("lockpick") || lower.Contains("padlock"))
             {
-                return ("res://assets/models/items/Key1.fbx", 0.45f);
+                return ("res://assets/models/items/Key1.fbx", 0.18f);
             }
         }
 
@@ -354,19 +397,28 @@ public static class ItemModelResolver
 
     private static PackedScene GetModel(string path)
     {
+        if (string.IsNullOrEmpty(path)) return null;
+
         if (_modelCache.TryGetValue(path, out var scene))
         {
             return scene;
         }
 
-        if (ResourceLoader.Exists(path))
+        try
         {
-            scene = GD.Load<PackedScene>(path);
-            if (scene != null)
+            if (ResourceLoader.Exists(path))
             {
-                _modelCache[path] = scene;
-                return scene;
+                scene = GD.Load<PackedScene>(path);
+                if (scene != null)
+                {
+                    _modelCache[path] = scene;
+                    return scene;
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[ItemModelResolver] Failed to load model '{path}': {ex.Message}");
         }
 
         return null;

@@ -97,10 +97,10 @@ public partial class Overlay : Control
     private Rect2 GetMinimapRect()
     {
         var top = _cell.Y + 12f;
-        var baseW = 240f;
-        var baseH = 180f;
+        var baseW = Mathf.Clamp(View.X * 0.16f, 240f, 420f);
+        var baseH = Mathf.Clamp(View.Y * 0.20f, 180f, 320f);
         var maxW = Mathf.Max(140f, View.X - Margin * 2);
-        var maxH = Mathf.Max(100f, View.Y - top - (_cell.Y * 2 + 20f));
+        var maxH = Mathf.Max(100f, View.Y - top - (_cell.Y * 3 + 30f));
         var w = Mathf.Clamp(baseW * MinimapScale, 140f, maxW);
         var h = Mathf.Clamp(baseH * MinimapScale, 100f, maxH);
         var left = View.X - w - Margin;
@@ -801,6 +801,7 @@ public partial class Overlay : Control
         var lines = Mathf.FloorToInt((View.Y - _cell.Y * 3) / _cell.Y);
         var ox = Mathf.Clamp(px - cols / 2, 0, Mathf.Max(0, w - cols));
         var oy = Mathf.Clamp(py - lines / 2, 0, Mathf.Max(0, h - lines));
+        var startX = Mathf.Max(0f, (View.X - cols * _cell.X) / 2f);
         var top = _cell.Y * 2;
 
         // Top tactical header bar
@@ -813,7 +814,7 @@ public partial class Overlay : Control
         // Draw vision cone if player is in visible window
         if (px >= ox && px < ox + cols && py >= oy && py < oy + lines)
         {
-            var playerPos = new Vector2((px - ox) * _cell.X + _cell.X / 2f, top + (py - oy) * _cell.Y + _cell.Y / 2f);
+            var playerPos = new Vector2(startX + (px - ox) * _cell.X + _cell.X / 2f, top + (py - oy) * _cell.Y + _cell.Y / 2f);
             var coneDist = _cell.Y * 4.0f;
             DrawVisionCone(playerPos, coneDist, FacingName, new Color(1.0f, 0.88f, 0.35f, 0.16f), new Color(1.0f, 0.90f, 0.50f, 0.40f));
         }
@@ -848,7 +849,7 @@ public partial class Overlay : Control
                 }
 
                 var inView = (flag & 0x2) != 0;
-                var cellRect = new Rect2(c * _cell.X, top + row * _cell.Y, _cell.X, _cell.Y);
+                var cellRect = new Rect2(startX + c * _cell.X, top + row * _cell.Y, _cell.X, _cell.Y);
 
                 // FoW Tile Underlay Smoothing
                 if (inView)
@@ -872,14 +873,14 @@ public partial class Overlay : Control
                 var isPlayer = (cell == px && oy + row == py);
                 if (isPlayer)
                 {
-                    var playerPos = new Vector2(c * _cell.X + _cell.X / 2f, top + row * _cell.Y + _cell.Y / 2f);
+                    var playerPos = new Vector2(startX + c * _cell.X + _cell.X / 2f, top + row * _cell.Y + _cell.Y / 2f);
                     DrawCircle(playerPos, _cell.Y * 0.60f, new Color(1.0f, 0.85f, 0.25f, 0.35f));
                     DrawDirectionalPointer(playerPos, _cell.Y * 0.65f, FacingName,
                         new Color(1.0f, 0.95f, 0.40f), new Color(0.15f, 0.10f, 0.02f, 0.95f));
                 }
                 else
                 {
-                    DrawString(_font, new Vector2(c * _cell.X, top + row * _cell.Y + _font.GetAscent(_fontSize)),
+                    DrawString(_font, new Vector2(startX + c * _cell.X, top + row * _cell.Y + _font.GetAscent(_fontSize)),
                         ch.ToString(), HorizontalAlignment.Left, -1, _fontSize, colour);
                 }
             }
@@ -895,7 +896,7 @@ public partial class Overlay : Control
                 if (pulseT >= 0f && pulseT <= 1f)
                 {
                     var centerPos = new Vector2(
-                        (p.X - ox) * _cell.X + _cell.X / 2f,
+                        startX + (p.X - ox) * _cell.X + _cell.X / 2f,
                         top + (p.Y - oy) * _cell.Y + _cell.Y / 2f);
                     var radius = Mathf.Lerp(_cell.Y * 0.4f, _cell.Y * 2.2f, pulseT);
                     var alpha = (1f - pulseT) * p.Color.A;

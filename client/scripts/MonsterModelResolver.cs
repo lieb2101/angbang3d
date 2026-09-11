@@ -169,9 +169,125 @@ public class MonsterModelRule
 /// </summary>
 public static class MonsterModelResolver
 {
+    public const float MinModelScale = 0.35f;
+    public const float MaxModelScale = 1.85f;
+
     private static readonly Dictionary<string, PackedScene> _modelCache = new();
+    private static readonly Dictionary<string, Texture2D> _textureCache = new();
     private static readonly Dictionary<char, List<MonsterModelRule>> _modelRules = new();
     private static readonly Dictionary<string, (Texture2D Albedo, Texture2D Normal)> _spriteCache = new();
+    private static readonly Dictionary<string, StandardMaterial3D> _creatureMaterialCache = new();
+
+    /// <summary>
+    /// Generates high-resolution procedural PBR textures & materials for creature tokens
+    /// (fur, reptilian scales, chitin, wet slime, bark, stone, etc.)
+    /// </summary>
+    public static StandardMaterial3D GetProceduralCreatureMaterial(string textureType, Color baseTone, float roughness = 0.5f, float metallic = 0.0f, bool isWet = false)
+    {
+        var key = $"{textureType}_{baseTone.ToHtml()}_{roughness:F2}_{metallic:F2}_{isWet}";
+        if (_creatureMaterialCache.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        const int size = 256;
+        var albedoImg = Image.CreateEmpty(size, size, true, Image.Format.Rgba8);
+        var normalImg = Image.CreateEmpty(size, size, true, Image.Format.Rgba8);
+
+        for (int y = 0; y < size; y++)
+        {
+            float v = (float)y / size;
+            for (int x = 0; x < size; x++)
+            {
+                float u = (float)x / size;
+                float pattern = 0f;
+                float nx = 0f;
+                float ny = 0f;
+
+                switch (textureType.ToLowerInvariant())
+                {
+                    case "fur":
+                        // Fine directional fur strands with directional grain
+                        var strand = Mathf.Sin(x * 1.8f + Mathf.Sin(y * 0.4f) * 4f);
+                        var undercoat = Mathf.Sin(x * 0.5f) * Mathf.Cos(y * 0.5f);
+                        pattern = (strand * 0.6f + undercoat * 0.4f) * 0.15f;
+                        nx = Mathf.Cos(x * 1.8f) * 0.4f;
+                        ny = 0.2f;
+                        break;
+
+                    case "scales":
+                        // Hexagonal / overlapping reptilian scale shingles
+                        var sx = x * 0.22f;
+                        var sy = y * 0.22f + ((x / 14) % 2 == 0 ? 0.5f : 0f);
+                        var cellX = sx - MathF.Floor(sx) - 0.5f;
+                        var cellY = sy - MathF.Floor(sy) - 0.5f;
+                        var dist = MathF.Sqrt(cellX * cellX + cellY * cellY);
+                        pattern = (1.0f - Mathf.Clamp(dist * 2.2f, 0f, 1f)) * 0.28f - 0.12f;
+                        nx = cellX * 1.8f;
+                        ny = cellY * 1.8f;
+                        break;
+
+                    case "chitin":
+                        // Polished arthropod shell with fine micro-scratches and plate seams
+                        var seam = MathF.Abs(Mathf.Sin(y * 0.12f));
+                        var micro = Mathf.Sin(x * 2.5f) * Mathf.Cos(y * 2.5f) * 0.05f;
+                        pattern = (seam > 0.92f ? -0.25f : 0.05f) + micro;
+                        nx = micro * 2.0f;
+                        ny = (seam > 0.92f ? 0.6f : 0f);
+                        break;
+
+                    case "bark":
+                        // Deep vertical crags & wood grain
+                        var crag = Mathf.Sin(x * 0.45f + Mathf.Sin(y * 0.15f) * 3f);
+                        pattern = crag * 0.25f;
+                        nx = Mathf.Cos(x * 0.45f) * 0.7f;
+                        ny = 0.1f;
+                        break;
+
+                    default:
+                        pattern = (Mathf.Sin(x * 0.3f) * Mathf.Cos(y * 0.3f)) * 0.10f;
+                        nx = Mathf.Cos(x * 0.3f) * 0.3f;
+                        ny = Mathf.Sin(y * 0.3f) * 0.3f;
+                        break;
+                }
+
+                var r = Mathf.Clamp(baseTone.R + pattern, 0f, 1f);
+                var g = Mathf.Clamp(baseTone.G + pattern, 0f, 1f);
+                var b = Mathf.Clamp(baseTone.B + pattern, 0f, 1f);
+                albedoImg.SetPixel(x, y, new Color(r, g, b, 1.0f));
+
+                var nz = MathF.Sqrt(Mathf.Clamp(1.0f - (nx * nx + ny * ny), 0.1f, 1.0f));
+                normalImg.SetPixel(x, y, new Color(nx * 0.5f + 0.5f, ny * 0.5f + 0.5f, nz * 0.5f + 0.5f, 1.0f));
+            }
+        }
+
+        albedoImg.GenerateMipmaps();
+        normalImg.GenerateMipmaps();
+
+        var albedoTex = ImageTexture.CreateFromImage(albedoImg);
+        var normalTex = ImageTexture.CreateFromImage(normalImg);
+
+        var mat = new StandardMaterial3D
+        {
+            AlbedoTexture = albedoTex,
+            NormalEnabled = true,
+            NormalTexture = normalTex,
+            NormalScale = 0.85f,
+            Roughness = isWet ? 0.15f : roughness,
+            Metallic = metallic,
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
+        };
+
+        if (isWet)
+        {
+            mat.RimEnabled = true;
+            mat.Rim = 0.45f;
+            mat.RimTint = 0.25f;
+        }
+
+        _creatureMaterialCache[key] = mat;
+        return mat;
+    }
 
     static MonsterModelResolver()
     {
@@ -395,7 +511,7 @@ public static class MonsterModelResolver
 
         // Resolve 3D character mesh model path if available
         var (modelPath, scale, isEthereal, isFloating, customSpeed, equipmentRole) = ResolveModelConfig(glyph, raceName, lowerName);
-        scale = Mathf.Clamp(scale, 0.45f, 2.0f);
+        scale = Mathf.Clamp(scale, MinModelScale, MaxModelScale);
 
         if (modelPath != null && ResourceLoader.Exists(modelPath))
         {
@@ -420,23 +536,53 @@ public static class MonsterModelResolver
                 entity.BaseY = isFloating ? 0.35f : 0.0f;
                 if (modelPath.Contains("tree_dead_large"))
                 {
-                    entity.ModelHeight = 4.8f * scale;
+                    entity.ModelHeight = 2.80f * scale;
                 }
-                else if (modelPath.Contains("chest"))
+                else if (modelPath.Contains("Chest_Closed") || modelPath.Contains("chest"))
+                {
+                    entity.ModelHeight = 0.65f * scale;
+                }
+                else if (modelPath.Contains("Gold_Ingots") || modelPath.Contains("coin"))
+                {
+                    entity.ModelHeight = 0.50f * scale;
+                }
+                else if (modelPath.Contains("Spider"))
                 {
                     entity.ModelHeight = 0.85f * scale;
                 }
-                else if (modelPath.Contains("coin_stack"))
+                else if (modelPath.Contains("Rat"))
                 {
-                    entity.ModelHeight = 1.2f * scale;
+                    entity.ModelHeight = 0.60f * scale;
                 }
-                else
+                else if (modelPath.Contains("Snake"))
+                {
+                    entity.ModelHeight = 0.65f * scale;
+                }
+                else if (modelPath.Contains("Frog"))
+                {
+                    entity.ModelHeight = 0.70f * scale;
+                }
+                else if (modelPath.Contains("Wasp"))
+                {
+                    entity.ModelHeight = 0.85f * scale;
+                    entity.BaseY = 0.35f;
+                    entity.IsFloating = true;
+                }
+                else if (modelPath.Contains("Imp") || modelPath.Contains("Puglin"))
+                {
+                    entity.ModelHeight = 1.35f * scale;
+                }
+                else if (modelPath.Contains("King") || modelPath.Contains("Punk"))
                 {
                     entity.ModelHeight = 2.05f * scale;
                 }
+                else
+                {
+                    entity.ModelHeight = 1.85f * scale;
+                }
 
-                // Realistic anatomically grounded scale
-                instance.Scale = new Vector3(scale * 0.90f, scale * 1.05f, scale * 0.90f);
+                // Realistic scale applied uniformly to character rigs
+                instance.Scale = new Vector3(scale, scale, scale);
                 instance.Position = Vector3.Zero;
 
                 var ap = FindAnimationPlayer(instance);
@@ -497,23 +643,31 @@ public static class MonsterModelResolver
     private static string SelectTownspersonModel(string raceName)
     {
         var lower = (raceName ?? "").ToLowerInvariant();
-        if (lower.Contains("female") || lower.Contains("woman") || lower.Contains("lady") || lower.Contains("maiden") || lower.Contains("damsel"))
+        if (lower.Contains("female") || lower.Contains("woman") || lower.Contains("lady") || lower.Contains("maiden") || lower.Contains("damsel") || lower.Contains("wench") || lower.Contains("maid"))
         {
             return "res://assets/models/characters/Casual.gltf";
         }
-        if (lower.Contains("farmer") || lower.Contains("gnome") || lower.Contains("halfling") || lower.Contains("hobbit"))
+        if (lower.Contains("beggar") || lower.Contains("leper") || lower.Contains("urchin") || lower.Contains("idiot") || lower.Contains("hermit") || lower.Contains("drunk") || lower.Contains("peasant") || lower.Contains("wretch"))
         {
             return "res://assets/models/characters/Farmer.gltf";
         }
-        if (lower.Contains("worker") || lower.Contains("smith") || lower.Contains("miner") || lower.Contains("artisan"))
+        if (lower.Contains("farmer"))
+        {
+            return "res://assets/models/characters/Farmer.gltf";
+        }
+        if (lower.Contains("merchant") || lower.Contains("shopkeeper") || lower.Contains("innkeeper") || lower.Contains("clerk") || lower.Contains("crier") || lower.Contains("scribe"))
+        {
+            return "res://assets/models/characters/Formal.gltf";
+        }
+        if (lower.Contains("worker") || lower.Contains("smith") || lower.Contains("miner") || lower.Contains("artisan") || lower.Contains("craftsman") || lower.Contains("butcher") || lower.Contains("baker") || lower.Contains("cook"))
         {
             return "res://assets/models/characters/Worker.gltf";
         }
-        if (lower.Contains("merchant") || lower.Contains("shopkeeper") || lower.Contains("innkeeper"))
+        if (lower.Contains("mercenary") || lower.Contains("veteran") || lower.Contains("rogue") || lower.Contains("scoundrel") || lower.Contains("brawler"))
         {
-            return "res://assets/models/characters/Casual_2.gltf";
+            return "res://assets/models/characters/Adventurer.gltf";
         }
-        return "res://assets/models/characters/Casual_Hoodie.gltf";
+        return "res://assets/models/characters/Farmer.gltf";
     }
 
     private static void AddModelRule(char glyph, MonsterModelRule rule)
@@ -529,140 +683,159 @@ public static class MonsterModelResolver
     private static void InitModelRules()
     {
         // =========================================================================
-        // High-Fidelity Realistic Fantasy 3D Asset Registry
-        // All models use verified skeletal rigs with rich looping animations!
+        // High-Fidelity Realistic CC0 Fantasy 3D Asset Registry
+        // All humanoid character models use properly scaled glTF rigs with rich animations!
+        // Dedicated non-humanoid creatures (rats, spiders, snakes, centipedes, etc.)
+        // use fully-articulated procedural 3D anatomical creature models.
         // =========================================================================
 
-        // 1. Rats & Rodents (r) - Procedural anatomical tokens / animated enemies
-        AddModelRule('r', new MonsterModelRule("res://assets/models/monsters/enemies/Rat.fbx", 0.40f, speed: 1.25f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("mouse") || n.Contains("small")));
-        AddModelRule('r', new MonsterModelRule("res://assets/models/monsters/enemies/Rat.fbx", 0.65f, speed: 1.15f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("giant") || n.Contains("plague") || n.Contains("rabid")));
-        AddModelRule('r', new MonsterModelRule("res://assets/models/monsters/enemies/Rat.fbx", 0.52f, speed: 1.20f, equipment: EquipmentRole.Unarmed));
+        // 1. Minor Demons, Imps, Quasits, Lemures (u) - Bestiary rigged animated Imp
+        AddModelRule('u', new MonsterModelRule("res://assets/models/monsters/bestiary/Imp.glb", 0.55f, isFloating: true, speed: 1.25f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("small") || n.Contains("homunculus")));
+        AddModelRule('u', new MonsterModelRule("res://assets/models/monsters/bestiary/Imp.glb", 0.65f, isFloating: true, speed: 1.20f, equipment: EquipmentRole.Unarmed));
 
-        // 2. Spiders & Arachnids (S)
-        AddModelRule('S', new MonsterModelRule("res://assets/models/monsters/enemies/Spider.fbx", 0.50f, speed: 1.10f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("small") || n.Contains("spiderling")));
-        AddModelRule('S', new MonsterModelRule("res://assets/models/monsters/enemies/Spider.fbx", 0.85f, speed: 1.0f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("giant") || n.Contains("phase") || n.Contains("shelob") || n.Contains("ungoliant")));
-        AddModelRule('S', new MonsterModelRule("res://assets/models/monsters/enemies/Spider.fbx", 0.68f, speed: 1.05f, equipment: EquipmentRole.Unarmed));
+        // 2. Kobolds (k), Yeeks (y) - Scaled small animated rogues / archers / Bestiary Puglin
+        AddModelRule('k', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.65f, speed: 1.15f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout") || n.Contains("sniper")));
+        AddModelRule('k', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.65f, speed: 1.05f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("shaman") || n.Contains("mage")));
+        AddModelRule('k', new MonsterModelRule("res://assets/models/monsters/bestiary/Puglin.glb", 0.60f, speed: 1.15f, equipment: EquipmentRole.Rogue, matcher: n => n.Contains("small")));
+        AddModelRule('k', new MonsterModelRule("res://assets/models/monsters/bestiary/Puglin.glb", 0.68f, speed: 1.15f, equipment: EquipmentRole.Rogue));
+        AddModelRule('y', new MonsterModelRule("res://assets/models/monsters/bestiary/Puglin.glb", 0.55f, speed: 1.20f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("blue") || n.Contains("small")));
+        AddModelRule('y', new MonsterModelRule("res://assets/models/monsters/bestiary/Puglin.glb", 0.62f, speed: 1.20f, equipment: EquipmentRole.Unarmed));
 
-        // 3. Snakes & Serpents (J)
-        AddModelRule('J', new MonsterModelRule("res://assets/models/monsters/enemies/Snake_angry.fbx", 0.80f, speed: 1.10f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("cobra") || n.Contains("viper") || n.Contains("angry") || n.Contains("mamba")));
-        AddModelRule('J', new MonsterModelRule("res://assets/models/monsters/enemies/Snake.fbx", 0.72f, speed: 1.05f, equipment: EquipmentRole.Unarmed));
-
-        // 4. Reptiles, Frogs, Lizards (R)
-        AddModelRule('R', new MonsterModelRule("res://assets/models/monsters/enemies/Frog.fbx", 0.60f, speed: 1.10f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("frog") || n.Contains("toad")));
-        AddModelRule('R', new MonsterModelRule("res://assets/models/monsters/enemies/Snake.fbx", 0.75f, speed: 1.05f, equipment: EquipmentRole.Unarmed));
-
-        // 5. Insects, Wasps, Centipedes, Beetles (a, I, c, K)
-        AddModelRule('a', new MonsterModelRule("res://assets/models/monsters/enemies/Wasp.fbx", 0.60f, isFloating: true, speed: 1.30f, equipment: EquipmentRole.Unarmed));
-        AddModelRule('I', new MonsterModelRule("res://assets/models/monsters/enemies/Wasp.fbx", 0.65f, isFloating: true, speed: 1.25f, equipment: EquipmentRole.Unarmed));
-        AddModelRule('c', new MonsterModelRule("res://assets/models/monsters/enemies/Wasp.fbx", 0.55f, isFloating: false, speed: 1.15f, equipment: EquipmentRole.Unarmed));
-        AddModelRule('K', new MonsterModelRule("res://assets/models/monsters/enemies/Wasp.fbx", 0.70f, isFloating: true, speed: 1.25f, equipment: EquipmentRole.Unarmed));
-
-        // 6. Minor Demons, Imps, Quasits, Lemures (u) - Animated fast imp with fiery red tint
-        AddModelRule('u', new MonsterModelRule("res://assets/models/characters/Punk.gltf", 0.72f, speed: 1.20f, equipment: EquipmentRole.Unarmed));
-
-        // 7. Kobolds (k), Yeeks (y) - Scaled small animated rogues / archers
-        AddModelRule('k', new MonsterModelRule("res://assets/models/characters/Soldier.gltf", 0.65f, speed: 1.15f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout")));
-        AddModelRule('k', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.62f, speed: 1.15f, equipment: EquipmentRole.Rogue));
-        AddModelRule('y', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.58f, speed: 1.20f, equipment: EquipmentRole.Unarmed));
-
-        // 8. Orcs, Goblins, Snagas, Uruks (o)
-        AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.75f, speed: 1.10f, equipment: EquipmentRole.Rogue, matcher: n => n.Contains("goblin") || n.Contains("snaga")));
+        // 3. Orcs, Goblins, Snagas, Uruks (o)
+        AddModelRule('o', new MonsterModelRule("res://assets/models/monsters/bestiary/Puglin.glb", 0.68f, speed: 1.10f, equipment: EquipmentRole.Rogue, matcher: n => n.Contains("goblin") || n.Contains("snaga")));
+        AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.85f, speed: 1.05f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout") || n.Contains("sniper")));
+        AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.85f, speed: 0.95f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("shaman") || n.Contains("mage") || n.Contains("curse")));
+        AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Punk.gltf", 0.98f, speed: 1.0f, equipment: EquipmentRole.Barbarian, matcher: n => n.Contains("uruk") || n.Contains("captain") || n.Contains("chieftain") || n.Contains("leader") || n.Contains("black orc")));
         AddModelRule('o', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.88f, speed: 1.0f, equipment: EquipmentRole.Barbarian));
 
-        // 9. Skeletons (s) - Animated undead warrior / archer / mage
-        AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Soldier.gltf", 0.85f, speed: 1.05f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout") || n.Contains("sniper")));
-        AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.90f, speed: 0.90f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("mage") || n.Contains("sorcerer") || n.Contains("druj")));
+        // 4. Skeletons (s) - Animated undead warrior / archer / mage
+        AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Soldier.gltf", 0.88f, speed: 1.05f, equipment: EquipmentRole.Archer, matcher: n => n.Contains("archer") || n.Contains("scout") || n.Contains("sniper")));
+        AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.88f, speed: 0.90f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("mage") || n.Contains("sorcerer") || n.Contains("druj") || n.Contains("necromancer")));
         AddModelRule('s', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 0.92f, speed: 1.0f, equipment: EquipmentRole.Warrior));
 
-        // 10. Zombies, Mummies, Ghouls (z)
+        // 5. Zombies, Mummies, Ghouls (z)
+        AddModelRule('z', new MonsterModelRule("res://assets/models/characters/Worker.gltf", 0.90f, speed: 0.80f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("worker") || n.Contains("ghoul")));
+        AddModelRule('z', new MonsterModelRule("res://assets/models/characters/Farmer.gltf", 0.90f, speed: 0.75f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("mummy")));
         AddModelRule('z', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.90f, speed: 0.80f, equipment: EquipmentRole.Unarmed));
 
-        // 11. Liches and Arch-Liches (L)
-        AddModelRule('L', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 1.15f, speed: 0.90f, equipment: EquipmentRole.Mage));
+        // 6. Liches and Arch-Liches (L)
+        AddModelRule('L', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 1.05f, speed: 0.90f, equipment: EquipmentRole.Mage));
 
-        // 12. Wights, Wraiths, Nazgul, Ringwraiths (W)
-        AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 1.08f, isEthereal: true, isFloating: true, speed: 0.90f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("nazgul") || n.Contains("ringwraith") || n.Contains("wraith")));
-        AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 1.0f, isEthereal: true, isFloating: false, speed: 0.85f, equipment: EquipmentRole.Warrior, matcher: n => n.Contains("wight")));
-        AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 1.0f, isEthereal: true, isFloating: true, speed: 0.90f, equipment: EquipmentRole.Warrior));
+        // 7. Wights, Wraiths, Nazgul, Ringwraiths (W)
+        AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 1.10f, isEthereal: true, isFloating: true, speed: 0.90f, equipment: EquipmentRole.TwoHandedSword, matcher: n => n.Contains("nazgul") || n.Contains("ringwraith") || n.Contains("witch-king")));
+        AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 1.00f, isEthereal: true, isFloating: true, speed: 0.90f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("wraith")));
+        AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 0.95f, isEthereal: true, isFloating: false, speed: 0.85f, equipment: EquipmentRole.Warrior, matcher: n => n.Contains("wight")));
+        AddModelRule('W', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 0.98f, isEthereal: true, isFloating: true, speed: 0.90f, equipment: EquipmentRole.Warrior));
 
-        // 13. Ghosts, Spectres, Poltergeists (G)
-        AddModelRule('G', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.95f, isEthereal: true, isFloating: true, speed: 0.85f, equipment: EquipmentRole.Unarmed));
+        // 8. Ghosts, Spectres, Poltergeists (G)
+        AddModelRule('G', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.90f, isEthereal: true, isFloating: true, speed: 0.85f, equipment: EquipmentRole.Unarmed));
 
-        // 14. Vampires (V)
+        // 9. Vampires (V)
         AddModelRule('V', new MonsterModelRule("res://assets/models/characters/King.gltf", 1.05f, speed: 1.05f, equipment: EquipmentRole.Mage, matcher: n => n.Contains("lord") || n.Contains("master") || n.Contains("ancient") || n.Contains("nosferatu")));
-        AddModelRule('V', new MonsterModelRule("res://assets/models/characters/King.gltf", 1.0f, speed: 1.05f, equipment: EquipmentRole.Unarmed));
+        AddModelRule('V', new MonsterModelRule("res://assets/models/characters/King.gltf", 0.98f, speed: 1.05f, equipment: EquipmentRole.Warrior));
 
-        // 15. Ainur, Maiar (A)
-        AddModelRule('A', new MonsterModelRule("res://assets/models/characters/King.gltf", 1.20f, speed: 1.0f, equipment: EquipmentRole.Warrior));
+        // 10. Ainur, Maiar (A)
+        AddModelRule('A', new MonsterModelRule("res://assets/models/characters/King.gltf", 1.15f, speed: 1.0f, equipment: EquipmentRole.TwoHandedSword));
 
-        // 16. Major Demons, Balrogs, Pit Fiends (U)
-        AddModelRule('U', new MonsterModelRule("res://assets/models/characters/King.gltf", 1.85f, speed: 1.0f, equipment: EquipmentRole.TwoHandedAxe));
+        // 11. Major Demons, Balrogs, Pit Fiends (U)
+        AddModelRule('U', new MonsterModelRule("res://assets/models/characters/King.gltf", 1.35f, speed: 1.0f, equipment: EquipmentRole.TwoHandedAxe));
 
-        // 17. Giants, Titans, Cyclops, Morgoth (P)
-        AddModelRule('P', new MonsterModelRule("res://assets/models/characters/King.gltf", 2.10f, speed: 0.85f, equipment: EquipmentRole.TwoHandedAxe, matcher: n => n.Contains("morgoth")));
-        AddModelRule('P', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 1.85f, speed: 0.85f, equipment: EquipmentRole.Barbarian));
+        // 12. Giants, Titans, Cyclops, Morgoth (P)
+        AddModelRule('P', new MonsterModelRule("res://assets/models/characters/King.gltf", 1.55f, speed: 0.85f, equipment: EquipmentRole.TwoHandedAxe, matcher: n => n.Contains("morgoth")));
+        AddModelRule('P', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 1.40f, speed: 0.85f, equipment: EquipmentRole.Barbarian));
 
-        // 18. Trolls (T), Ogres (O), Yetis (Y)
-        AddModelRule('T', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 1.45f, speed: 0.90f, equipment: EquipmentRole.Barbarian));
-        AddModelRule('O', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 1.35f, speed: 0.95f, equipment: EquipmentRole.Barbarian));
-        AddModelRule('Y', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 1.35f, speed: 0.90f, equipment: EquipmentRole.Unarmed));
+        // 13. Trolls (T), Ogres (O), Yetis (Y)
+        AddModelRule('T', new MonsterModelRule("res://assets/models/characters/Punk.gltf", 1.25f, speed: 0.90f, equipment: EquipmentRole.Barbarian));
+        AddModelRule('O', new MonsterModelRule("res://assets/models/characters/Punk.gltf", 1.18f, speed: 0.95f, equipment: EquipmentRole.Barbarian));
+        AddModelRule('Y', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 1.18f, speed: 0.90f, equipment: EquipmentRole.Unarmed));
 
-        // 19. Mimics (?) and Creeping Coins ($)
-        AddModelRule('?', new MonsterModelRule("res://assets/models/items/Chest_Closed.fbx", 0.85f, speed: 1.0f, equipment: EquipmentRole.Unarmed));
-        AddModelRule('$', new MonsterModelRule("res://assets/models/items/Gold_Ingots.fbx", 0.90f, speed: 1.0f, equipment: EquipmentRole.Unarmed));
+        // 14. Mimics (?) and Creeping Coins ($)
+        AddModelRule('?', new MonsterModelRule("res://assets/models/items/Chest_Closed.fbx", 0.22f, speed: 1.0f, equipment: EquipmentRole.Unarmed));
+        AddModelRule('$', new MonsterModelRule("res://assets/models/items/Gold_Ingots.fbx", 0.20f, speed: 1.0f, equipment: EquipmentRole.Unarmed));
 
-        // 20. Ents & Trees (l)
-        AddModelRule('l', new MonsterModelRule("res://assets/models/props/tree_dead_large.gltf", 1.10f, speed: 0.5f, equipment: EquipmentRole.Unarmed));
+        // 15. Ents & Trees (l)
+        AddModelRule('l', new MonsterModelRule("res://assets/models/props/tree_dead_large.gltf", 0.40f, speed: 0.5f, equipment: EquipmentRole.Unarmed));
 
-        // 21. Humanoids (h) and People / Adventurers (p)
+        // 16. Humanoids (h) and People / Adventurers (p)
         Func<string, bool> isKnight = n => n.Contains("knight") || n.Contains("paladin") || n.Contains("veteran") ||
             n.Contains("warrior") || n.Contains("soldier") || n.Contains("guard") || n.Contains("captain") ||
-            n.Contains("fighter") || n.Contains("champion") || n.Contains("swordsman") || n.Contains("centurion");
+            n.Contains("fighter") || n.Contains("champion") || n.Contains("swordsman") || n.Contains("centurion") ||
+            n.Contains("lord") || n.Contains("templar");
 
         Func<string, bool> isBarb = n => n.Contains("barbarian") || n.Contains("mercenary") || n.Contains("gladiator") ||
-            n.Contains("berserker") || n.Contains("bouncer") || n.Contains("ruffian") || n.Contains("beastman");
+            n.Contains("berserker") || n.Contains("bouncer") || n.Contains("ruffian") || n.Contains("beastman") || n.Contains("brute");
 
         Func<string, bool> isMage = n => n.Contains("mage") || n.Contains("wizard") || n.Contains("warlock") ||
             n.Contains("sorcerer") || n.Contains("alchemist") || n.Contains("scholar") || n.Contains("priest") ||
             n.Contains("cleric") || n.Contains("sage") || n.Contains("acolyte") || n.Contains("cultist") ||
             n.Contains("druid") || n.Contains("seer") || n.Contains("shaman") || n.Contains("enchanter") || n.Contains("necromancer");
 
+        Func<string, bool> isArcher = n => n.Contains("archer") || n.Contains("scout") || n.Contains("sniper") ||
+            n.Contains("tracker") || n.Contains("marksman") || n.Contains("bowman") || n.Contains("crossbow") || n.Contains("hunter") || n.Contains("ranger") || n.Contains("elf") || n.Contains("dunedain");
+
         Func<string, bool> isThief = n => n.Contains("thief") || n.Contains("rogue") || n.Contains("burglar") ||
-            n.Contains("assassin") || n.Contains("cutpurse") || n.Contains("beggar") || n.Contains("scoundrel") ||
-            n.Contains("bandit") || n.Contains("brigand") || n.Contains("ninja") || n.Contains("scout") || n.Contains("stalker");
+            n.Contains("assassin") || n.Contains("cutpurse") || n.Contains("bandit") || n.Contains("brigand") ||
+            n.Contains("ninja") || n.Contains("stalker") || n.Contains("pickpocket") || n.Contains("scoundrel");
+
+        Func<string, bool> isPeasant = n => n.Contains("peasant") || n.Contains("drunkard") || n.Contains("drunk") ||
+            n.Contains("beggar") || n.Contains("fool") || n.Contains("idiot") || n.Contains("commoner") || n.Contains("villager") ||
+            n.Contains("leper") || n.Contains("urchin") || n.Contains("hermit") || n.Contains("scullion") || n.Contains("slave");
 
         // Rules for 'h'
         AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 0.95f, equipment: EquipmentRole.Warrior, matcher: isKnight));
-        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Punk.gltf", 1.0f, equipment: EquipmentRole.Barbarian, matcher: isBarb));
-        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.95f, speed: 0.95f, equipment: EquipmentRole.Mage, matcher: isMage));
-        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Soldier.gltf", 0.95f, speed: 1.05f, equipment: EquipmentRole.Rogue, matcher: isThief));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.95f, speed: 1.05f, equipment: EquipmentRole.Archer, matcher: isArcher));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.95f, speed: 1.05f, equipment: EquipmentRole.Rogue, matcher: isThief));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Farmer.gltf", 0.90f, speed: 1.0f, equipment: EquipmentRole.Unarmed, matcher: isPeasant));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Punk.gltf", 1.00f, equipment: EquipmentRole.Barbarian, matcher: isBarb));
+        AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.92f, speed: 0.95f, equipment: EquipmentRole.Mage, matcher: isMage));
         AddModelRule('h', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.95f));
 
         // Rules for 'p'
-        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 1.0f, equipment: EquipmentRole.Warrior, matcher: isKnight));
-        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Punk.gltf", 1.05f, equipment: EquipmentRole.Barbarian, matcher: isBarb));
-        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 1.0f, speed: 0.95f, equipment: EquipmentRole.Mage, matcher: isMage));
-        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Soldier.gltf", 1.0f, speed: 1.05f, equipment: EquipmentRole.Rogue, matcher: isThief));
-        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 1.0f));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Medieval.gltf", 0.95f, equipment: EquipmentRole.Warrior, matcher: isKnight));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.95f, speed: 1.05f, equipment: EquipmentRole.Archer, matcher: isArcher));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.95f, speed: 1.05f, equipment: EquipmentRole.Rogue, matcher: isThief));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Farmer.gltf", 0.90f, speed: 1.0f, equipment: EquipmentRole.Unarmed, matcher: isPeasant));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Punk.gltf", 1.00f, equipment: EquipmentRole.Barbarian, matcher: isBarb));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.92f, speed: 0.95f, equipment: EquipmentRole.Mage, matcher: isMage));
+        AddModelRule('p', new MonsterModelRule("res://assets/models/characters/Adventurer.gltf", 0.95f));
 
-        // 22. Nagas (n)
-        AddModelRule('n', new MonsterModelRule("res://assets/models/characters/Witch.gltf", 0.95f, speed: 0.95f, equipment: EquipmentRole.Mage));
+        // 17. Nagas (n) - Rigged 3D Serpent Enemy Models
+        AddModelRule('n', new MonsterModelRule("res://assets/models/monsters/enemies/Snake_angry.fbx", 0.38f, speed: 1.15f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("black") || n.Contains("spirit") || n.Contains("guardian") || n.Contains("fire") || n.Contains("red")));
+        AddModelRule('n', new MonsterModelRule("res://assets/models/monsters/enemies/Snake.fbx", 0.32f, speed: 1.10f, equipment: EquipmentRole.Unarmed));
+
+        // 18. Spiders & Scorpions (S) - Rigged 3D Enemy Models
+        AddModelRule('S', new MonsterModelRule("res://assets/models/monsters/enemies/Spider.fbx", 0.35f, speed: 1.15f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("giant") || n.Contains("shelob") || n.Contains("ungoliant")));
+        AddModelRule('S', new MonsterModelRule("res://assets/models/monsters/enemies/Spider.fbx", 0.25f, speed: 1.20f, equipment: EquipmentRole.Unarmed));
+
+        // 19. Rats & Rodents (r) - Rigged 3D Enemy Models
+        AddModelRule('r', new MonsterModelRule("res://assets/models/monsters/enemies/Rat.fbx", 0.30f, speed: 1.25f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("giant") || n.Contains("wererat")));
+        AddModelRule('r', new MonsterModelRule("res://assets/models/monsters/enemies/Rat.fbx", 0.20f, speed: 1.30f, equipment: EquipmentRole.Unarmed));
+
+        // 20. Snakes & Serpents (J) - Rigged 3D Enemy Models
+        AddModelRule('J', new MonsterModelRule("res://assets/models/monsters/enemies/Snake_angry.fbx", 0.28f, speed: 1.15f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("viper") || n.Contains("cobra") || n.Contains("rattle") || n.Contains("asp")));
+        AddModelRule('J', new MonsterModelRule("res://assets/models/monsters/enemies/Snake.fbx", 0.25f, speed: 1.15f, equipment: EquipmentRole.Unarmed));
+
+        // 21. Wasps & Flying Insects (F) - Rigged 3D Enemy Models
+        AddModelRule('F', new MonsterModelRule("res://assets/models/monsters/enemies/Wasp.fbx", 0.25f, isFloating: true, speed: 1.40f, equipment: EquipmentRole.Unarmed));
+
+        // 22. Frogs & Amphibians (R) - Rigged 3D Frog Model for Frogs/Toads
+        AddModelRule('R', new MonsterModelRule("res://assets/models/monsters/enemies/Frog.fbx", 0.25f, speed: 1.10f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("frog") || n.Contains("toad")));
     }
 
     private static (string ModelPath, float Scale, bool IsEthereal, bool IsFloating, float Speed, EquipmentRole Equipment) ResolveModelConfig(
         char glyph, string raceName, string lowerName)
     {
-        // 20. Townsfolk (t) - completely unarmed / bare-handed
+        // Townsfolk (t) - completely unarmed / bare-handed
         if (glyph == 't')
         {
-            float scale = 0.85f;
+            float scale = 0.88f;
             if (lowerName.Contains("dwarf") || lowerName.Contains("hobbit") || lowerName.Contains("gnome") ||
                 lowerName.Contains("halfling"))
             {
                 scale = 0.65f;
             }
             var townModel = SelectTownspersonModel(raceName);
-            return (townModel, Mathf.Clamp(scale, 0.45f, 2.0f), false, false, 1.0f, EquipmentRole.Unarmed);
+            return (townModel, Mathf.Clamp(scale, MinModelScale, MaxModelScale), false, false, 1.0f, EquipmentRole.Unarmed);
         }
 
         if (_modelRules.TryGetValue(glyph, out var rules))
@@ -677,18 +850,19 @@ public static class MonsterModelResolver
                         if (lowerName.Contains("dwarf") || lowerName.Contains("hobbit") || lowerName.Contains("gnome") ||
                             lowerName.Contains("halfling") || lowerName.Contains("leprechaun"))
                         {
-                            scale *= (0.65f / 0.90f);
+                            scale *= (0.65f / 0.95f);
                         }
                         else if (lowerName.Contains("elf") || lowerName.Contains("ranger") || lowerName.Contains("dunedain"))
                         {
-                            scale *= (0.98f / 0.90f);
+                            scale *= (0.98f / 0.95f);
                         }
                     }
-                    return (rule.ModelPath, Mathf.Clamp(scale, 0.45f, 2.0f), rule.IsEthereal, rule.IsFloating, rule.Speed, rule.Equipment);
+                    return (rule.ModelPath, Mathf.Clamp(scale, MinModelScale, MaxModelScale), rule.IsEthereal, rule.IsFloating, rule.Speed, rule.Equipment);
                 }
             }
         }
 
+        // Return null so unmapped non-humanoid creatures use their dedicated high-res sculpted procedural tokens!
         return (null, 1.0f, false, false, 1.0f, EquipmentRole.Auto);
     }
 
@@ -751,8 +925,8 @@ public static class MonsterModelResolver
             return cached;
         }
 
-        const int w = 256;
-        const int h = 384;
+        const int w = 512;
+        const int h = 768;
 
         var albedoImg = Image.CreateEmpty(w, h, true, Image.Format.Rgba8);
         var normalImg = Image.CreateEmpty(w, h, true, Image.Format.Rgba8);
@@ -893,126 +1067,151 @@ public static class MonsterModelResolver
         switch (glyph)
         {
             case 'e': // Floating Eye
-                tokenBody = CreateEyeToken(entity, color);
-                height = 1.15f;
+                var eyeScale = 0.48f;
+                tokenBody = CreateEyeToken(entity, color, eyeScale);
+                height = 0.80f;
                 isFloating = true;
                 break;
 
             case 'w': // Worm Mass
-                tokenBody = CreateWormToken(entity, color);
-                height = 0.45f;
+                var wormScale = 0.38f;
+                tokenBody = CreateWormToken(entity, color, wormScale);
+                height = 0.20f + 0.22f * wormScale;
                 break;
 
             case 'j' or 'i': // Jelly, Slime, Ooze, Icky Thing
-                tokenBody = CreateSlimeToken(entity, color);
-                height = 0.70f;
+                var slimeScale = 0.48f;
+                tokenBody = CreateSlimeToken(entity, color, slimeScale);
+                height = 0.20f + 0.38f * slimeScale;
                 break;
 
             case 'm' or ',': // Mold, Mushroom
-                tokenBody = CreateMushroomToken(entity, color);
-                height = 0.75f;
+                var mushScale = 0.42f;
+                tokenBody = CreateMushroomToken(entity, color, mushScale);
+                height = 0.20f + 0.32f * mushScale;
                 break;
 
             case 'c': // Centipede (Giant white centipede, etc.)
-                tokenBody = CreateCentipedeToken(entity, color, 0.95f);
-                height = 0.50f;
+                var centScale = lowerName.Contains("giant") ? 0.48f : (lowerName.Contains("metallic") ? 0.52f : 0.38f);
+                tokenBody = CreateCentipedeToken(entity, color, centScale);
+                height = 0.18f + 0.25f * centScale;
                 break;
 
-            case 'a' or 'I' or 'K' or 'F': // Ant, Insect, Killer Beetle, Dragonfly
-                var isBeetle = glyph == 'K';
-                var isFly = glyph == 'F';
-                var insectScale = Mathf.Clamp(isBeetle ? 1.25f : (glyph == 'a' ? 0.95f : 0.85f), 0.45f, 2.0f);
-                tokenBody = CreateInsectToken(entity, color, insectScale, isFly, isBeetle);
-                height = 0.45f + 0.35f * insectScale;
-                if (isFly) isFloating = true;
+            case 'a': // Ant (Soldier ant, giant red ant, fire ant, army ant)
+                var antScale = lowerName.Contains("queen") ? 0.58f : (lowerName.Contains("soldier") ? 0.36f : (lowerName.Contains("giant") ? 0.42f : 0.30f));
+                tokenBody = CreateInsectToken(entity, color, antScale, isFlying: false, isBeetle: false);
+                height = 0.22f + 0.30f * antScale;
+                break;
+
+            case 'K': // Killer Beetle
+                var beetleScale = lowerName.Contains("giant") || lowerName.Contains("rhinoceros") ? 0.60f : 0.46f;
+                tokenBody = CreateInsectToken(entity, color, beetleScale, isFlying: false, isBeetle: true);
+                height = 0.24f + 0.32f * beetleScale;
+                break;
+
+            case 'F': // Dragonfly / Fly
+                var flyScale = lowerName.Contains("giant") ? 0.46f : 0.36f;
+                tokenBody = CreateInsectToken(entity, color, flyScale, isFlying: true, isBeetle: false);
+                height = 0.70f;
+                isFloating = true;
+                break;
+
+            case 'I': // Generic crawling/swarming insects
+                var insectScale = 0.34f;
+                tokenBody = CreateInsectToken(entity, color, insectScale, isFlying: false, isBeetle: false);
+                height = 0.28f;
                 break;
 
             case 'S': // Spider, Scorpion
-                var spiderScale = Mathf.Clamp(1.0f, 0.45f, 2.0f);
+                var spiderScale = lowerName.Contains("shelob") || lowerName.Contains("ungoliant") ? 1.05f : (lowerName.Contains("giant") ? 0.62f : (lowerName.Contains("cave") || lowerName.Contains("phase") ? 0.44f : 0.34f));
                 tokenBody = CreateArachnidToken(entity, color, spiderScale);
-                height = 0.45f + 0.35f * spiderScale;
+                height = 0.20f + 0.32f * spiderScale;
                 break;
 
             case 'b' or 'B': // Bat, Bird, Crow, Raven, Eagle
                 var isBird = glyph == 'B';
-                tokenBody = CreateBatToken(entity, color, isBird);
-                height = 1.05f;
+                var batScale = isBird ? (lowerName.Contains("eagle") ? 0.65f : 0.38f) : (lowerName.Contains("vampire") ? 0.45f : 0.32f);
+                tokenBody = CreateBatToken(entity, color, isBird, batScale);
+                height = 0.75f;
                 isFloating = true;
                 break;
 
             case 'r': // Rodent (Giant white mouse, rat, cave rat)
-                var rodentScale = Mathf.Clamp(0.85f, 0.45f, 2.0f);
+                var rodentScale = lowerName.Contains("mouse") ? 0.25f : (lowerName.Contains("giant") || lowerName.Contains("wererat") ? 0.45f : 0.34f);
                 tokenBody = CreateRodentToken(entity, color, rodentScale);
-                height = 0.55f;
+                height = 0.20f + 0.25f * rodentScale;
                 break;
 
             case 'C' or 'Z': // Canine (Dog, Wolf, Jackal, War Dog, Hound, Zephyr Hound)
                 var isHound = glyph == 'Z' || lowerName.Contains("hound") || lowerName.Contains("zephyr");
-                var canineScale = Mathf.Clamp(isHound ? 0.95f : (lowerName.Contains("wolf") || lowerName.Contains("warg") ? 1.05f : 0.85f), 0.45f, 2.0f);
+                var canineScale = isHound ? 0.68f : (lowerName.Contains("wolf") || lowerName.Contains("warg") ? 0.76f : (lowerName.Contains("jackal") ? 0.44f : 0.55f));
                 tokenBody = CreateCanineToken(entity, color, canineScale, isHound, lowerName);
-                height = 0.55f + 0.35f * canineScale;
+                height = 0.32f + 0.32f * canineScale;
                 break;
 
             case 'f': // Feline (Cat, Panther, Tiger, Lion, Leopard, Cheetah, Jagwal)
                 var isBigCat = lowerName.Contains("tiger") || lowerName.Contains("lion") || lowerName.Contains("panther") || lowerName.Contains("leopard") || lowerName.Contains("jagwal");
-                var felineScale = Mathf.Clamp(isBigCat ? 1.05f : 0.75f, 0.45f, 2.0f);
+                var felineScale = isBigCat ? 0.74f : 0.38f;
                 tokenBody = CreateFelineToken(entity, color, felineScale, isBigCat, lowerName);
-                height = 0.45f + 0.30f * felineScale;
+                height = 0.28f + 0.28f * felineScale;
                 break;
 
-            case 'J': // Snake (Snake, Viper, Cobra, Python, Rattlesnake, Copperhead)
-                var isCobra = lowerName.Contains("cobra") || lowerName.Contains("viper") || lowerName.Contains("asp");
-                var snakeScale = Mathf.Clamp(lowerName.Contains("giant") || lowerName.Contains("python") || lowerName.Contains("anaconda") ? 1.15f : 0.85f, 0.45f, 2.0f);
+            case 'J' or 'n': // Snake & Naga (Black naga, Spirit naga, Red naga, Viper, Cobra, Python, Rattlesnake)
+                var isCobra = lowerName.Contains("cobra") || lowerName.Contains("viper") || lowerName.Contains("asp") || lowerName.Contains("naga");
+                var snakeScale = lowerName.Contains("giant") || lowerName.Contains("python") || lowerName.Contains("anaconda") || lowerName.Contains("guardian") || lowerName.Contains("spirit") ? 0.65f : (isCobra ? 0.45f : 0.34f);
                 tokenBody = CreateSnakeToken(entity, color, snakeScale, isCobra, lowerName);
-                height = 0.45f * snakeScale;
+                height = 0.22f + 0.25f * snakeScale;
                 break;
 
             case 'R': // Reptile / Amphibian (Lizard, Gecko, Salamander, Crocodile, Alligator, Basilisk, Frog)
                 var isCroc = lowerName.Contains("croc") || lowerName.Contains("alligator") || lowerName.Contains("basilisk");
-                var reptScale = Mathf.Clamp(isCroc ? 1.15f : 0.85f, 0.45f, 2.0f);
+                var reptScale = isCroc ? 0.65f : (lowerName.Contains("salamander") || lowerName.Contains("lizard") ? 0.42f : 0.36f);
                 tokenBody = CreateReptileToken(entity, color, reptScale, isCroc, lowerName);
-                height = 0.45f * reptScale;
+                height = 0.20f + 0.25f * reptScale;
                 break;
 
             case 'q': // Quadruped (Boar, Bull, Stag, Bear, Rhino, Horse, Mammoth, Hippo)
-                var quadScale = Mathf.Clamp(lowerName.Contains("giant") || lowerName.Contains("mammoth") || lowerName.Contains("rhino") || lowerName.Contains("elephant") ? 1.35f : (lowerName.Contains("bear") ? 1.15f : 0.95f), 0.45f, 2.0f);
+                var quadScale = lowerName.Contains("giant") || lowerName.Contains("mammoth") || lowerName.Contains("rhino") || lowerName.Contains("elephant") ? 0.88f : (lowerName.Contains("bear") ? 0.78f : 0.60f);
                 tokenBody = CreateQuadrupedToken(entity, color, quadScale, lowerName);
-                height = 0.55f + 0.45f * quadScale;
+                height = 0.38f + 0.38f * quadScale;
                 break;
 
             case 'H': // Hybrid (Griffon, Chimera, Manticore, Minotaur, Hippogriff)
-                var hybridScale = Mathf.Clamp(1.10f, 0.45f, 2.0f);
+                var hybridScale = 0.75f;
                 tokenBody = CreateHybridToken(entity, color, hybridScale, lowerName);
-                height = 0.65f + 0.50f * hybridScale;
+                height = 0.42f + 0.42f * hybridScale;
                 break;
 
             case 'd' or 'D' or 'M': // Dragon, Ancient Dragon, Wyrm, Hydra
-                var dragonScale = Mathf.Clamp(glyph == 'D' ? 1.75f : glyph == 'M' ? 1.4f : 1.25f, 0.45f, 2.0f);
+                var dragonScale = glyph == 'D' ? 1.35f : (glyph == 'M' ? 1.15f : (lowerName.Contains("baby") ? 0.60f : 0.88f));
                 tokenBody = CreateDragonToken(entity, color, dragonScale);
-                height = 0.25f + 1.10f * dragonScale;
+                height = 0.35f + 0.80f * dragonScale;
                 break;
 
             case 'E' or 'v': // Elemental, Vortex
-                tokenBody = CreateElementalToken(entity, color);
-                height = 1.25f;
+                var elemScale = 0.65f;
+                tokenBody = CreateElementalToken(entity, color, elemScale);
+                height = 0.85f;
                 isFloating = true;
                 isSpinning = true;
                 break;
 
             case 'g' or 'X' or 'x': // Golem, Xorn, Lurker
-                tokenBody = CreateGolemToken(entity, color);
-                height = 1.10f;
+                var golemScale = 0.82f;
+                tokenBody = CreateGolemToken(entity, color, golemScale);
+                height = 0.30f + 0.60f * golemScale;
                 break;
 
             case 'Q': // Quylthulg
-                tokenBody = CreateQuylthulgToken(entity, color);
-                height = 1.05f;
+                var quylScale = 0.65f;
+                tokenBody = CreateQuylthulgToken(entity, color, quylScale);
+                height = 0.75f;
                 isFloating = true;
                 break;
 
             default:
-                tokenBody = CreateFloatingRunicGem(entity, color, glyph.ToString());
-                height = 1.00f;
+                tokenBody = CreateFloatingRunicGem(entity, color, glyph.ToString(), 0.50f);
+                height = 0.85f;
                 break;
         }
 
@@ -1030,7 +1229,7 @@ public static class MonsterModelResolver
         var container = new Node3D { Position = new Vector3(0, 0, 0), Scale = new Vector3(scale, scale, scale) };
 
         var furColor = new Color(0.22f, 0.20f, 0.18f).Lerp(glowColor, 0.60f);
-        var bodyMat = new StandardMaterial3D { AlbedoColor = furColor, Roughness = 0.75f };
+        var bodyMat = GetProceduralCreatureMaterial("fur", furColor, roughness: 0.75f);
         var pinkMat = new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.65f, 0.68f), Roughness = 0.8f };
 
         var bodyNode = new Node3D { Position = new Vector3(0, 0.14f, 0) };
@@ -1039,55 +1238,55 @@ public static class MonsterModelResolver
         entity.InitialBodyScale = Vector3.One;
 
         // Main torso
-        var bodyMesh = new BoxMesh { Size = new Vector3(0.28f, 0.22f, 0.46f) };
-        bodyNode.AddChild(new MeshInstance3D { Mesh = bodyMesh, MaterialOverride = bodyMat });
+        var bodyMesh = new SphereMesh { Radius = 0.15f, Height = 0.44f, RadialSegments = 12, Rings = 6 };
+        bodyNode.AddChild(new MeshInstance3D { Mesh = bodyMesh, MaterialOverride = bodyMat, Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
         // Head with snout
-        var headNode = new Node3D { Position = new Vector3(0, 0.05f, 0.26f) };
+        var headNode = new Node3D { Position = new Vector3(0, 0.05f, 0.24f) };
         bodyNode.AddChild(headNode);
         entity.HeadNode = headNode;
 
-        var headMesh = new BoxMesh { Size = new Vector3(0.20f, 0.17f, 0.24f) };
-        headNode.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = bodyMat, Position = new Vector3(0, 0, 0) });
+        var headMesh = new SphereMesh { Radius = 0.11f, Height = 0.22f, RadialSegments = 10, Rings = 5 };
+        headNode.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = bodyMat, Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
         // Snout / Nose
-        var noseMesh = new BoxMesh { Size = new Vector3(0.06f, 0.05f, 0.06f) };
-        headNode.AddChild(new MeshInstance3D { Mesh = noseMesh, MaterialOverride = pinkMat, Position = new Vector3(0, -0.02f, 0.14f) });
+        var noseMesh = new SphereMesh { Radius = 0.03f, Height = 0.05f, RadialSegments = 6, Rings = 3 };
+        headNode.AddChild(new MeshInstance3D { Mesh = noseMesh, MaterialOverride = pinkMat, Position = new Vector3(0, -0.02f, 0.12f) });
 
         // Upright rounded ears
-        var earMesh = new BoxMesh { Size = new Vector3(0.07f, 0.09f, 0.03f) };
-        headNode.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = pinkMat, Position = new Vector3(0.09f, 0.10f, -0.04f), Rotation = new Vector3(0, 0, Mathf.DegToRad(-15)) });
-        headNode.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = pinkMat, Position = new Vector3(-0.09f, 0.10f, -0.04f), Rotation = new Vector3(0, 0, Mathf.DegToRad(15)) });
+        var earMesh = new CylinderMesh { TopRadius = 0.01f, BottomRadius = 0.04f, Height = 0.07f, RadialSegments = 6 };
+        headNode.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = pinkMat, Position = new Vector3(0.07f, 0.08f, -0.04f), Rotation = new Vector3(Mathf.DegToRad(-15), 0, Mathf.DegToRad(-20)) });
+        headNode.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = pinkMat, Position = new Vector3(-0.07f, 0.08f, -0.04f), Rotation = new Vector3(Mathf.DegToRad(-15), 0, Mathf.DegToRad(20)) });
 
         // Glowing beady eyes
-        var eyeMesh = new SphereMesh { Radius = 0.035f, Height = 0.07f, RadialSegments = 8, Rings = 4 };
+        var eyeMesh = new SphereMesh { Radius = 0.032f, Height = 0.06f, RadialSegments = 8, Rings = 4 };
         var eyeColor = (glowColor == Colors.White || glowColor.V > 0.85f) ? new Color(0.95f, 0.25f, 0.30f) : glowColor;
         var eyeMat = new StandardMaterial3D { AlbedoColor = eyeColor, EmissionEnabled = true, Emission = eyeColor, EmissionEnergyMultiplier = 1.8f };
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(0.08f, 0.04f, 0.07f) });
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-0.08f, 0.04f, 0.07f) });
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(0.065f, 0.04f, 0.06f) });
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-0.065f, 0.04f, 0.06f) });
 
         // Tail (articulated chain extending back)
-        var tailNode = new Node3D { Position = new Vector3(0, 0.02f, -0.23f) };
+        var tailNode = new Node3D { Position = new Vector3(0, 0.02f, -0.22f) };
         bodyNode.AddChild(tailNode);
         entity.TailNode = tailNode;
 
-        var tailMesh1 = new CylinderMesh { TopRadius = 0.025f, BottomRadius = 0.035f, Height = 0.22f, RadialSegments = 6 };
+        var tailMesh1 = new CylinderMesh { TopRadius = 0.02f, BottomRadius = 0.03f, Height = 0.22f, RadialSegments = 6 };
         var tailInst1 = new MeshInstance3D { Mesh = tailMesh1, MaterialOverride = pinkMat, Position = new Vector3(0, 0.04f, -0.10f), Rotation = new Vector3(Mathf.DegToRad(-60), 0, 0) };
         tailNode.AddChild(tailInst1);
 
-        var tailMesh2 = new CylinderMesh { TopRadius = 0.015f, BottomRadius = 0.025f, Height = 0.20f, RadialSegments = 6 };
+        var tailMesh2 = new CylinderMesh { TopRadius = 0.012f, BottomRadius = 0.02f, Height = 0.20f, RadialSegments = 6 };
         var tailInst2 = new MeshInstance3D { Mesh = tailMesh2, MaterialOverride = pinkMat, Position = new Vector3(0, 0.12f, -0.22f), Rotation = new Vector3(Mathf.DegToRad(-25), 0, 0) };
         tailNode.AddChild(tailInst2);
 
         // 4 Paws on the ground
-        var pawMesh = new BoxMesh { Size = new Vector3(0.07f, 0.05f, 0.10f) };
+        var pawMesh = new SphereMesh { Radius = 0.035f, Height = 0.06f, RadialSegments = 6, Rings = 3 };
         var pawMat = new StandardMaterial3D { AlbedoColor = furColor * 0.85f, Roughness = 0.8f };
         var pawPositions = new[]
         {
-            new Vector3(0.12f, -0.09f, 0.14f),   // Front-Right
-            new Vector3(-0.12f, -0.09f, 0.14f),  // Front-Left
-            new Vector3(0.13f, -0.09f, -0.14f),  // Back-Right
-            new Vector3(-0.13f, -0.09f, -0.14f), // Back-Left
+            new Vector3(0.10f, -0.09f, 0.12f),
+            new Vector3(-0.10f, -0.09f, 0.12f),
+            new Vector3(0.10f, -0.09f, -0.12f),
+            new Vector3(-0.10f, -0.09f, -0.12f),
         };
         foreach (var pos in pawPositions)
         {
@@ -1106,7 +1305,7 @@ public static class MonsterModelResolver
         var container = new Node3D { Position = new Vector3(0, 0, 0), Scale = new Vector3(scale, scale, scale) };
 
         var chitinColor = new Color(0.16f, 0.15f, 0.17f).Lerp(glowColor, isBeetle ? 0.45f : 0.35f);
-        var chitinMat = new StandardMaterial3D { AlbedoColor = chitinColor, Roughness = 0.35f, Metallic = 0.3f };
+        var chitinMat = GetProceduralCreatureMaterial("chitin", chitinColor, roughness: 0.35f, metallic: 0.3f);
         var darkMat = new StandardMaterial3D { AlbedoColor = chitinColor * 0.75f, Roughness = 0.4f };
 
         var thoraxNode = new Node3D { Position = new Vector3(0, 0.16f, 0) };
@@ -1349,10 +1548,10 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateBatToken(MonsterEntity entity, Color glowColor, bool isBird)
+    private static Node3D CreateBatToken(MonsterEntity entity, Color glowColor, bool isBird, float scale = 1.0f)
     {
         entity.TokenType = isBird ? CreatureTokenType.Bird : CreatureTokenType.Bat;
-        var container = new Node3D { Position = new Vector3(0, 0.70f, 0) };
+        var container = new Node3D { Position = new Vector3(0, 0.70f, 0), Scale = new Vector3(scale, scale, scale) };
 
         var bodyColor = isBird
             ? new Color(0.25f, 0.22f, 0.20f).Lerp(glowColor, 0.45f)
@@ -1388,10 +1587,10 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateEyeToken(MonsterEntity entity, Color glowColor)
+    private static Node3D CreateEyeToken(MonsterEntity entity, Color glowColor, float scale = 1.0f)
     {
         entity.TokenType = CreatureTokenType.Eye;
-        var container = new Node3D { Position = new Vector3(0, 0.75f, 0) };
+        var container = new Node3D { Position = new Vector3(0, 0.75f, 0), Scale = new Vector3(scale, scale, scale) };
 
         // Sclera (central demonic eyeball) with glossy wet specular
         var eyeMesh = new SphereMesh { Radius = 0.32f, Height = 0.64f, RadialSegments = 16, Rings = 8 };
@@ -1462,10 +1661,10 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateSlimeToken(MonsterEntity entity, Color glowColor)
+    private static Node3D CreateSlimeToken(MonsterEntity entity, Color glowColor, float scale = 1.0f)
     {
         entity.TokenType = CreatureTokenType.Slime;
-        var container = new Node3D { Position = new Vector3(0, 0, 0) };
+        var container = new Node3D { Position = new Vector3(0, 0, 0), Scale = new Vector3(scale, scale, scale) };
 
         var domeMesh = new SphereMesh { Radius = 0.42f, Height = 0.50f, RadialSegments = 16, Rings = 8 };
         var domeMat = new StandardMaterial3D
@@ -1498,10 +1697,10 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateWormToken(MonsterEntity entity, Color glowColor)
+    private static Node3D CreateWormToken(MonsterEntity entity, Color glowColor, float scale = 1.0f)
     {
         entity.TokenType = CreatureTokenType.Worm;
-        var container = new Node3D { Position = new Vector3(0, 0, 0) };
+        var container = new Node3D { Position = new Vector3(0, 0, 0), Scale = new Vector3(scale, scale, scale) };
 
         var wormColor = new Color(0.25f, 0.20f, 0.18f).Lerp(glowColor, 0.45f);
         var wormMat = new StandardMaterial3D { AlbedoColor = wormColor, Roughness = 0.5f };
@@ -1519,10 +1718,10 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateMushroomToken(MonsterEntity entity, Color glowColor)
+    private static Node3D CreateMushroomToken(MonsterEntity entity, Color glowColor, float scale = 1.0f)
     {
         entity.TokenType = CreatureTokenType.Mushroom;
-        var container = new Node3D { Position = new Vector3(0, 0, 0) };
+        var container = new Node3D { Position = new Vector3(0, 0, 0), Scale = new Vector3(scale, scale, scale) };
 
         var bodyNode = new Node3D { Position = new Vector3(0, 0, 0) };
         container.AddChild(bodyNode);
@@ -1570,7 +1769,7 @@ public static class MonsterModelResolver
         else if (lowerName.Contains("shadow") || lowerName.Contains("black")) baseFur = new Color(0.10f, 0.10f, 0.12f);
 
         var furColor = baseFur.Lerp(glowColor, 0.40f);
-        var bodyMat = new StandardMaterial3D { AlbedoColor = furColor, Roughness = 0.70f };
+        var bodyMat = GetProceduralCreatureMaterial("fur", furColor, roughness: 0.70f);
         var darkMat = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.08f), Roughness = 0.50f };
         var eyeMat = new StandardMaterial3D { AlbedoColor = glowColor, EmissionEnabled = true, Emission = glowColor, EmissionEnergyMultiplier = 1.8f };
 
@@ -1579,78 +1778,70 @@ public static class MonsterModelResolver
         entity.BodyNode = bodyNode;
         entity.InitialBodyScale = Vector3.One;
 
-        // Athletic canine torso: deeper in chest/shoulders, slimmer waist towards hips
-        var chestMesh = new BoxMesh { Size = new Vector3(0.34f, 0.36f, 0.38f) };
-        bodyNode.AddChild(new MeshInstance3D { Mesh = chestMesh, MaterialOverride = bodyMat, Position = new Vector3(0, 0.02f, 0.14f) });
+        // Athletic canine torso: organic capsule/sphere contours
+        var chestMesh = new SphereMesh { Radius = 0.22f, Height = 0.45f, RadialSegments = 14, Rings = 7 };
+        bodyNode.AddChild(new MeshInstance3D { Mesh = chestMesh, MaterialOverride = bodyMat, Position = new Vector3(0, 0.02f, 0.12f) });
 
-        var waistMesh = new BoxMesh { Size = new Vector3(0.28f, 0.28f, 0.36f) };
-        bodyNode.AddChild(new MeshInstance3D { Mesh = waistMesh, MaterialOverride = bodyMat, Position = new Vector3(0, -0.01f, -0.16f) });
-
-        // Neck angled upward/forward
-        var neckMesh = new BoxMesh { Size = new Vector3(0.20f, 0.26f, 0.22f) };
-        bodyNode.AddChild(new MeshInstance3D { Mesh = neckMesh, MaterialOverride = bodyMat, Position = new Vector3(0, 0.14f, 0.28f), Rotation = new Vector3(Mathf.DegToRad(30), 0, 0) });
+        var waistMesh = new SphereMesh { Radius = 0.18f, Height = 0.40f, RadialSegments = 14, Rings = 7 };
+        bodyNode.AddChild(new MeshInstance3D { Mesh = waistMesh, MaterialOverride = bodyMat, Position = new Vector3(0, -0.01f, -0.14f) });
 
         // Head node
-        var headNode = new Node3D { Position = new Vector3(0, 0.24f, 0.38f) };
+        var headNode = new Node3D { Position = new Vector3(0, 0.24f, 0.36f) };
         bodyNode.AddChild(headNode);
         entity.HeadNode = headNode;
 
-        var headMesh = new BoxMesh { Size = new Vector3(0.24f, 0.22f, 0.26f) };
+        var headMesh = new SphereMesh { Radius = 0.15f, Height = 0.26f, RadialSegments = 12, Rings = 6 };
         headNode.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = bodyMat });
 
         // Elongated canine muzzle / snout
-        var muzzleMesh = new BoxMesh { Size = new Vector3(0.14f, 0.12f, 0.24f) };
-        headNode.AddChild(new MeshInstance3D { Mesh = muzzleMesh, MaterialOverride = bodyMat, Position = new Vector3(0, -0.04f, 0.18f) });
+        var muzzleMesh = new CylinderMesh { TopRadius = 0.06f, BottomRadius = 0.10f, Height = 0.22f, RadialSegments = 8 };
+        headNode.AddChild(new MeshInstance3D { Mesh = muzzleMesh, MaterialOverride = bodyMat, Position = new Vector3(0, -0.04f, 0.16f), Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
         // Dark nose pad
-        var noseMesh = new BoxMesh { Size = new Vector3(0.08f, 0.06f, 0.06f) };
-        headNode.AddChild(new MeshInstance3D { Mesh = noseMesh, MaterialOverride = darkMat, Position = new Vector3(0, -0.02f, 0.30f) });
+        var noseMesh = new SphereMesh { Radius = 0.04f, Height = 0.06f, RadialSegments = 8, Rings = 4 };
+        headNode.AddChild(new MeshInstance3D { Mesh = noseMesh, MaterialOverride = darkMat, Position = new Vector3(0, -0.02f, 0.27f) });
 
         // Canine Ears: pointed wolf ears or folded hound ears
         if (isHound)
         {
-            // Drooping / folded hound ears
-            var houndEarMesh = new BoxMesh { Size = new Vector3(0.05f, 0.18f, 0.08f) };
-            headNode.AddChild(new MeshInstance3D { Mesh = houndEarMesh, MaterialOverride = bodyMat, Position = new Vector3(0.13f, 0.02f, -0.02f), Rotation = new Vector3(Mathf.DegToRad(15), 0, Mathf.DegToRad(-15)) });
-            headNode.AddChild(new MeshInstance3D { Mesh = houndEarMesh, MaterialOverride = bodyMat, Position = new Vector3(-0.13f, 0.02f, -0.02f), Rotation = new Vector3(Mathf.DegToRad(15), 0, Mathf.DegToRad(15)) });
+            var houndEarMesh = new BoxMesh { Size = new Vector3(0.04f, 0.16f, 0.07f) };
+            headNode.AddChild(new MeshInstance3D { Mesh = houndEarMesh, MaterialOverride = bodyMat, Position = new Vector3(0.12f, 0.02f, -0.02f), Rotation = new Vector3(Mathf.DegToRad(15), 0, Mathf.DegToRad(-15)) });
+            headNode.AddChild(new MeshInstance3D { Mesh = houndEarMesh, MaterialOverride = bodyMat, Position = new Vector3(-0.12f, 0.02f, -0.02f), Rotation = new Vector3(Mathf.DegToRad(15), 0, Mathf.DegToRad(15)) });
         }
         else
         {
-            // Upright triangular pointed wolf/dog ears
-            var wolfEarMesh = new BoxMesh { Size = new Vector3(0.06f, 0.16f, 0.05f) };
-            headNode.AddChild(new MeshInstance3D { Mesh = wolfEarMesh, MaterialOverride = bodyMat, Position = new Vector3(0.10f, 0.16f, -0.04f), Rotation = new Vector3(Mathf.DegToRad(-10), 0, Mathf.DegToRad(-15)) });
-            headNode.AddChild(new MeshInstance3D { Mesh = wolfEarMesh, MaterialOverride = bodyMat, Position = new Vector3(-0.10f, 0.16f, -0.04f), Rotation = new Vector3(Mathf.DegToRad(-10), 0, Mathf.DegToRad(15)) });
+            var wolfEarMesh = new CylinderMesh { TopRadius = 0.01f, BottomRadius = 0.05f, Height = 0.14f, RadialSegments = 6 };
+            headNode.AddChild(new MeshInstance3D { Mesh = wolfEarMesh, MaterialOverride = bodyMat, Position = new Vector3(0.09f, 0.14f, -0.03f), Rotation = new Vector3(Mathf.DegToRad(-15), 0, Mathf.DegToRad(-20)) });
+            headNode.AddChild(new MeshInstance3D { Mesh = wolfEarMesh, MaterialOverride = bodyMat, Position = new Vector3(-0.09f, 0.14f, -0.03f), Rotation = new Vector3(Mathf.DegToRad(-15), 0, Mathf.DegToRad(20)) });
         }
 
         // Glowing forward eyes
-        var eyeMesh = new SphereMesh { Radius = 0.035f, Height = 0.07f, RadialSegments = 8, Rings = 4 };
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(0.08f, 0.05f, 0.10f) });
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-0.08f, 0.05f, 0.10f) });
+        var eyeMesh = new SphereMesh { Radius = 0.032f, Height = 0.06f, RadialSegments = 8, Rings = 4 };
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(0.07f, 0.04f, 0.10f) });
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-0.07f, 0.04f, 0.10f) });
 
         // Canine tail: arched upward and extending back
-        var tailNode = new Node3D { Position = new Vector3(0, 0.08f, -0.32f) };
+        var tailNode = new Node3D { Position = new Vector3(0, 0.08f, -0.30f) };
         bodyNode.AddChild(tailNode);
         entity.TailNode = tailNode;
 
-        var tailMesh1 = new CylinderMesh { TopRadius = 0.035f, BottomRadius = 0.045f, Height = 0.26f, RadialSegments = 6 };
-        var tailInst1 = new MeshInstance3D { Mesh = tailMesh1, MaterialOverride = bodyMat, Position = new Vector3(0, 0.10f, -0.08f), Rotation = new Vector3(Mathf.DegToRad(40), 0, 0) };
-        tailNode.AddChild(tailInst1);
+        var tailMesh1 = new CylinderMesh { TopRadius = 0.03f, BottomRadius = 0.045f, Height = 0.26f, RadialSegments = 6 };
+        tailNode.AddChild(new MeshInstance3D { Mesh = tailMesh1, MaterialOverride = bodyMat, Position = new Vector3(0, 0.10f, -0.08f), Rotation = new Vector3(Mathf.DegToRad(40), 0, 0) });
 
-        var tailMesh2 = new CylinderMesh { TopRadius = 0.02f, BottomRadius = 0.035f, Height = 0.22f, RadialSegments = 6 };
-        var tailInst2 = new MeshInstance3D { Mesh = tailMesh2, MaterialOverride = bodyMat, Position = new Vector3(0, 0.22f, -0.18f), Rotation = new Vector3(Mathf.DegToRad(15), 0, 0) };
-        tailNode.AddChild(tailInst2);
+        var tailMesh2 = new CylinderMesh { TopRadius = 0.015f, BottomRadius = 0.03f, Height = 0.22f, RadialSegments = 6 };
+        tailNode.AddChild(new MeshInstance3D { Mesh = tailMesh2, MaterialOverride = bodyMat, Position = new Vector3(0, 0.22f, -0.18f), Rotation = new Vector3(Mathf.DegToRad(15), 0, 0) });
 
         // 4 Athletic Legs with Paws
-        var upperLegMesh = new BoxMesh { Size = new Vector3(0.09f, 0.22f, 0.11f) };
-        var lowerLegMesh = new BoxMesh { Size = new Vector3(0.07f, 0.18f, 0.08f) };
-        var pawMesh = new BoxMesh { Size = new Vector3(0.08f, 0.05f, 0.12f) };
+        var upperLegMesh = new CylinderMesh { TopRadius = 0.045f, BottomRadius = 0.035f, Height = 0.20f, RadialSegments = 6 };
+        var lowerLegMesh = new CylinderMesh { TopRadius = 0.035f, BottomRadius = 0.025f, Height = 0.18f, RadialSegments = 6 };
+        var pawMesh = new SphereMesh { Radius = 0.045f, Height = 0.07f, RadialSegments = 6, Rings = 3 };
 
         var legPositions = new[]
         {
-            new Vector3(0.14f, -0.12f, 0.22f),  // Front Right
-            new Vector3(-0.14f, -0.12f, 0.22f), // Front Left
-            new Vector3(0.13f, -0.14f, -0.22f), // Back Right
-            new Vector3(-0.13f, -0.14f, -0.22f) // Back Left
+            new Vector3(0.13f, -0.10f, 0.20f),  // Front Right
+            new Vector3(-0.13f, -0.10f, 0.20f), // Front Left
+            new Vector3(0.12f, -0.12f, -0.20f), // Back Right
+            new Vector3(-0.12f, -0.12f, -0.20f) // Back Left
         };
 
         for (int i = 0; i < 4; i++)
@@ -1675,9 +1866,9 @@ public static class MonsterModelResolver
         var container = new Node3D { Position = Vector3.Zero, Scale = new Vector3(scale, scale, scale) };
 
         // Feline fur / coat color
-        var baseFur = isBigCat ? (lowerName.Contains("panther") ? new Color(0.12f, 0.12f, 0.14f) : new Color(0.72f, 0.45f, 0.18f)) : new Color(0.40f, 0.35f, 0.30f);
+        var baseFur = isBigCat ? (lowerName.Contains("panther") ? new Color(0.12f, 0.12f, 0.14f) : new Color(0.72f, 0.45f, 0.18f)) : new Color(0.42f, 0.36f, 0.30f);
         var furColor = baseFur.Lerp(glowColor, 0.35f);
-        var bodyMat = new StandardMaterial3D { AlbedoColor = furColor, Roughness = 0.65f };
+        var bodyMat = GetProceduralCreatureMaterial("fur", furColor, roughness: 0.65f);
         var darkMat = new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.10f, 0.10f), Roughness = 0.5f };
         var pinkMat = new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.60f, 0.65f), Roughness = 0.7f };
         var eyeMat = new StandardMaterial3D { AlbedoColor = glowColor, EmissionEnabled = true, Emission = glowColor, EmissionEnergyMultiplier = 1.9f };
@@ -1687,62 +1878,59 @@ public static class MonsterModelResolver
         entity.BodyNode = bodyNode;
         entity.InitialBodyScale = Vector3.One;
 
-        // Sleek, low-slung, flexible feline torso
-        var torsoSize = isBigCat ? new Vector3(0.32f, 0.28f, 0.64f) : new Vector3(0.24f, 0.20f, 0.48f);
-        var torsoMesh = new BoxMesh { Size = torsoSize };
-        bodyNode.AddChild(new MeshInstance3D { Mesh = torsoMesh, MaterialOverride = bodyMat });
+        // Sleek, organic sculpted feline torso (curved shoulders and slender flanks)
+        var torsoMesh = new SphereMesh { Radius = isBigCat ? 0.20f : 0.14f, Height = isBigCat ? 0.68f : 0.48f, RadialSegments = 14, Rings = 7 };
+        bodyNode.AddChild(new MeshInstance3D { Mesh = torsoMesh, MaterialOverride = bodyMat, Position = new Vector3(0, 0, 0), Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
         // Compact rounded feline head
-        var headNode = new Node3D { Position = new Vector3(0, 0.08f, torsoSize.Z * 0.52f) };
+        var headNode = new Node3D { Position = new Vector3(0, 0.08f, isBigCat ? 0.34f : 0.25f) };
         bodyNode.AddChild(headNode);
         entity.HeadNode = headNode;
 
-        var headSize = isBigCat ? new Vector3(0.28f, 0.22f, 0.26f) : new Vector3(0.20f, 0.16f, 0.20f);
-        var headMesh = new BoxMesh { Size = headSize };
+        var headMesh = new SphereMesh { Radius = isBigCat ? 0.16f : 0.12f, Height = isBigCat ? 0.24f : 0.18f, RadialSegments = 14, Rings = 7 };
         headNode.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = bodyMat });
 
         // Short blunt feline muzzle
-        var muzzleSize = new Vector3(headSize.X * 0.55f, headSize.Y * 0.45f, 0.12f);
-        var muzzleMesh = new BoxMesh { Size = muzzleSize };
-        headNode.AddChild(new MeshInstance3D { Mesh = muzzleMesh, MaterialOverride = bodyMat, Position = new Vector3(0, -headSize.Y * 0.20f, headSize.Z * 0.50f) });
+        var muzzleMesh = new SphereMesh { Radius = isBigCat ? 0.09f : 0.065f, Height = isBigCat ? 0.12f : 0.09f, RadialSegments = 10, Rings = 5 };
+        headNode.AddChild(new MeshInstance3D { Mesh = muzzleMesh, MaterialOverride = bodyMat, Position = new Vector3(0, -0.03f, isBigCat ? 0.12f : 0.09f) });
 
-        // Cute/fierce pink or dark nose
-        var noseMesh = new BoxMesh { Size = new Vector3(0.05f, 0.04f, 0.04f) };
-        headNode.AddChild(new MeshInstance3D { Mesh = noseMesh, MaterialOverride = pinkMat, Position = new Vector3(0, -headSize.Y * 0.12f, headSize.Z * 0.50f + 0.06f) });
+        // Cute pink/dark nose
+        var noseMesh = new SphereMesh { Radius = 0.025f, Height = 0.04f, RadialSegments = 6, Rings = 3 };
+        headNode.AddChild(new MeshInstance3D { Mesh = noseMesh, MaterialOverride = pinkMat, Position = new Vector3(0, -0.01f, isBigCat ? 0.18f : 0.14f) });
 
-        // Distinct triangular perked cat ears set wide on top crown
-        var earMesh = new BoxMesh { Size = new Vector3(0.06f, 0.08f, 0.03f) };
-        headNode.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = bodyMat, Position = new Vector3(headSize.X * 0.35f, headSize.Y * 0.50f + 0.03f, -0.02f), Rotation = new Vector3(Mathf.DegToRad(-15), 0, Mathf.DegToRad(-15)) });
-        headNode.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = bodyMat, Position = new Vector3(-headSize.X * 0.35f, headSize.Y * 0.50f + 0.03f, -0.02f), Rotation = new Vector3(Mathf.DegToRad(-15), 0, Mathf.DegToRad(15)) });
+        // Distinct triangular perked cat ears
+        var earMesh = new CylinderMesh { TopRadius = 0.005f, BottomRadius = 0.045f, Height = 0.09f, RadialSegments = 6 };
+        headNode.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = bodyMat, Position = new Vector3(0.08f, 0.12f, 0.01f), Rotation = new Vector3(Mathf.DegToRad(-20), 0, Mathf.DegToRad(-25)) });
+        headNode.AddChild(new MeshInstance3D { Mesh = earMesh, MaterialOverride = bodyMat, Position = new Vector3(-0.08f, 0.12f, 0.01f), Rotation = new Vector3(Mathf.DegToRad(-20), 0, Mathf.DegToRad(25)) });
 
         // Glowing feline almond eyes
-        var eyeMesh = new SphereMesh { Radius = 0.03f, Height = 0.06f, RadialSegments = 8, Rings = 4 };
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(headSize.X * 0.28f, headSize.Y * 0.12f, headSize.Z * 0.40f) });
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-headSize.X * 0.28f, headSize.Y * 0.12f, headSize.Z * 0.40f) });
+        var eyeMesh = new SphereMesh { Radius = 0.028f, Height = 0.055f, RadialSegments = 8, Rings = 4 };
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(0.065f, 0.03f, 0.10f) });
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-0.065f, 0.03f, 0.10f) });
 
         // Long graceful curving feline whip tail
-        var tailNode = new Node3D { Position = new Vector3(0, 0.04f, -torsoSize.Z * 0.48f) };
+        var tailNode = new Node3D { Position = new Vector3(0, 0.04f, isBigCat ? -0.32f : -0.23f) };
         bodyNode.AddChild(tailNode);
         entity.TailNode = tailNode;
 
         var tailSeg1 = new CylinderMesh { TopRadius = 0.02f, BottomRadius = 0.03f, Height = 0.24f, RadialSegments = 6 };
-        var tailInst1 = new MeshInstance3D { Mesh = tailSeg1, MaterialOverride = bodyMat, Position = new Vector3(0, 0.04f, -0.10f), Rotation = new Vector3(Mathf.DegToRad(-35), 0, 0) };
-        tailNode.AddChild(tailInst1);
+        tailNode.AddChild(new MeshInstance3D { Mesh = tailSeg1, MaterialOverride = bodyMat, Position = new Vector3(0, 0.04f, -0.10f), Rotation = new Vector3(Mathf.DegToRad(-35), 0, 0) });
 
-        var tailSeg2 = new CylinderMesh { TopRadius = 0.015f, BottomRadius = 0.02f, Height = 0.22f, RadialSegments = 6 };
-        var tailInst2 = new MeshInstance3D { Mesh = tailSeg2, MaterialOverride = bodyMat, Position = new Vector3(0, 0.14f, -0.22f), Rotation = new Vector3(Mathf.DegToRad(30), 0, 0) };
-        tailNode.AddChild(tailInst2);
+        var tailSeg2 = new CylinderMesh { TopRadius = 0.012f, BottomRadius = 0.02f, Height = 0.22f, RadialSegments = 6 };
+        tailNode.AddChild(new MeshInstance3D { Mesh = tailSeg2, MaterialOverride = bodyMat, Position = new Vector3(0, 0.14f, -0.22f), Rotation = new Vector3(Mathf.DegToRad(30), 0, 0) });
 
         // 4 Slender stealthy feline legs
-        var legMesh = new BoxMesh { Size = new Vector3(0.08f, 0.18f, 0.09f) };
-        var pawMesh = new BoxMesh { Size = new Vector3(0.08f, 0.04f, 0.10f) };
+        var legMesh = new CylinderMesh { TopRadius = 0.035f, BottomRadius = 0.025f, Height = 0.18f, RadialSegments = 6 };
+        var pawMesh = new SphereMesh { Radius = 0.038f, Height = 0.055f, RadialSegments = 6, Rings = 3 };
 
+        var halfZ = isBigCat ? 0.20f : 0.14f;
+        var halfX = isBigCat ? 0.12f : 0.09f;
         var legPositions = new[]
         {
-            new Vector3(torsoSize.X * 0.42f, -0.09f, torsoSize.Z * 0.35f),
-            new Vector3(-torsoSize.X * 0.42f, -0.09f, torsoSize.Z * 0.35f),
-            new Vector3(torsoSize.X * 0.42f, -0.09f, -torsoSize.Z * 0.35f),
-            new Vector3(-torsoSize.X * 0.42f, -0.09f, -torsoSize.Z * 0.35f)
+            new Vector3(halfX, -0.09f, halfZ),
+            new Vector3(-halfX, -0.09f, halfZ),
+            new Vector3(halfX, -0.09f, -halfZ),
+            new Vector3(-halfX, -0.09f, -halfZ)
         };
 
         for (int i = 0; i < 4; i++)
@@ -1762,14 +1950,13 @@ public static class MonsterModelResolver
         entity.TokenType = CreatureTokenType.Snake;
         var container = new Node3D { Position = Vector3.Zero, Scale = new Vector3(scale, scale, scale) };
 
-        // Snake scales color
         var baseScales = isCobra ? new Color(0.20f, 0.28f, 0.18f) : new Color(0.30f, 0.25f, 0.15f);
         if (lowerName.Contains("black") || lowerName.Contains("shadow")) baseScales = new Color(0.12f, 0.12f, 0.15f);
         else if (lowerName.Contains("fire") || lowerName.Contains("red")) baseScales = new Color(0.45f, 0.15f, 0.10f);
 
         var scaleColor = baseScales.Lerp(glowColor, 0.40f);
-        var snakeMat = new StandardMaterial3D { AlbedoColor = scaleColor, Roughness = 0.45f, Metallic = 0.2f };
-        var underMat = new StandardMaterial3D { AlbedoColor = scaleColor.Lightened(0.25f), Roughness = 0.5f };
+        var snakeMat = GetProceduralCreatureMaterial("scales", scaleColor, roughness: 0.40f, metallic: 0.15f, isWet: true);
+        var underMat = GetProceduralCreatureMaterial("scales", scaleColor.Lightened(0.25f), roughness: 0.50f);
         var eyeMat = new StandardMaterial3D { AlbedoColor = glowColor, EmissionEnabled = true, Emission = glowColor, EmissionEnergyMultiplier = 2.0f };
         var tongueMat = new StandardMaterial3D { AlbedoColor = new Color(0.95f, 0.15f, 0.20f), EmissionEnabled = true, Emission = new Color(0.95f, 0.15f, 0.20f), EmissionEnergyMultiplier = 1.0f };
 
@@ -1779,18 +1966,14 @@ public static class MonsterModelResolver
         entity.HeadNode = headNode;
 
         // Triangular serpent head
-        var headMesh = new BoxMesh { Size = new Vector3(0.24f, 0.12f, 0.28f) };
-        headNode.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = snakeMat });
-
-        // Tapered snout
-        var snoutMesh = new BoxMesh { Size = new Vector3(0.16f, 0.08f, 0.14f) };
-        headNode.AddChild(new MeshInstance3D { Mesh = snoutMesh, MaterialOverride = snakeMat, Position = new Vector3(0, -0.02f, 0.16f) });
+        var headMesh = new SphereMesh { Radius = 0.13f, Height = 0.26f, RadialSegments = 12, Rings = 6 };
+        headNode.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = snakeMat, Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
         // Cobra hood if cobra
         if (isCobra)
         {
-            var hoodMesh = new BoxMesh { Size = new Vector3(0.46f, 0.22f, 0.06f) };
-            headNode.AddChild(new MeshInstance3D { Mesh = hoodMesh, MaterialOverride = snakeMat, Position = new Vector3(0, -0.04f, -0.08f) });
+            var hoodMesh = new SphereMesh { Radius = 0.22f, Height = 0.30f, RadialSegments = 10, Rings = 5 };
+            headNode.AddChild(new MeshInstance3D { Mesh = hoodMesh, MaterialOverride = snakeMat, Position = new Vector3(0, -0.04f, -0.08f), Scale = new Vector3(1.2f, 0.25f, 0.8f) });
         }
 
         // Forked tongue darting from snout
@@ -1803,12 +1986,12 @@ public static class MonsterModelResolver
         tongueNode.AddChild(new MeshInstance3D { Mesh = forkL, MaterialOverride = tongueMat, Position = new Vector3(0.02f, 0, 0.13f), Rotation = new Vector3(0, Mathf.DegToRad(30), 0) });
         tongueNode.AddChild(new MeshInstance3D { Mesh = forkR, MaterialOverride = tongueMat, Position = new Vector3(-0.02f, 0, 0.13f), Rotation = new Vector3(0, Mathf.DegToRad(-30), 0) });
         headNode.AddChild(tongueNode);
-        entity.LeftAntennaNode = tongueNode; // Re-use node ref for tongue darting animation
+        entity.LeftAntennaNode = tongueNode;
 
         // Glowing slit serpent eyes
         var eyeMesh = new SphereMesh { Radius = 0.03f, Height = 0.06f, RadialSegments = 8, Rings = 4 };
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(0.10f, 0.03f, 0.08f) });
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-0.10f, 0.03f, 0.08f) });
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(0.09f, 0.03f, 0.08f) });
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-0.09f, 0.03f, 0.08f) });
 
         // 7 Articulated Serpentine Body Segments cascading back
         var segZPositions = new[] { 0.28f, 0.14f, 0.00f, -0.14f, -0.28f, -0.42f, -0.56f };
@@ -1818,12 +2001,8 @@ public static class MonsterModelResolver
         {
             var r = segRadii[i];
             var segNode = new Node3D { Position = new Vector3(0, r + 0.02f, segZPositions[i]) };
-            var segMesh = new SphereMesh { Radius = r, Height = r * 2.2f, RadialSegments = 10, Rings = 5 };
-            segNode.AddChild(new MeshInstance3D { Mesh = segMesh, MaterialOverride = snakeMat });
-
-            // Underbelly plating
-            var bellyMesh = new BoxMesh { Size = new Vector3(r * 1.5f, 0.03f, r * 1.8f) };
-            segNode.AddChild(new MeshInstance3D { Mesh = bellyMesh, MaterialOverride = underMat, Position = new Vector3(0, -r * 0.7f, 0) });
+            var segMesh = new SphereMesh { Radius = r, Height = r * 2.2f, RadialSegments = 12, Rings = 6 };
+            segNode.AddChild(new MeshInstance3D { Mesh = segMesh, MaterialOverride = snakeMat, Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
             container.AddChild(segNode);
             entity.Segments.Add(segNode);
@@ -1837,12 +2016,12 @@ public static class MonsterModelResolver
         entity.TokenType = CreatureTokenType.Reptile;
         var container = new Node3D { Position = Vector3.Zero, Scale = new Vector3(scale, scale, scale) };
 
-        var baseSkin = isCroc ? new Color(0.22f, 0.28f, 0.18f) : new Color(0.25f, 0.35f, 0.22f);
+        var baseSkin = isCroc ? new Color(0.22f, 0.28f, 0.18f) : new Color(0.28f, 0.36f, 0.22f);
         if (lowerName.Contains("basilisk")) baseSkin = new Color(0.30f, 0.20f, 0.35f);
         else if (lowerName.Contains("salamander") || lowerName.Contains("fire")) baseSkin = new Color(0.55f, 0.20f, 0.10f);
 
         var skinColor = baseSkin.Lerp(glowColor, 0.40f);
-        var reptMat = new StandardMaterial3D { AlbedoColor = skinColor, Roughness = 0.50f, Metallic = 0.15f };
+        var reptMat = GetProceduralCreatureMaterial("scales", skinColor, roughness: 0.45f, metallic: 0.15f, isWet: true);
         var darkMat = new StandardMaterial3D { AlbedoColor = skinColor * 0.70f, Roughness = 0.60f };
         var eyeMat = new StandardMaterial3D { AlbedoColor = glowColor, EmissionEnabled = true, Emission = glowColor, EmissionEnergyMultiplier = 1.8f };
 
@@ -1851,55 +2030,55 @@ public static class MonsterModelResolver
         entity.BodyNode = bodyNode;
         entity.InitialBodyScale = Vector3.One;
 
-        // Broad, flat, low-slung reptilian body
-        var bodySize = isCroc ? new Vector3(0.44f, 0.20f, 0.72f) : new Vector3(0.34f, 0.18f, 0.54f);
-        var bodyMesh = new BoxMesh { Size = bodySize };
-        bodyNode.AddChild(new MeshInstance3D { Mesh = bodyMesh, MaterialOverride = reptMat });
+        // Broad, flat, low-slung reptilian body with organic smooth contours
+        var bodyMesh = new SphereMesh { Radius = isCroc ? 0.24f : 0.18f, Height = isCroc ? 0.75f : 0.58f, RadialSegments = 14, Rings = 7 };
+        bodyNode.AddChild(new MeshInstance3D { Mesh = bodyMesh, MaterialOverride = reptMat, Scale = new Vector3(1.1f, 0.65f, 1.0f), Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
         // Scaly dorsal spine ridge along back
-        var ridgeMesh = new BoxMesh { Size = new Vector3(0.04f, 0.08f, bodySize.Z * 0.85f) };
-        bodyNode.AddChild(new MeshInstance3D { Mesh = ridgeMesh, MaterialOverride = darkMat, Position = new Vector3(0, bodySize.Y * 0.50f + 0.03f, 0) });
+        var ridgeMesh = new CylinderMesh { TopRadius = 0.01f, BottomRadius = 0.04f, Height = isCroc ? 0.60f : 0.45f, RadialSegments = 6 };
+        bodyNode.AddChild(new MeshInstance3D { Mesh = ridgeMesh, MaterialOverride = darkMat, Position = new Vector3(0, 0.12f, 0), Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
         // Flat broad reptilian head
-        var headNode = new Node3D { Position = new Vector3(0, 0.02f, bodySize.Z * 0.52f) };
+        var headNode = new Node3D { Position = new Vector3(0, 0.02f, isCroc ? 0.40f : 0.30f) };
         bodyNode.AddChild(headNode);
         entity.HeadNode = headNode;
 
-        var headSize = isCroc ? new Vector3(0.32f, 0.14f, 0.38f) : new Vector3(0.24f, 0.12f, 0.26f);
-        var headMesh = new BoxMesh { Size = headSize };
-        headNode.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = reptMat });
+        var headMesh = new SphereMesh { Radius = isCroc ? 0.16f : 0.13f, Height = isCroc ? 0.36f : 0.26f, RadialSegments = 12, Rings = 6 };
+        headNode.AddChild(new MeshInstance3D { Mesh = headMesh, MaterialOverride = reptMat, Scale = new Vector3(1.1f, 0.55f, 1.0f), Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
         // Lateral reptilian eyes
         var eyeMesh = new SphereMesh { Radius = 0.035f, Height = 0.07f, RadialSegments = 8, Rings = 4 };
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(headSize.X * 0.40f, headSize.Y * 0.35f, 0.04f) });
-        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(-headSize.X * 0.40f, headSize.Y * 0.35f, 0.04f) });
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(isCroc ? 0.12f : 0.09f, 0.05f, 0.04f) });
+        headNode.AddChild(new MeshInstance3D { Mesh = eyeMesh, MaterialOverride = eyeMat, Position = new Vector3(isCroc ? -0.12f : -0.09f, 0.05f, 0.04f) });
 
         // Heavy tapering muscular tail
-        var tailNode = new Node3D { Position = new Vector3(0, 0, -bodySize.Z * 0.50f) };
+        var tailNode = new Node3D { Position = new Vector3(0, 0, isCroc ? -0.38f : -0.28f) };
         bodyNode.AddChild(tailNode);
         entity.TailNode = tailNode;
 
-        var tailMesh = new CylinderMesh { TopRadius = 0.03f, BottomRadius = 0.12f, Height = 0.55f, RadialSegments = 8 };
+        var tailMesh = new CylinderMesh { TopRadius = 0.02f, BottomRadius = 0.11f, Height = 0.55f, RadialSegments = 8 };
         tailNode.AddChild(new MeshInstance3D { Mesh = tailMesh, MaterialOverride = reptMat, Position = new Vector3(0, 0, -0.26f), Rotation = new Vector3(Mathf.DegToRad(90), 0, 0) });
 
         // 4 Sprawling reptilian legs (splayed outwards horizontally, then down)
         var upperLegMesh = new CylinderMesh { TopRadius = 0.03f, BottomRadius = 0.04f, Height = 0.18f, RadialSegments = 6 };
         var lowerLegMesh = new CylinderMesh { TopRadius = 0.025f, BottomRadius = 0.035f, Height = 0.16f, RadialSegments = 6 };
-        var clawMesh = new BoxMesh { Size = new Vector3(0.09f, 0.03f, 0.11f) };
+        var clawMesh = new SphereMesh { Radius = 0.04f, Height = 0.08f, RadialSegments = 6, Rings = 3 };
 
-        var legZ = new[] { bodySize.Z * 0.32f, -bodySize.Z * 0.32f };
+        var halfZ = isCroc ? 0.22f : 0.16f;
+        var halfX = isCroc ? 0.20f : 0.15f;
+        var legZ = new[] { halfZ, -halfZ };
         for (int i = 0; i < 2; i++)
         {
-            // Right leg (splayed right)
-            var legR = new Node3D { Position = new Vector3(bodySize.X * 0.50f, 0, legZ[i]) };
+            // Right leg
+            var legR = new Node3D { Position = new Vector3(halfX, 0, legZ[i]) };
             legR.AddChild(new MeshInstance3D { Mesh = upperLegMesh, MaterialOverride = reptMat, Position = new Vector3(0.08f, 0.02f, 0), Rotation = new Vector3(0, 0, Mathf.DegToRad(75)) });
             legR.AddChild(new MeshInstance3D { Mesh = lowerLegMesh, MaterialOverride = reptMat, Position = new Vector3(0.16f, -0.06f, 0), Rotation = new Vector3(0, 0, Mathf.DegToRad(-15)) });
             legR.AddChild(new MeshInstance3D { Mesh = clawMesh, MaterialOverride = darkMat, Position = new Vector3(0.18f, -0.12f, 0.03f) });
             bodyNode.AddChild(legR);
             entity.Legs.Add(legR);
 
-            // Left leg (splayed left)
-            var legL = new Node3D { Position = new Vector3(-bodySize.X * 0.50f, 0, legZ[i]) };
+            // Left leg
+            var legL = new Node3D { Position = new Vector3(-halfX, 0, legZ[i]) };
             legL.AddChild(new MeshInstance3D { Mesh = upperLegMesh, MaterialOverride = reptMat, Position = new Vector3(-0.08f, 0.02f, 0), Rotation = new Vector3(0, 0, Mathf.DegToRad(-75)) });
             legL.AddChild(new MeshInstance3D { Mesh = lowerLegMesh, MaterialOverride = reptMat, Position = new Vector3(-0.16f, -0.06f, 0), Rotation = new Vector3(0, 0, Mathf.DegToRad(15)) });
             legL.AddChild(new MeshInstance3D { Mesh = clawMesh, MaterialOverride = darkMat, Position = new Vector3(-0.18f, -0.12f, 0.03f) });
@@ -2198,10 +2377,10 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateElementalToken(MonsterEntity entity, Color glowColor)
+    private static Node3D CreateElementalToken(MonsterEntity entity, Color glowColor, float scale = 1.0f)
     {
         entity.TokenType = CreatureTokenType.Elemental;
-        var container = new Node3D { Position = new Vector3(0, 0.65f, 0) };
+        var container = new Node3D { Position = new Vector3(0, 0.65f, 0), Scale = new Vector3(scale, scale, scale) };
 
         // Faceted crystal prism
         var prismMesh = new BoxMesh { Size = new Vector3(0.42f, 0.42f, 0.42f) };
@@ -2244,10 +2423,10 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateGolemToken(MonsterEntity entity, Color glowColor)
+    private static Node3D CreateGolemToken(MonsterEntity entity, Color glowColor, float scale = 1.0f)
     {
         entity.TokenType = CreatureTokenType.Golem;
-        var container = new Node3D { Position = new Vector3(0, 0, 0) };
+        var container = new Node3D { Position = new Vector3(0, 0, 0), Scale = new Vector3(scale, scale, scale) };
 
         var bodyNode = new Node3D { Position = new Vector3(0, 0, 0) };
         container.AddChild(bodyNode);
@@ -2281,10 +2460,10 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateQuylthulgToken(MonsterEntity entity, Color glowColor)
+    private static Node3D CreateQuylthulgToken(MonsterEntity entity, Color glowColor, float scale = 1.0f)
     {
         entity.TokenType = CreatureTokenType.Quylthulg;
-        var container = new Node3D { Position = new Vector3(0, 0.60f, 0) };
+        var container = new Node3D { Position = new Vector3(0, 0.60f, 0), Scale = new Vector3(scale, scale, scale) };
 
         var orbMesh = new SphereMesh { Radius = 0.35f, Height = 0.70f, RadialSegments = 16, Rings = 8 };
         var orbMat = new StandardMaterial3D
@@ -2304,10 +2483,10 @@ public static class MonsterModelResolver
         return container;
     }
 
-    private static Node3D CreateFloatingRunicGem(MonsterEntity entity, Color glowColor, string glyphStr)
+    private static Node3D CreateFloatingRunicGem(MonsterEntity entity, Color glowColor, string glyphStr, float scale = 1.0f)
     {
         entity.TokenType = CreatureTokenType.GenericToken;
-        var container = new Node3D { Position = new Vector3(0, 0.65f, 0) };
+        var container = new Node3D { Position = new Vector3(0, 0.65f, 0), Scale = new Vector3(scale, scale, scale) };
 
         var gemMesh = new BoxMesh { Size = new Vector3(0.35f, 0.35f, 0.35f) };
         var gemMat = new StandardMaterial3D
@@ -2476,71 +2655,197 @@ public static class MonsterModelResolver
 
     private static void ApplyCharacterSkinAndTint(Node node, char glyph, string lowerName, Color tintColor)
     {
-        bool isDemon = glyph == 'U' || glyph == 'u';
+        bool isDemon = glyph == 'U' || (glyph == 'u' && !lowerName.Contains("imp"));
         bool isAinu = glyph == 'A';
         bool isUndead = glyph == 's' || glyph == 'z' || glyph == 'L' || glyph == 'V';
+        bool isDragon = glyph == 'D' || glyph == 'd' || glyph == 'M';
+        bool isElemental = glyph == 'E' || glyph == 'v';
 
-        ApplySkinRecursive(node, tintColor, isDemon, isAinu, isUndead);
-    }
+        Texture2D diffuseTex = null;
+        Texture2D normalTex = null;
+        Texture2D ormTex = null;
+        Texture2D emissiveTex = null;
 
-    private static void ApplySkinRecursive(Node node, Color tintColor, bool isDemon, bool isAinu, bool isUndead)
-    {
-        if (node is MeshInstance3D mi)
+        if (glyph == 's')
         {
-            Texture2D origTex = null;
-            if (mi.GetActiveMaterial(0) is StandardMaterial3D existingMat)
+            if (lowerName.Contains("archer") || lowerName.Contains("scout") || lowerName.Contains("sniper"))
             {
-                origTex = existingMat.AlbedoTexture;
+                diffuseTex = GetCachedTexture("res://assets/models/characters/Skeleton_Rogue_skeleton_texture.png");
             }
-
-            var nodeName = mi.Name.ToString().ToLowerInvariant();
-            var isArmor = nodeName.Contains("armor") || nodeName.Contains("metal") || nodeName.Contains("helmet") ||
-                          nodeName.Contains("shield") || nodeName.Contains("blade") || nodeName.Contains("sword") ||
-                          nodeName.Contains("axe") || nodeName.Contains("iron");
-
-            var mat = new StandardMaterial3D
+            else if (lowerName.Contains("mage") || lowerName.Contains("sorcerer") || lowerName.Contains("druj") || lowerName.Contains("necromancer"))
             {
-                AlbedoTexture = origTex,
-                Roughness = isArmor ? 0.35f : 0.65f,
-                Metallic = isArmor ? 0.85f : 0.08f,
-                RimEnabled = true,
-                Rim = 0.45f,
-                RimTint = 0.35f,
-            };
-
-            if (isDemon)
-            {
-                mat.AlbedoColor = new Color(0.35f, 0.12f, 0.08f).Lerp(tintColor, 0.40f);
-                mat.EmissionEnabled = true;
-                mat.Emission = new Color(0.95f, 0.30f, 0.10f);
-                mat.EmissionEnergyMultiplier = 1.1f;
-            }
-            else if (isAinu)
-            {
-                mat.AlbedoColor = new Color(0.85f, 0.85f, 0.95f).Lerp(tintColor, 0.35f);
-                mat.EmissionEnabled = true;
-                mat.Emission = tintColor;
-                mat.EmissionEnergyMultiplier = 0.75f;
-            }
-            else if (isUndead)
-            {
-                // Gritty bone and dark iron for undead
-                mat.AlbedoColor = new Color(0.65f, 0.62f, 0.58f).Lerp(tintColor, 0.30f);
-                mat.Roughness = 0.75f;
+                diffuseTex = GetCachedTexture("res://assets/models/characters/Skeleton_Mage_skeleton_texture.png");
             }
             else
             {
-                // Dark fantasy tone modulation: reduce oversaturated cartoon colors with gritty earthen/steel tint
-                var darkBase = new Color(0.72f, 0.70f, 0.68f);
-                mat.AlbedoColor = darkBase.Lerp(tintColor, 0.35f);
+                diffuseTex = GetCachedTexture("res://assets/models/characters/Skeleton_Warrior_skeleton_texture.png")
+                          ?? GetCachedTexture("res://assets/models/characters/skeleton_texture.png");
             }
+        }
+        else if (glyph == 'u' && (lowerName.Contains("imp") || lowerName.Contains("quasit") || lowerName.Contains("lemure") || lowerName.Contains("homunculus")))
+        {
+            if (lowerName.Contains("green") || lowerName.Contains("swamp") || lowerName.Contains("poison") || (tintColor.G > tintColor.R && tintColor.G > tintColor.B))
+            {
+                diffuseTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Imp_BaseColor_3.png");
+            }
+            else if (lowerName.Contains("blue") || lowerName.Contains("shadow") || lowerName.Contains("frost") || tintColor.B > tintColor.R)
+            {
+                diffuseTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Imp_BaseColor_2.png");
+            }
+            else
+            {
+                diffuseTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Imp_BaseColor_1.png");
+            }
+            normalTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Imp_Normal.png");
+            ormTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Imp_ORM.png");
+            emissiveTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Imp_Emissive.png");
+        }
+        else if ((glyph is 'k' or 'y' or 'o') && (lowerName.Contains("goblin") || lowerName.Contains("snaga") || lowerName.Contains("kobold") || lowerName.Contains("yeek") || lowerName.Contains("puglin")))
+        {
+            if (lowerName.Contains("blue") || lowerName.Contains("frost") || lowerName.Contains("ice") || (tintColor.B > tintColor.R && tintColor.B > tintColor.G))
+            {
+                diffuseTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Puglin_BaseColor_2.png");
+            }
+            else if (lowerName.Contains("brown") || lowerName.Contains("cave") || lowerName.Contains("earth"))
+            {
+                diffuseTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Puglin_BaseColor_3.png");
+            }
+            else
+            {
+                diffuseTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Puglin_BaseColor_1.png");
+            }
+            normalTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Puglin_Normal.png");
+            ormTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Puglin_ORM.png");
+            emissiveTex = GetCachedTexture("res://assets/models/monsters/bestiary/T_Puglin_Emissive.png");
+        }
+        else if (glyph == 'r') // Rats & Rodents
+        {
+            diffuseTex = GetProceduralCreatureMaterial("fur", new Color(0.24f, 0.20f, 0.18f).Lerp(tintColor, 0.35f), 0.70f).AlbedoTexture;
+            normalTex = GetProceduralCreatureMaterial("fur", new Color(0.24f, 0.20f, 0.18f).Lerp(tintColor, 0.35f), 0.70f).NormalTexture;
+        }
+        else if (glyph == 'S') // Spiders & Scorpions
+        {
+            diffuseTex = GetProceduralCreatureMaterial("chitin", new Color(0.18f, 0.16f, 0.20f).Lerp(tintColor, 0.35f), 0.35f, 0.2f).AlbedoTexture;
+            normalTex = GetProceduralCreatureMaterial("chitin", new Color(0.18f, 0.16f, 0.20f).Lerp(tintColor, 0.35f), 0.35f, 0.2f).NormalTexture;
+        }
+        else if (glyph == 'J' || glyph == 'n' || (glyph == 'R' && (lowerName.Contains("frog") || lowerName.Contains("toad")))) // Snakes, Nagas & Frogs
+        {
+            diffuseTex = GetProceduralCreatureMaterial("scales", new Color(0.22f, 0.32f, 0.18f).Lerp(tintColor, 0.40f), 0.40f, 0.1f, isWet: true).AlbedoTexture;
+            normalTex = GetProceduralCreatureMaterial("scales", new Color(0.22f, 0.32f, 0.18f).Lerp(tintColor, 0.40f), 0.40f, 0.1f, isWet: true).NormalTexture;
+        }
+        else if (glyph == 'F') // Wasps
+        {
+            diffuseTex = GetProceduralCreatureMaterial("chitin", new Color(0.35f, 0.30f, 0.12f).Lerp(tintColor, 0.40f), 0.30f, 0.2f).AlbedoTexture;
+            normalTex = GetProceduralCreatureMaterial("chitin", new Color(0.35f, 0.30f, 0.12f).Lerp(tintColor, 0.40f), 0.30f, 0.2f).NormalTexture;
+        }
 
-            mi.MaterialOverride = mat;
+        ApplySkinRecursive(node, glyph, lowerName, tintColor, isDemon, isAinu, isUndead, isDragon, isElemental, diffuseTex, normalTex, ormTex, emissiveTex);
+    }
+
+    private static void ApplySkinRecursive(
+        Node node, char glyph, string lowerName, Color tintColor, bool isDemon, bool isAinu, bool isUndead, bool isDragon, bool isElemental,
+        Texture2D diffuseTex, Texture2D normalTex, Texture2D ormTex, Texture2D emissiveTex)
+    {
+        if (node is MeshInstance3D mi)
+        {
+            var surfaceCount = mi.Mesh != null ? mi.Mesh.GetSurfaceCount() : 1;
+            for (int i = 0; i < surfaceCount; i++)
+            {
+                if (mi.GetActiveMaterial(i) is BaseMaterial3D orig)
+                {
+                    var mat = (BaseMaterial3D)orig.Duplicate();
+                    var matName = (mat.ResourceName ?? "").ToLowerInvariant();
+
+                    if (diffuseTex != null)
+                    {
+                        mat.AlbedoTexture = diffuseTex;
+                    }
+                    if (normalTex != null)
+                    {
+                        mat.NormalEnabled = true;
+                        mat.NormalTexture = normalTex;
+                        mat.NormalScale = 0.85f;
+                    }
+                    if (ormTex != null)
+                    {
+                        mat.RoughnessTexture = ormTex;
+                        mat.RoughnessTextureChannel = BaseMaterial3D.TextureChannel.Green;
+                        mat.MetallicTexture = ormTex;
+                        mat.MetallicTextureChannel = BaseMaterial3D.TextureChannel.Blue;
+                    }
+                    if (emissiveTex != null)
+                    {
+                        mat.EmissionEnabled = true;
+                        mat.EmissionTexture = emissiveTex;
+                        mat.Emission = tintColor != Colors.White && tintColor.A > 0 ? tintColor : Colors.White;
+                        mat.EmissionEnergyMultiplier = 1.35f;
+                    }
+
+                    mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic;
+
+                    if (isDemon)
+                    {
+                        mat.EmissionEnabled = true;
+                        mat.Emission = new Color(0.95f, 0.28f, 0.08f);
+                        mat.EmissionEnergyMultiplier = 0.85f;
+                    }
+                    else if (isAinu)
+                    {
+                        mat.EmissionEnabled = true;
+                        mat.Emission = new Color(0.95f, 0.88f, 0.40f);
+                        mat.EmissionEnergyMultiplier = 0.65f;
+                    }
+                    else if (isDragon)
+                    {
+                        mat.Metallic = 0.35f;
+                        mat.Roughness = 0.45f;
+                        if (tintColor != Colors.White && tintColor.A > 0)
+                        {
+                            mat.EmissionEnabled = true;
+                            mat.Emission = tintColor * 0.5f;
+                            mat.EmissionEnergyMultiplier = 0.8f;
+                        }
+                    }
+                    else if (isElemental)
+                    {
+                        mat.EmissionEnabled = true;
+                        mat.Emission = tintColor != Colors.White && tintColor.A > 0 ? tintColor : new Color(0.7f, 0.8f, 1.0f);
+                        mat.EmissionEnergyMultiplier = 1.2f;
+                    }
+                    else if (isUndead)
+                    {
+                        mat.Roughness = Mathf.Clamp(mat.Roughness + 0.15f, 0f, 1f);
+                        if (matName.Contains("skin"))
+                        {
+                            mat.AlbedoColor = mat.AlbedoColor.Lerp(new Color(0.70f, 0.72f, 0.68f), 0.50f);
+                        }
+                    }
+                    else if (glyph is 'o' or 'k' or 'y' or 'T' or 'O')
+                    {
+                        // Orcs, goblins, kobolds, trolls - tint skin tone with creature color
+                        if (matName.Contains("skin"))
+                        {
+                            mat.AlbedoColor = mat.AlbedoColor.Lerp(tintColor, 0.45f);
+                        }
+                        else if (diffuseTex == null)
+                        {
+                            mat.AlbedoColor = mat.AlbedoColor.Lerp(tintColor, 0.25f);
+                        }
+                    }
+                    else if (tintColor != Colors.White && tintColor.A > 0 && !matName.Contains("skin") && !matName.Contains("face") && diffuseTex == null)
+                    {
+                        // Accent tinting on garments/armor/creatures for distinct monster variants
+                        mat.AlbedoColor = mat.AlbedoColor.Lerp(tintColor, 0.28f);
+                    }
+
+                    mi.SetSurfaceOverrideMaterial(i, mat);
+                }
+            }
         }
 
         foreach (var child in node.GetChildren())
         {
-            ApplySkinRecursive(child, tintColor, isDemon, isAinu, isUndead);
+            ApplySkinRecursive(child, glyph, lowerName, tintColor, isDemon, isAinu, isUndead, isDragon, isElemental, diffuseTex, normalTex, ormTex, emissiveTex);
         }
     }
 
@@ -2548,25 +2853,23 @@ public static class MonsterModelResolver
     {
         if (node is MeshInstance3D mi)
         {
-            Texture2D origTex = null;
-            if (mi.GetActiveMaterial(0) is StandardMaterial3D existingMat)
+            var surfaceCount = mi.Mesh != null ? mi.Mesh.GetSurfaceCount() : 1;
+            for (int i = 0; i < surfaceCount; i++)
             {
-                origTex = existingMat.AlbedoTexture;
+                if (mi.GetActiveMaterial(i) is BaseMaterial3D orig)
+                {
+                    var mat = (BaseMaterial3D)orig.Duplicate();
+                    mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                    var c = mat.AlbedoColor;
+                    c.A = 0.55f;
+                    mat.AlbedoColor = c;
+                    mat.EmissionEnabled = true;
+                    mat.Emission = spectralColor * 0.7f;
+                    mat.EmissionEnergyMultiplier = 0.9f;
+                    mat.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+                    mi.SetSurfaceOverrideMaterial(i, mat);
+                }
             }
-
-            var mat = new StandardMaterial3D
-            {
-                AlbedoTexture = origTex,
-                AlbedoColor = new Color(spectralColor.R, spectralColor.G, spectralColor.B, 0.55f),
-                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                Roughness = 0.25f,
-                Metallic = 0.1f,
-                EmissionEnabled = true,
-                Emission = spectralColor * 0.6f,
-                EmissionEnergyMultiplier = 0.9f,
-                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            };
-            mi.MaterialOverride = mat;
         }
 
         foreach (var child in node.GetChildren())
@@ -2713,7 +3016,7 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(rightHand, "res://assets/models/weapons/Sword.fbx", 0.55f);
+                    AttachWeapon(rightHand, "res://assets/models/weapons/Sword.fbx", 0.22f, new Vector3(0, 0.04f, 0.02f), new Vector3(Mathf.DegToRad(-90), 0, 0));
                 }
 
                 // Left hand: Shield
@@ -2724,7 +3027,7 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(leftHand, "res://assets/models/weapons/Shield_Heater.fbx", 0.55f);
+                    AttachWeapon(leftHand, "res://assets/models/weapons/Shield_Heater.fbx", 0.22f, new Vector3(-0.06f, 0.04f, 0.02f), new Vector3(Mathf.DegToRad(-90), Mathf.DegToRad(90), 0));
                 }
                 break;
             }
@@ -2739,7 +3042,7 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(rightHand, "res://assets/models/weapons/Axe.fbx", 0.55f);
+                    AttachWeapon(rightHand, "res://assets/models/weapons/Axe.fbx", 0.20f, new Vector3(0, 0.04f, 0.02f), new Vector3(Mathf.DegToRad(-90), 0, 0));
                 }
 
                 // Left hand: round shield or empty
@@ -2761,7 +3064,7 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(rightHand, "res://assets/models/weapons/Dagger.fbx", 0.50f);
+                    AttachWeapon(rightHand, "res://assets/models/weapons/Dagger.fbx", 0.18f, new Vector3(0, 0.03f, 0.01f), new Vector3(Mathf.DegToRad(-90), 0, 0));
                 }
                 break;
             }
@@ -2776,14 +3079,14 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(rightHand, "res://assets/models/weapons/Bow_Wooden.fbx", 0.55f);
+                    AttachWeapon(rightHand, "res://assets/models/weapons/Bow_Wooden.fbx", 0.22f, new Vector3(0, 0.04f, 0), new Vector3(0, Mathf.DegToRad(90), Mathf.DegToRad(-90)));
                 }
                 break;
             }
 
             case EquipmentRole.Mage:
             {
-                // Right hand: Wand / Staff / Spear
+                // Right hand: Wizard Staff / Spear
                 var wand = FindChildByNameSubstrings(rightHand, "1h_wand", "2h_staff", "wand", "staff");
                 if (wand != null)
                 {
@@ -2791,7 +3094,7 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(rightHand, "res://assets/models/weapons/Spear.fbx", 0.50f);
+                    AttachWeapon(rightHand, "res://assets/models/characters/Skeleton_Staff.gltf", 0.75f, new Vector3(0, 0.04f, 0), new Vector3(Mathf.DegToRad(-90), 0, 0));
                 }
 
                 // Left hand: Spellbook
@@ -2800,13 +3103,17 @@ public static class MonsterModelResolver
                 {
                     book.Visible = true;
                 }
+                else
+                {
+                    AttachWeapon(leftHand, "res://assets/models/items/Book1_Closed.fbx", 0.22f, new Vector3(-0.04f, 0.04f, 0.02f), new Vector3(Mathf.DegToRad(-30), Mathf.DegToRad(60), 0));
+                }
                 break;
             }
 
             case EquipmentRole.Cleric:
             {
                 // Right hand: Mace / Hammer
-                AttachWeapon(rightHand, "res://assets/models/weapons/Hammer_Small.fbx", 0.50f);
+                AttachWeapon(rightHand, "res://assets/models/weapons/Hammer_Small.fbx", 0.20f, new Vector3(0, 0.04f, 0.02f), new Vector3(Mathf.DegToRad(-90), 0, 0));
 
                 // Left hand: Spellbook or Shield
                 var book = FindChildByNameSubstrings(leftHand, "spellbook");
@@ -2816,7 +3123,7 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(leftHand, "res://assets/models/items/Book1_Closed.fbx", 0.45f);
+                    AttachWeapon(leftHand, "res://assets/models/items/Book1_Closed.fbx", 0.22f, new Vector3(-0.04f, 0.04f, 0.02f), new Vector3(Mathf.DegToRad(-30), Mathf.DegToRad(60), 0));
                 }
                 break;
             }
@@ -2830,7 +3137,7 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(rightHand, "res://assets/models/weapons/Claymore.fbx", 0.60f);
+                    AttachWeapon(rightHand, "res://assets/models/weapons/Claymore.fbx", 0.24f, new Vector3(0, 0.05f, 0.02f), new Vector3(Mathf.DegToRad(-90), 0, 0));
                 }
                 break;
             }
@@ -2844,7 +3151,7 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(rightHand, "res://assets/models/weapons/Axe_Double.fbx", 0.60f);
+                    AttachWeapon(rightHand, "res://assets/models/weapons/Axe_Double.fbx", 0.22f, new Vector3(0, 0.04f, 0.02f), new Vector3(Mathf.DegToRad(-90), 0, 0));
                 }
                 break;
             }
@@ -2858,7 +3165,7 @@ public static class MonsterModelResolver
                 }
                 else
                 {
-                    AttachWeapon(rightHand, "res://assets/models/weapons/Spear.fbx", 0.55f);
+                    AttachWeapon(rightHand, "res://assets/models/characters/Skeleton_Staff.gltf", 0.80f, new Vector3(0, 0.04f, 0), new Vector3(Mathf.DegToRad(-90), 0, 0));
                 }
                 break;
             }
@@ -2869,11 +3176,12 @@ public static class MonsterModelResolver
     {
         if (node == null) return;
         var name = node.Name.ToString().ToLowerInvariant();
-        if (leftHand == null && (name == "handslot.l" || name == "handslot_l" || name == "handslotleft" || (name.StartsWith("handslot") && name.EndsWith("l")) || name == "hand.l" || name == "hand_l"))
+
+        if (leftHand == null && (name == "handslot.l" || name == "handslot_l" || name == "handslotleft" || (name.StartsWith("handslot") && name.EndsWith("l")) || name == "hand.l" || name == "hand_l" || name == "wrist.l" || name == "wrist_l"))
         {
             if (node is Node3D n3d) leftHand = n3d;
         }
-        if (rightHand == null && (name == "handslot.r" || name == "handslot_r" || name == "handslotright" || (name.StartsWith("handslot") && name.EndsWith("r")) || name == "hand.r" || name == "hand_r"))
+        if (rightHand == null && (name == "handslot.r" || name == "handslot_r" || name == "handslotright" || (name.StartsWith("handslot") && name.EndsWith("r")) || name == "hand.r" || name == "hand_r" || name == "wrist.r" || name == "wrist_r"))
         {
             if (node is Node3D n3d) rightHand = n3d;
         }
@@ -2885,7 +3193,9 @@ public static class MonsterModelResolver
                 for (int b = 0; b < skel.GetBoneCount(); b++)
                 {
                     var bName = skel.GetBoneName(b).ToLowerInvariant();
-                    if (bName.Contains("hand") && (bName.Contains("left") || bName.EndsWith(".l") || bName.EndsWith("_l") || bName.Contains(".l.") || bName.Contains("_l_")))
+                    bool isLeft = bName.EndsWith(".l") || bName.EndsWith("_l") || bName.Contains(".l.") || bName.Contains("_l_") || bName.Contains("left") || bName.StartsWith("l_") || bName.StartsWith("l.");
+                    bool isHand = bName.Contains("hand") || bName.Contains("wrist") || bName.Contains("palm");
+                    if (isLeft && isHand)
                     {
                         var ba = new BoneAttachment3D { Name = "BoneAttach_Hand_L", BoneName = skel.GetBoneName(b) };
                         skel.AddChild(ba);
@@ -2899,7 +3209,9 @@ public static class MonsterModelResolver
                 for (int b = 0; b < skel.GetBoneCount(); b++)
                 {
                     var bName = skel.GetBoneName(b).ToLowerInvariant();
-                    if (bName.Contains("hand") && (bName.Contains("right") || bName.EndsWith(".r") || bName.EndsWith("_r") || bName.Contains(".r.") || bName.Contains("_r_")))
+                    bool isRight = bName.EndsWith(".r") || bName.EndsWith("_r") || bName.Contains(".r.") || bName.Contains("_r_") || bName.Contains("right") || bName.StartsWith("r_") || bName.StartsWith("r.");
+                    bool isHand = bName.Contains("hand") || bName.Contains("wrist") || bName.Contains("palm");
+                    if (isRight && isHand)
                     {
                         var ba = new BoneAttachment3D { Name = "BoneAttach_Hand_R", BoneName = skel.GetBoneName(b) };
                         skel.AddChild(ba);
@@ -2948,17 +3260,24 @@ public static class MonsterModelResolver
         return null;
     }
 
-    private static void AttachWeapon(Node3D handNode, string modelPath, float scale = 1.0f)
+    private static void AttachWeapon(Node3D handNode, string modelPath, float scale = 1.0f, Vector3? positionOffset = null, Vector3? rotationOffset = null)
     {
         if (handNode == null || string.IsNullOrEmpty(modelPath)) return;
-        var scene = GetModel(modelPath);
-        if (scene != null)
+        try
         {
-            var weaponInst = scene.Instantiate<Node3D>();
-            weaponInst.Position = Vector3.Zero;
-            weaponInst.Rotation = Vector3.Zero;
-            weaponInst.Scale = Vector3.One * scale;
-            handNode.AddChild(weaponInst);
+            var scene = GetModel(modelPath);
+            if (scene != null)
+            {
+                var weaponInst = scene.Instantiate<Node3D>();
+                weaponInst.Position = positionOffset ?? Vector3.Zero;
+                weaponInst.Rotation = rotationOffset ?? Vector3.Zero;
+                weaponInst.Scale = Vector3.One * scale;
+                handNode.AddChild(weaponInst);
+            }
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[MonsterModelResolver] Failed to attach weapon '{modelPath}': {ex.Message}");
         }
     }
 
@@ -3511,19 +3830,56 @@ public static class MonsterModelResolver
 
     private static PackedScene GetModel(string path)
     {
+        if (string.IsNullOrEmpty(path)) return null;
+
         if (_modelCache.TryGetValue(path, out var scene))
         {
             return scene;
         }
 
-        if (ResourceLoader.Exists(path))
+        try
         {
-            scene = GD.Load<PackedScene>(path);
-            if (scene != null)
+            if (ResourceLoader.Exists(path))
             {
-                _modelCache[path] = scene;
-                return scene;
+                scene = GD.Load<PackedScene>(path);
+                if (scene != null)
+                {
+                    _modelCache[path] = scene;
+                    return scene;
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[MonsterModelResolver] Failed to load model '{path}': {ex.Message}");
+        }
+        return null;
+    }
+
+    private static Texture2D GetCachedTexture(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return null;
+
+        if (_textureCache.TryGetValue(path, out var tex))
+        {
+            return tex;
+        }
+
+        try
+        {
+            if (ResourceLoader.Exists(path))
+            {
+                tex = GD.Load<Texture2D>(path);
+                if (tex != null)
+                {
+                    _textureCache[path] = tex;
+                    return tex;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr($"[MonsterModelResolver] Failed to load texture '{path}': {ex.Message}");
         }
         return null;
     }

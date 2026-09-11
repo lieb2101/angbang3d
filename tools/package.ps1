@@ -125,11 +125,24 @@ Copy-Item (Join-Path $repo 'client\assets') $destClient -Recurse
 Copy-Item (Join-Path $repo 'client\scripts') $destClient -Recurse
 if (Test-Path (Join-Path $repo 'client\.godot')) {
     Copy-Item (Join-Path $repo 'client\.godot') $destClient -Recurse
-    # Strip non-release debug compilation artifacts from .godot
+    # Strip non-release debug compilation artifacts and editor cache from .godot
     $debugBin = Join-Path $destClient '.godot\mono\temp\bin\Debug'
     if (Test-Path $debugBin) { Remove-Item $debugBin -Recurse -Force }
     $debugObj = Join-Path $destClient '.godot\mono\temp\obj\Debug'
     if (Test-Path $debugObj) { Remove-Item $debugObj -Recurse -Force }
+    $editorCache = Join-Path $destClient '.godot\editor'
+    if (Test-Path $editorCache) { Remove-Item $editorCache -Recurse -Force }
+}
+
+# Copy Standalone executable and assemblies if available in dist root
+$standaloneExe = Join-Path $distRoot 'Angband3D.exe'
+$standalonePck = Join-Path $distRoot 'Angband3D.pck'
+$standaloneData = Join-Path $distRoot 'data_angband3d_windows_x86_64'
+if ((Test-Path $standaloneExe) -and (Test-Path $standalonePck) -and (Test-Path $standaloneData)) {
+    Write-Host "Including standalone Angband3D.exe and .pck bundle in distribution..." -ForegroundColor Green
+    Copy-Item $standaloneExe $stageDir
+    Copy-Item $standalonePck $stageDir
+    Copy-Item $standaloneData $stageDir -Recurse
 }
 
 # Copy Engine binaries and gamedata

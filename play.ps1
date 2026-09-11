@@ -4,8 +4,8 @@
 .DESCRIPTION
     Launches the Godot client, locating Godot automatically. Run from anywhere.
 .PARAMETER Character
-    Which save slot to use. Defaults to "angband3d". Each name is a separate
-    character; nothing is ever overwritten.
+    Which character / save slot to use. Each name is a separate character;
+    nothing is ever overwritten.
 .PARAMETER List
     List existing save slots and exit.
 .PARAMETER Random
@@ -27,7 +27,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Character = 'angband3d',
+    [string]$Character,
     [switch]$Random,
     [switch]$Manual,
     [switch]$List,
@@ -48,12 +48,41 @@ if (-not (Test-Path $angband)) {
 
 $saveDir = Join-Path $repo 'engine\build\game\lib\save'
 
+function Get-SaveDescription([string]$path) {
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes($path)
+        if ($bytes.Length -ge 36) {
+            $magic = [System.Text.Encoding]::ASCII.GetString($bytes, 0, 8)
+            if ($magic -eq "SaveVNLA") {
+                $block = [System.Text.Encoding]::ASCII.GetString($bytes, 8, 16).TrimEnd("`0")
+                if ($block -eq "description") {
+                    $sz = [System.BitConverter]::ToUInt32($bytes, 28)
+                    if ($sz -gt 0 -and $sz -le 512 -and $bytes.Length -ge (36 + $sz)) {
+                        $nullIdx = [System.Array]::IndexOf($bytes, [byte]0, 36, $sz)
+                        $len = if ($nullIdx -ge 36) { $nullIdx - 36 } else { $sz }
+                        return [System.Text.Encoding]::UTF8.GetString($bytes, 36, $len)
+                    }
+                }
+            }
+        }
+    } catch {}
+    return $null
+}
+
 if ($List) {
     Write-Host "Save slots in $saveDir" -ForegroundColor Cyan
     if (Test-Path $saveDir) {
-        $saves = Get-ChildItem $saveDir -File -ErrorAction SilentlyContinue
+        $saves = Get-ChildItem $saveDir -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending
         if ($saves) {
-            $saves | ForEach-Object { "  {0,-24} {1}" -f $_.Name, $_.LastWriteTime }
+            $saves | ForEach-Object {
+                $desc = Get-SaveDescription $_.FullName
+                if ($desc) {
+                    "  {0,-16} {1,-38} ({2:yyyy-MM-dd HH:mm})" -f $_.Name, $desc, $_.LastWriteTime
+                } else {
+                    "  {0,-16} ({1:yyyy-MM-dd HH:mm})" -f $_.Name, $_.LastWriteTime
+                }
+            }
         } else { Write-Host "  (none yet)" }
     } else { Write-Host "  (none yet)" }
     Write-Host ""
@@ -64,7 +93,9 @@ if ($List) {
 if ($Classic) {
     Write-Host "Starting Angband in text mode. Quit with Ctrl-X." -ForegroundColor Cyan
     Push-Location (Split-Path $angband)
-    try { & $angband -mgcu "-u$Character" } finally { Pop-Location }
+    $gcuArgs = @('-mgcu')
+    if ($Character) { $gcuArgs += "-u$Character" }
+    try { & $angband $gcuArgs } finally { Pop-Location }
     exit $LASTEXITCODE
 }
 
@@ -98,13 +129,15 @@ if (-not $godot) {
     exit 1
 }
 
-$existing = Join-Path $saveDir $Character
-if (Test-Path $existing) {
-    Write-Host "Character '$Character' found." -ForegroundColor Cyan
-} else {
-    Write-Host "No character called '$Character' yet." -ForegroundColor Cyan
+if ($Character) {
+    $existing = Join-Path $saveDir $Character
+    if (Test-Path $existing) {
+        Write-Host "Character '$Character' found." -ForegroundColor Cyan
+    } else {
+        Write-Host "No character called '$Character' yet." -ForegroundColor Cyan
+    }
 }
-Write-Host "Choose continue or new character on the title screen." -ForegroundColor DarkGray
+Write-Host "Choose continue, load, or new character on the title screen." -ForegroundColor DarkGray
 
 Write-Host ""
 Write-Host "Controls" -ForegroundColor Cyan
@@ -121,8 +154,12 @@ Write-Host ""
 $client = Join-Path $repo 'client'
 $clientArgs = @('--path', $client)
 if ($Editor) { $clientArgs += '--editor' }
-$clientArgs += @('--', "--save=$Character")
-if ($Random) { $clientArgs += '--autobirth' }
-if ($Manual) { $clientArgs += '--manual' }
+$userArgs = @()
+if ($Character) { $userArgs += "--save=$Character" }
+if ($Random) { $userArgs += '--autobirth' }
+if ($Manual) { $userArgs += '--manual' }
+if ($userArgs.Count -gt 0) {
+    $clientArgs += @('--') + $userArgs
+}
 
 & $godot $clientArgs

@@ -123,9 +123,9 @@ public partial class BridgeClient : Node, IGameEngineBridge
     /// Launches the engine executable with bridge arguments and attaches stdio streams.
     /// </summary>
     /// <param name="exePath">Absolute path to the engine binary (e.g. angband.exe).</param>
-    /// <param name="saveName">Name of the character/save slot.</param>
+    /// <param name="saveName">Name of the character/save slot. If null or empty, engine handles character naming.</param>
     /// <param name="newCharacter">Whether to pass -n to create a new character slot.</param>
-    public void Start(string exePath, string saveName = "angband3d", bool newCharacter = true)
+    public void Start(string exePath, string saveName = null, bool newCharacter = false)
     {
         var info = new ProcessStartInfo
         {

@@ -27,7 +27,8 @@ public partial class Main : Node
     private int _shotAfter = 120;
     private int _frames;
     private bool _shotTaken;
-    private string _saveName = "angband3d";
+    private string _saveName;
+    private string _characterName;
     private bool _manualRequested;
     private bool _randomRequested;
     private bool _inSplash;
@@ -200,6 +201,92 @@ public partial class Main : Node
         return System.IO.Path.Combine(repo, "engine", "build", "game", "lib", "save");
     }
 
+    public record SaveFileInfo(System.IO.FileInfo File, string CharacterName, string Description)
+    {
+        public string DisplayName => !string.IsNullOrEmpty(CharacterName) ? CharacterName : File.Name;
+
+        public string DisplaySummary
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(Description))
+                {
+                    return Description;
+                }
+                return DisplayName;
+            }
+        }
+    }
+
+    private static SaveFileInfo GetSaveInfo(System.IO.FileInfo file)
+    {
+        var desc = ReadSaveDescription(file.FullName);
+        string charName = null;
+        if (!string.IsNullOrEmpty(desc))
+        {
+            var commaIdx = desc.IndexOf(',');
+            if (commaIdx > 0)
+            {
+                charName = desc.Substring(0, commaIdx).Trim();
+            }
+        }
+        return new SaveFileInfo(file, charName, desc);
+    }
+
+    private static string ReadSaveDescription(string filePath)
+    {
+        try
+        {
+            using var stream = System.IO.File.OpenRead(filePath);
+            if (stream.Length < 36)
+            {
+                return null;
+            }
+
+            var header = new byte[36];
+            var read = stream.Read(header, 0, 36);
+            if (read < 36)
+            {
+                return null;
+            }
+
+            // Check magic "SaveVNLA"
+            if (header[0] != 0x53 || header[1] != 0x61 || header[2] != 0x76 || header[3] != 0x65 ||
+                header[4] != 0x56 || header[5] != 0x4E || header[6] != 0x4C || header[7] != 0x41)
+            {
+                return null;
+            }
+
+            // Check block name "description"
+            var blockName = System.Text.Encoding.ASCII.GetString(header, 8, 16).TrimEnd('\0');
+            if (blockName != "description")
+            {
+                return null;
+            }
+
+            var size = System.BitConverter.ToUInt32(header, 28);
+            if (size == 0 || size > 512 || stream.Length < 36 + size)
+            {
+                return null;
+            }
+
+            var buf = new byte[size];
+            var bufRead = stream.Read(buf, 0, (int)size);
+            if (bufRead < size)
+            {
+                return null;
+            }
+
+            var nullIdx = System.Array.IndexOf(buf, (byte)0);
+            var strLen = nullIdx >= 0 ? nullIdx : (int)size;
+            return System.Text.Encoding.UTF8.GetString(buf, 0, strLen);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static System.IO.FileInfo[] GetSaveFiles()
     {
         var dir = SaveDir();
@@ -211,26 +298,6 @@ public partial class Main : Node
         var files = di.GetFiles();
         Array.Sort(files, (a, b) => b.LastWriteTime.CompareTo(a.LastWriteTime));
         return files;
-    }
-
-    private static bool SaveExists(string name) =>
-        System.IO.File.Exists(System.IO.Path.Combine(SaveDir(), name));
-
-    /// <summary>A slot name that is not in use, so nothing is ever overwritten.</summary>
-    private static string FreeSlot(string baseName)
-    {
-        if (!SaveExists(baseName))
-        {
-            return baseName;
-        }
-        for (var i = 2; i < 100; i++)
-        {
-            if (!SaveExists($"{baseName}-{i}"))
-            {
-                return $"{baseName}-{i}";
-            }
-        }
-        return baseName + "-new";
     }
 
     private void OpenSplash()
@@ -270,9 +337,11 @@ public partial class Main : Node
         var saves = GetSaveFiles();
         if (saves.Length > 0)
         {
-            _menuItems.Add(($"Continue Last Played ({saves[0].Name})", () =>
+            var topSave = GetSaveInfo(saves[0]);
+            _menuItems.Add(($"Continue Last Played ({topSave.DisplayName})", () =>
             {
                 _saveName = saves[0].Name;
+                _characterName = topSave.CharacterName;
                 _inMenu = false;
                 StartGame();
             }));
@@ -282,13 +351,15 @@ public partial class Main : Node
 
         _menuItems.Add(("New Character (Custom - Race/Class/Stats)", () =>
         {
-            _saveName = FreeSlot(_saveName);
+            _saveName = null;
+            _characterName = null;
             _inMenu = false;
             StartGame();
         }));
         _menuItems.Add(("New Character (Random - Review & Re-roll)", () =>
         {
-            _saveName = FreeSlot(_saveName);
+            _saveName = null;
+            _characterName = null;
             _randomRequested = true;
             _inMenu = false;
             StartGame();
@@ -325,10 +396,12 @@ public partial class Main : Node
         foreach (var file in saves)
         {
             var saveFile = file;
-            var label = $"{saveFile.Name}  ({saveFile.LastWriteTime:yyyy-MM-dd HH:mm})";
+            var info = GetSaveInfo(saveFile);
+            var label = $"{info.DisplaySummary}  ({saveFile.LastWriteTime:yyyy-MM-dd HH:mm})";
             _menuItems.Add((label, () =>
             {
                 _saveName = saveFile.Name;
+                _characterName = info.CharacterName;
                 _inMenu = false;
                 _inPauseMenu = false;
                 if (_bridge.Connected)
@@ -364,21 +437,22 @@ public partial class Main : Node
         foreach (var file in saves)
         {
             var saveFile = file;
-            var label = $"{saveFile.Name}  ({saveFile.LastWriteTime:yyyy-MM-dd HH:mm})";
-            _menuItems.Add((label, () => ConfirmDeleteMenu(saveFile)));
+            var info = GetSaveInfo(saveFile);
+            var label = $"{info.DisplaySummary}  ({saveFile.LastWriteTime:yyyy-MM-dd HH:mm})";
+            _menuItems.Add((label, () => ConfirmDeleteMenu(saveFile, info)));
         }
 
         _menuItems.Add(("Back", _inPauseMenu ? OpenPauseMenu : OpenMenu));
         RefreshMenuDisplay("DELETE SAVE", "Select a saved game to delete");
     }
 
-    private void ConfirmDeleteMenu(System.IO.FileInfo file)
+    private void ConfirmDeleteMenu(System.IO.FileInfo file, SaveFileInfo info)
     {
         _inMenu = true;
         _menuIndex = 0;
         _menuItems.Clear();
 
-        _menuItems.Add(($"Yes, Delete '{file.Name}' permanently", () =>
+        _menuItems.Add(($"Yes, Delete '{info.DisplayName}' permanently", () =>
         {
             try
             {
@@ -410,7 +484,7 @@ public partial class Main : Node
 
         _menuItems.Add(("Cancel (Keep Save)", OpenDeleteMenu));
 
-        RefreshMenuDisplay("CONFIRM DELETE", $"Are you sure you want to permanently delete '{file.Name}'?");
+        RefreshMenuDisplay("CONFIRM DELETE", $"Are you sure you want to permanently delete '{info.DisplaySummary}'?");
     }
 
     private void OpenPauseMenu()
@@ -450,7 +524,10 @@ public partial class Main : Node
         _menuItems.Add(("Toggle Fullscreen / Windowed (F11)", () =>
         {
             ToggleFullscreen();
-            RefreshMenuDisplay("GAME MENU", $"Current Character: {_saveName}");
+            var charDisplay = !string.IsNullOrEmpty(_characterName)
+                ? _characterName
+                : (!string.IsNullOrEmpty(_saveName) ? _saveName : "Adventurer");
+            RefreshMenuDisplay("GAME MENU", $"Current Character: {charDisplay}");
         }));
         _menuItems.Add(("Angband Wiki (Open in Browser)", () =>
         {
@@ -481,7 +558,10 @@ public partial class Main : Node
             OpenMenu();
         }));
 
-        RefreshMenuDisplay("GAME MENU", $"Current Character: {_saveName}");
+        var charDisplay = !string.IsNullOrEmpty(_characterName)
+            ? _characterName
+            : (!string.IsNullOrEmpty(_saveName) ? _saveName : "Adventurer");
+        RefreshMenuDisplay("GAME MENU", $"Current Character: {charDisplay}");
     }
 
     private void RefreshMenuDisplay(string title, string subtitle)
@@ -561,6 +641,22 @@ public partial class Main : Node
         _overlay.Frame = f;
         _waiting = 0.0;
         _overlay.Waiting = 0.0;
+
+        if (f.TryGetProperty("player", out var pl) && pl.ValueKind == JsonValueKind.Object)
+        {
+            if (pl.TryGetProperty("name", out var pName))
+            {
+                var charName = pName.GetString();
+                if (!string.IsNullOrEmpty(charName))
+                {
+                    _characterName = charName;
+                    if (string.IsNullOrEmpty(_saveName))
+                    {
+                        _saveName = charName;
+                    }
+                }
+            }
+        }
 
         AutoBirth(f);
         HandleRandomBirth(f);

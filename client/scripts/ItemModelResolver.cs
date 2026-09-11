@@ -150,23 +150,33 @@ public static class ItemModelResolver
             var lower = itemName.ToLowerInvariant();
 
             // Daggers & Knives
-            if (lower.Contains("dagger") || lower.Contains("knife") || lower.Contains("rapier") || lower.Contains("stiletto") || lower.Contains("main gauche"))
+            if (lower.Contains("dagger") || lower.Contains("knife") || lower.Contains("rapier") || lower.Contains("stiletto") || lower.Contains("main gauche") || lower.Contains("misericorde") || lower.Contains("baselard") || lower.Contains("bodkin") || lower.Contains("falcon") || lower.Contains("athame"))
             {
                 return ("res://assets/models/weapons/Dagger.fbx", 0.18f);
             }
             // 2H Swords & Greatswords
-            if (lower.Contains("two-handed") || lower.Contains("great sword") || lower.Contains("claymore") || lower.Contains("zweihander") || lower.Contains("bastard") || lower.Contains("executioner"))
+            if (lower.Contains("two-handed") || lower.Contains("great sword") || lower.Contains("claymore") || lower.Contains("zweihander") || lower.Contains("executioner") || lower.Contains("flamberge") || lower.Contains("no-dachi"))
             {
-                return ("res://assets/models/weapons/Claymore.fbx", 0.24f);
+                return ("res://assets/models/weapons/Claymore.fbx", 0.22f);
+            }
+            // Bastard / Big Swords
+            if (lower.Contains("bastard") || lower.Contains("broad sword") || lower.Contains("broadsword"))
+            {
+                return ("res://assets/models/weapons/Sword_Big.fbx", 0.20f);
+            }
+            // Curved / Short Swords
+            if (lower.Contains("short sword") || lower.Contains("sabre") || lower.Contains("scimitar") || lower.Contains("cutlass") || lower.Contains("tulwar") || lower.Contains("wakizashi") || lower.Contains("ninjato"))
+            {
+                return ("res://assets/models/weapons/Sword_2.fbx", 0.18f);
             }
             // 1H Swords
-            if (lower.Contains("sword") || lower.Contains("blade") || lower.Contains("scimitar") || lower.Contains("sabre") || lower.Contains("katana") || lower.Contains("cutlass"))
+            if (lower.Contains("sword") || lower.Contains("blade") || lower.Contains("katana") || lower.Contains("foil"))
             {
-                if (lower.Contains("golden") || lower.Contains("holy") || lower.Contains("radiant"))
+                if (lower.Contains("golden") || lower.Contains("holy") || lower.Contains("radiant") || lower.Contains("blessed") || lower.Contains("westernesse") || lower.Contains("gondolin") || lower.Contains("anduril") || lower.Contains("glamdring") || lower.Contains("ringil") || lower.Contains("sting"))
                 {
-                    return ("res://assets/models/weapons/Sword_Golden.fbx", 0.22f);
+                    return ("res://assets/models/weapons/Sword_Golden.fbx", 0.20f);
                 }
-                return ("res://assets/models/weapons/Sword.fbx", 0.22f);
+                return ("res://assets/models/weapons/Sword.fbx", 0.20f);
             }
             // 2H Battle Axes & Polearms
             if (lower.Contains("battle axe") || lower.Contains("great axe") || lower.Contains("broad axe") || lower.Contains("halberd") || lower.Contains("poleaxe"))

@@ -550,7 +550,7 @@ public partial class Overlay : Control
         var top = View.Y * 0.18f;
 
         // Card frame around menu
-        var menuWidth = 640f;
+        var menuWidth = 720f;
         var menuLeft = cx - menuWidth / 2f;
 
         DrawString(_font, new Vector2(menuLeft, top), MenuTitle,

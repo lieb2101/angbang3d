@@ -28,29 +28,33 @@ Your character's rolled race and physical height stat directly scale the entire 
 
 ### 🐉 3. Living 3D Bestiary & Procedural Anatomical Creatures
 - **Role-Accurate Humanoid Equipment**: Guards wield swords and shields; archers draw crossbows; mages hold glowing staves; thieves wield daggers; and beggars fight unarmed.
-- **Procedural 3D Creature Tokens**: Hundreds of non-humanoid monsters (dragons, hydras, giant spiders, centipedes, beholders, slimes, basilisks, demons, elementals) feature procedural anatomical 3D models with undulating segments, skittering legs, flapping wings, glowing irises, and pulsating nuclei.
+- **Anatomical Procedural 3D Creature Tokens**: Hundreds of non-humanoid monsters (dragons, hydras, giant spiders, centipedes, beholders, slimes, basilisks, demons, elementals, kobolds, imps, yeeks, yetis, lice) feature dedicated procedural anatomical 3D models with undulating segments, skittering legs, flapping wings, glowing irises, and pulsating nuclei.
+- **Robust Skeletal Rigging & T-Pose Prevention**: Bestiary models without embedded skeletal animation tracks automatically fallback to bespoke anatomical creature rigs, preventing static T-pose artifacts.
+- **Depth-Tested Nameplates & Status Reticles**: Monster nameplates, status badges (`💤 Sleep`, `⚠ Fleeing`, `🌀 Confused`), and target reticles enforce strict depth buffer testing and LOS gating so creature positions are never spoiled through solid walls.
 - **Living Visual Behaviors**: Monsters smoothly interpolate across tiles, turn to face you when adjacent, track their health with color-coded 3D nameplates, and play custom Idle/Walk animations.
 
-### 💥 4. Kinetic Combat VFX & Feedback ("Juice")
-- **3D Floating Combat Text**: Floating billboard damage numbers (orange), misses (silver), and critical hits (gold).
-- **Directional Impact Sparks**: Impact particles match monster blood or elemental type (crimson, acid green, spark yellow, void purple).
-- **Death Dissolve VFX**: Slain monsters burst into ethereal dissolve particles and smoke poofs.
-- **Camera Screen Trauma**: High-impact strikes and heavy damage trigger decaying screen shake and viewmodel recoil.
-
-### 🏰 5. Procedural PBR Masonry & Dynamic Atmospheric Biomes
+### 🏰 5. Procedural PBR Masonry, Depth Biomes & Solid Barrier Walls
 - **Multi-Octave PBR Materials**: Ashlar limestone masonry, weathered flagstone floors, cavern ceilings, glowing magma veins, and crystalline quartz seams with normal maps and calibrated roughness.
+- **6 Subterranean Depth Biomes**: Town & Overworld (0), Upper Crypts (1-15), Overgrown Catacombs (16-35), Crystal Caverns (36-60), Magma Underworld (61-85), and Abyssal Throne (86-100+).
+- **Wall Neighbor Discovery & Void-Free Boundary Rock**: Solid walls adjacent to illuminated rooms or hallways render immediately with inherited lighting upon entrance, and boundary rock is synthesized into dark barriers to eliminate see-through void gaps.
 - **Corridor Wall Sconces & Clutter**: Deterministic wall torches with point lights every 6–8 tiles, room corner pillars, and dungeon clutter.
 - **Atmospheric Lighting**: Dynamic torchlight with realistic sinusoidal flicker, ember particles, volumetric fog, and ambient SSAO.
 
-### 🗺️ 6. Dual-Mode Minimap & Independent Geometry Scaling
+### ⚰️ 6. Atmospheric Death & Post-Mortem Revelation Experience
+- **Solemn Funeral Bells & Atmospheric Memorial Screen**: Custom death audio chimes and a dedicated death UI honoring your fallen hero.
+- **Full Runes & Item Disclosure**: Optional full identification unmasks unknown runes, history, and properties across Equipment, Backpack, and Quiver.
+- **Authoritative High Scores**: Seamlessly records high scores into Angband's binary score ledger.
+- **Quick Restart & Reload**: Single-click actions to reload the latest save, roll a new character, or review character info.
+
+### 🗺️ 7. Dual-Mode Minimap & Independent Geometry Scaling
 - **Decoupled Minimap Controls**: Adjust physical HUD window dimensions (`Ctrl+PgUp/PgDn` or `[`/`]`) independently from grid tile zoom radius (`PgUp/PgDn` or `+`/`-`).
 - **Full-Screen 2D Tactical Map**: Press `Shift-M` for an instant top-down view with your directional vision cone and fog of memory.
 
-### 🔊 7. Zero-Latency Positional 3D Audio
-- **Procedural 16-bit PCM Audio Engine**: Generates spatialized footsteps (stone vs outdoor terrain), blade clangs, critical slashes, spell zaps, door creaks, and staircase transitions dynamically with zero external audio assets.
+### 🔊 8. Zero-Latency Positional 3D Audio
+- **Procedural 16-bit PCM Audio Engine**: Generates spatialized footsteps (stone vs outdoor terrain), blade clangs, critical slashes, spell zaps, door creaks, funeral death tolls, and staircase transitions dynamically with zero external audio assets.
 - **Pre-Allocated Sound Pools**: Zero-allocation audio playback eliminates runtime garbage collection hiccups.
 
-### 📜 8. 100% Faithful Angband 4.2.6 Engine Depth
+### 📜 9. 100% Faithful Angband 4.2.6 Engine Depth
 - **Zero Compromises on Roguelike Depth**: Every item, artifact, ego-type, spell, monster AI behavior, and dungeon generator is running directly from unmodified Angband 4.2.6 C code.
 - **Seamless Terminal Overlay**: Inventory, stores, character creation, targeting, and wizard debug menus pop up seamlessly via the terminal overlay without breaking immersion or game state.
 
@@ -164,6 +168,17 @@ dotnet build client/angband3d.csproj
 # 4. Run automated bridge acceptance tests
 python tools/smoke_test.py
 ```
+
+### Packaging Standalone Releases
+
+To build a clean, self-contained standalone distribution bundle (`Angband3D-Windows-x64.zip`):
+
+```powershell
+# Double-click or run from terminal:
+.\package.cmd
+```
+
+This compiles the engine, exports the standalone release executable (`Angband3D.exe`), packages gamedata and scripts, creates `dist/Angband3D-Windows-x64/`, and compresses it into an optimized `.zip` archive. End-users can extract and double-click `Angband3D.exe` (or `Play-Angband3D.cmd`) to play immediately with zero Godot installation required.
 
 ### Extending & Contributing
 

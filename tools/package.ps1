@@ -52,7 +52,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to build client project."
 }
 
-# Find Godot executable for export
+# Find Godot executable for export (prefer console binary to ensure synchronous completion)
 function Find-GodotExe {
     $cmd = Get-Command godot -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
@@ -65,7 +65,7 @@ function Find-GodotExe {
     foreach ($root in $roots) {
         if (-not (Test-Path $root)) { continue }
         $hit = Get-ChildItem $root -Recurse -Filter 'Godot*.exe' -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -notlike '*console*' } |
+            Where-Object { $_.Name -like '*console*' } |
             Sort-Object { $_.Name -like '*mono*' } -Descending |
             Select-Object -First 1
         if ($hit) { return $hit.FullName }
@@ -80,6 +80,14 @@ $distRoot = Join-Path $repo $OutputDir
 $pkgName = "Angband3D-Windows-x64"
 $stageDir = Join-Path $distRoot $pkgName
 
+# Clean dist directory of any temporary or obsolete artifacts
+if (Test-Path $distRoot) {
+    Get-ChildItem $distRoot | ForEach-Object {
+        if ($_.Name -ne $pkgName -and $_.Name -ne "$pkgName.zip") {
+            Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
 if (Test-Path $stageDir) {
     Remove-Item $stageDir -Recurse -Force
 }
@@ -103,47 +111,6 @@ if ($godotExe) {
 # Copy root docs and licenses
 Copy-Item (Join-Path $repo 'LICENSE') $stageDir
 Copy-Item (Join-Path $repo 'README.md') $stageDir
-
-# Copy Client files
-$destClient = Join-Path $stageDir 'client'
-New-Item -ItemType Directory -Path $destClient -Force | Out-Null
-
-Copy-Item (Join-Path $repo 'client\Main.tscn') $destClient
-Copy-Item (Join-Path $repo 'client\project.godot') $destClient
-Copy-Item (Join-Path $repo 'client\icon.svg') $destClient
-if (Test-Path (Join-Path $repo 'client\icon.svg.import')) {
-    Copy-Item (Join-Path $repo 'client\icon.svg.import') $destClient
-}
-if (Test-Path (Join-Path $repo 'client\export_presets.cfg')) {
-    Copy-Item (Join-Path $repo 'client\export_presets.cfg') $destClient
-}
-
-# Copy Assets
-Copy-Item (Join-Path $repo 'client\assets') $destClient -Recurse
-
-# Copy Scripts & .godot cache (lean export: exclude Debug bin/obj binaries to minimize footprint)
-Copy-Item (Join-Path $repo 'client\scripts') $destClient -Recurse
-if (Test-Path (Join-Path $repo 'client\.godot')) {
-    Copy-Item (Join-Path $repo 'client\.godot') $destClient -Recurse
-    # Strip non-release debug compilation artifacts and editor cache from .godot
-    $debugBin = Join-Path $destClient '.godot\mono\temp\bin\Debug'
-    if (Test-Path $debugBin) { Remove-Item $debugBin -Recurse -Force }
-    $debugObj = Join-Path $destClient '.godot\mono\temp\obj\Debug'
-    if (Test-Path $debugObj) { Remove-Item $debugObj -Recurse -Force }
-    $editorCache = Join-Path $destClient '.godot\editor'
-    if (Test-Path $editorCache) { Remove-Item $editorCache -Recurse -Force }
-}
-
-# Copy Standalone executable and assemblies if available in dist root
-$standaloneExe = Join-Path $distRoot 'Angband3D.exe'
-$standalonePck = Join-Path $distRoot 'Angband3D.pck'
-$standaloneData = Join-Path $distRoot 'data_angband3d_windows_x86_64'
-if ((Test-Path $standaloneExe) -and (Test-Path $standalonePck) -and (Test-Path $standaloneData)) {
-    Write-Host "Including standalone Angband3D.exe and .pck bundle in distribution..." -ForegroundColor Green
-    Copy-Item $standaloneExe $stageDir
-    Copy-Item $standalonePck $stageDir
-    Copy-Item $standaloneData $stageDir -Recurse
-}
 
 # Copy Engine binaries and gamedata
 $destEngine = Join-Path $stageDir 'engine\build\game'
@@ -171,7 +138,11 @@ $quickLauncherContent = @"
 @echo off
 setlocal
 cd /d "%~dp0"
-call play.cmd %*
+if exist "%~dp0Angband3D.exe" (
+    "%~dp0Angband3D.exe" %*
+) else (
+    call play.cmd %*
+)
 "@
 Set-Content -Path (Join-Path $stageDir 'Play-Angband3D.cmd') -Value $quickLauncherContent
 

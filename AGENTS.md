@@ -10,11 +10,13 @@ If starting a new session or recovering from a crash/disconnect:
    - `dotnet build client/angband3d.csproj` (Godot C# compilation)
 5. **DO NOT** execute exploratory recursive file searches (`**/*`) or dump entire files into context. All key file paths and data structures are indexed in `docs/LLM_CONTEXT.md`.
 
-## 2. Token & Rate Limit Optimization Rules
+## 2. Token, Efficiency & Workflow Rules
 - **Targeted Reads**: Read only the relevant line ranges (20-100 lines) around target symbols.
 - **Surgical Edits**: Use exact string replacement tools (`multi_replace_string_in_file` / `replace_string_in_file`) with 3 lines of context. Avoid rewriting full files.
 - **Avoid Command Polling**: Never run sleep loops or wait scripts in terminals. One-shot sync commands are standard.
 - **Output Brevity**: Keep chat responses short, dense, and action-oriented. State the fix, verify it, and record progress.
+- **Meaningful Code Comments**: Add clear, descriptive comments along the way for non-obvious logic, coordinate transformations, protocol changes, and invariant guards.
+- **Continuous Plan Tracking**: Keep track of in-flight goals, subtasks, and progress by maintaining `docs/NEXT_STEPS.md` and memory notes after completing milestones.
 
 ## 3. Strict Architectural Invariants
 1. **Engine Rebasability**:

@@ -4,11 +4,15 @@
 
 1. **Engine Bridge**:
    - Upstream Angband 4.2.6 fork on branch `bridge` with `main-bridge.c`.
-   - Complete player telemetry: HP, SP, AC, Max/Exp/Next Exp, Gold, Stats (STR/INT/WIS/DEX/CON with reductions), active statuses array, targeting monster tracker, depth/feelings, physical height (`ht`) and weight (`wt`), equipped light source, weapons (`weapon_item`), bows (`bow_item`), and shields (`shield_item`).
+   - Complete player telemetry: HP, SP, AC, Max/Exp/Next Exp, Gold, Stats (STR/INT/WIS/DEX/CON with reductions), active statuses array, targeting monster tracker, depth/feelings, physical height (`ht`) and weight (`wt`), equipped light source, weapons (`weapon_item`), bows (`bow_item`), shields (`shield_item`), cause of death (`died_from`), and fully identified `equipment`, `inventory`, and `quiver` object arrays on death.
    - 11/11 bridge smoke tests passing (`python tools/smoke_test.py`).
    - Patch file `engine-patch/0001-bridge-frontend.patch` fully synchronized.
 
 2. **Godot 4.7.2 C# Client**:
+   - **Full-Featured Death Experience & Post-Mortem Disclosure (`Overlay.cs`, `Main.cs`)**:
+     - Atmospheric death screen with funeral toll audio bells (`PlayerDeath` SFX).
+     - Full item & runes disclosure across Equipment, Backpack Inventory, Quiver Missiles, and Ability Scores.
+     - One-click / one-key quick actions: `[R]` Reload last saved game, `[N]` Re-roll new character, `[M / Esc]` Return to main menu.
    - **First-Person Viewmodel & Hands (`ViewModel.cs`)**:
      - Tapered forearm sleeves with class-tailored fabric shaders.
      - Modeled wrist cuffs / metal bracers.

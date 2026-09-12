@@ -30,6 +30,11 @@ public partial class Overlay : Control
     public int GuideSection { get; set; } = 0;
     public int GuideScroll { get; set; } = 0;
 
+    // Death Screen state
+    public int DeathSection { get; set; } = 0;
+    public int DeathScroll { get; set; } = 0;
+    public bool DeathItemsIdentified { get; set; } = false;
+
     // Discovery Pulses & Fog Smoothing (Step 13)
     private struct DiscoveryPulse
     {
@@ -61,16 +66,26 @@ public partial class Overlay : Control
     public event System.Action SplashGuideRequested;
     public event System.Action SplashWikiRequested;
     public event System.Action SplashQuitRequested;
+    public event System.Action DeathReloadRequested;
+    public event System.Action DeathRerollRequested;
+    public event System.Action DeathIdentifyRequested;
+    public event System.Action DeathMainMenuRequested;
+    public event System.Action<int> DeathTabClicked;
 
     // Interactive clickable bounding rects
     private readonly System.Collections.Generic.List<Rect2> _menuItemRects = new();
     private readonly System.Collections.Generic.List<Rect2> _guideTabRects = new();
+    private readonly System.Collections.Generic.List<Rect2> _deathTabRects = new();
     private Rect2 _splashBtnRect;
     private Rect2 _splashGuideRect;
     private Rect2 _splashWikiRect;
     private Rect2 _splashQuitRect;
     private Rect2 _guideCloseRect;
     private Rect2 _guideWikiRect;
+    private Rect2 _deathReloadBtnRect;
+    private Rect2 _deathRerollBtnRect;
+    private Rect2 _deathIdentifyBtnRect;
+    private Rect2 _deathMainMenuBtnRect;
 
     public void ChangeMinimapScale(float delta)
     {
@@ -141,6 +156,12 @@ public partial class Overlay : Control
 
         if (Frame is not { } frame)
         {
+            return;
+        }
+
+        if (Mode == ViewMode.Death)
+        {
+            DrawDeath(frame);
             return;
         }
 
@@ -632,6 +653,371 @@ public partial class Overlay : Control
             HorizontalAlignment.Left, -1, 13, new Color(0.6f, 0.68f, 0.82f));
     }
 
+    private void DrawCenteredButtonText(string text, Rect2 rect, int fontSize, Color color)
+    {
+        var sz = _font.GetStringSize(text, HorizontalAlignment.Left, -1, fontSize);
+        var pos = new Vector2(rect.Position.X + (rect.Size.X - sz.X) / 2f, rect.Position.Y + (rect.Size.Y + sz.Y) / 2f - 3f);
+        DrawString(_font, pos, text, HorizontalAlignment.Left, -1, fontSize, color);
+    }
+
+    private readonly struct DeathLine
+    {
+        public string Text { get; init; }
+        public string Prefix { get; init; }
+        public string Suffix { get; init; }
+        public Color Color { get; init; }
+        public bool IsHeader { get; init; }
+    }
+
+    private static System.Collections.Generic.List<DeathLine> GetDeathLines(int section, JsonElement player, bool identified)
+    {
+        var list = new System.Collections.Generic.List<DeathLine>();
+        if (player.ValueKind != JsonValueKind.Object)
+        {
+            list.Add(new DeathLine { Text = "No player telemetry available.", Color = Colors.Gray });
+            return list;
+        }
+
+        var idSuffix = identified ? " (IDENTIFIED)" : " (KNOWN AT DEATH)";
+
+        switch (section)
+        {
+            case 1: // Equipment
+                list.Add(new DeathLine { Text = $"[ EQUIPMENT SLOTS{idSuffix} ]", IsHeader = true });
+                if (player.TryGetProperty("equipment", out var eqArr) && eqArr.ValueKind == JsonValueKind.Array && eqArr.GetArrayLength() > 0)
+                {
+                    foreach (var item in eqArr.EnumerateArray())
+                    {
+                        var mention = item.TryGetProperty("mention", out var mElem) ? mElem.GetString() ?? "" : "";
+                        var slotName = item.TryGetProperty("slot_name", out var snElem) ? snElem.GetString() ?? "" : "";
+                        var prefix = !string.IsNullOrEmpty(mention) ? $"{mention}:" : (!string.IsNullOrEmpty(slotName) ? $"{slotName}:" : "Equipped:");
+                        var name = item.TryGetProperty("name", out var nElem) ? nElem.GetString() ?? "" : "(unknown item)";
+                        var weight = item.TryGetProperty("weight", out var wElem) ? wElem.GetInt32() : 0;
+                        var attr = item.TryGetProperty("attr", out var aElem) ? aElem.GetInt32() : 1;
+                        var col = AngbandColors.Get(attr);
+                        var suffix = weight > 0 ? $"{weight / 10.0f:F1} lb" : "";
+
+                        list.Add(new DeathLine
+                        {
+                            Prefix = prefix,
+                            Text = name,
+                            Suffix = suffix,
+                            Color = col
+                        });
+                    }
+                }
+                else
+                {
+                    list.Add(new DeathLine { Text = "  (No equipment was worn at the time of death)", Color = Colors.SlateGray });
+                }
+                break;
+
+            case 2: // Inventory
+                list.Add(new DeathLine { Text = $"[ BACKPACK INVENTORY{idSuffix} ]", IsHeader = true });
+                if (player.TryGetProperty("inventory", out var invArr) && invArr.ValueKind == JsonValueKind.Array && invArr.GetArrayLength() > 0)
+                {
+                    foreach (var item in invArr.EnumerateArray())
+                    {
+                        var label = item.TryGetProperty("label", out var lElem) ? lElem.GetString() ?? "" : "";
+                        var prefix = !string.IsNullOrEmpty(label) ? $"{label}) " : "• ";
+                        var name = item.TryGetProperty("name", out var nElem) ? nElem.GetString() ?? "" : "(unknown item)";
+                        var weight = item.TryGetProperty("weight", out var wElem) ? wElem.GetInt32() : 0;
+                        var attr = item.TryGetProperty("attr", out var aElem) ? aElem.GetInt32() : 1;
+                        var col = AngbandColors.Get(attr);
+                        var suffix = weight > 0 ? $"{weight / 10.0f:F1} lb" : "";
+
+                        list.Add(new DeathLine
+                        {
+                            Prefix = prefix,
+                            Text = name,
+                            Suffix = suffix,
+                            Color = col
+                        });
+                    }
+                }
+                else
+                {
+                    list.Add(new DeathLine { Text = "  (Backpack was empty)", Color = Colors.SlateGray });
+                }
+                break;
+
+            case 3: // Quiver
+                list.Add(new DeathLine { Text = $"[ MISSILES & QUIVER{idSuffix} ]", IsHeader = true });
+                if (player.TryGetProperty("quiver", out var qArr) && qArr.ValueKind == JsonValueKind.Array && qArr.GetArrayLength() > 0)
+                {
+                    foreach (var item in qArr.EnumerateArray())
+                    {
+                        var label = item.TryGetProperty("label", out var lElem) ? lElem.GetString() ?? "" : "";
+                        var prefix = !string.IsNullOrEmpty(label) ? $"{label}) " : "• ";
+                        var name = item.TryGetProperty("name", out var nElem) ? nElem.GetString() ?? "" : "(unknown item)";
+                        var weight = item.TryGetProperty("weight", out var wElem) ? wElem.GetInt32() : 0;
+                        var attr = item.TryGetProperty("attr", out var aElem) ? aElem.GetInt32() : 1;
+                        var col = AngbandColors.Get(attr);
+                        var suffix = weight > 0 ? $"{weight / 10.0f:F1} lb" : "";
+
+                        list.Add(new DeathLine
+                        {
+                            Prefix = prefix,
+                            Text = name,
+                            Suffix = suffix,
+                            Color = col
+                        });
+                    }
+                }
+                else
+                {
+                    list.Add(new DeathLine { Text = "  (Quiver was empty)", Color = Colors.SlateGray });
+                }
+                break;
+
+            case 4: // Final Stats & Attributes
+                list.Add(new DeathLine { Text = "[ FINAL CHARACTER ATTRIBUTES & METRICS ]", IsHeader = true });
+
+                var pName = player.TryGetProperty("name", out var pn) ? pn.GetString() ?? "" : "Adventurer";
+                var pRace = player.TryGetProperty("race", out var pr) ? pr.GetString() ?? "" : "Human";
+                var pClass = player.TryGetProperty("class", out var pc) ? pc.GetString() ?? "" : "Warrior";
+                var lev = player.TryGetProperty("level", out var pl) ? pl.GetInt32() : 1;
+                var maxLev = player.TryGetProperty("max_lev", out var pml) ? pml.GetInt32() : lev;
+                var ht = player.TryGetProperty("ht", out var pht) ? pht.GetInt32() : 70;
+                var wt = player.TryGetProperty("wt", out var pwt) ? pwt.GetInt32() : 180;
+                var hp = player.TryGetProperty("hp", out var php) ? php.GetInt32() : 0;
+                var mhp = player.TryGetProperty("hp_max", out var pmhp) ? pmhp.GetInt32() : 1;
+                var sp = player.TryGetProperty("sp", out var psp) ? psp.GetInt32() : 0;
+                var msp = player.TryGetProperty("sp_max", out var pmsp) ? pmsp.GetInt32() : 0;
+                var ac = player.TryGetProperty("ac", out var pac) ? pac.GetInt32() : 0;
+                var acBase = player.TryGetProperty("ac_base", out var pacb) ? pacb.GetInt32() : 0;
+                var acToA = player.TryGetProperty("ac_to_a", out var pact) ? pact.GetInt32() : 0;
+                var gold = player.TryGetProperty("gold", out var pau) ? pau.GetInt32() : 0;
+                var exp = player.TryGetProperty("exp", out var pexp) ? pexp.GetInt32() : 0;
+                var maxExp = player.TryGetProperty("exp_max", out var pmexp) ? pmexp.GetInt32() : exp;
+                var speed = player.TryGetProperty("speed", out var pspd) ? pspd.GetInt32() : 110;
+                var depth = player.TryGetProperty("depth", out var pd) ? pd.GetInt32() : 0;
+                var maxDepth = player.TryGetProperty("max_depth", out var pmd) ? pmd.GetInt32() : depth;
+
+                list.Add(new DeathLine { Prefix = "Identity:", Text = $"{pName} the {pRace} {pClass}", Color = new Color(1.0f, 0.92f, 0.70f) });
+                list.Add(new DeathLine { Prefix = "Level:", Text = $"Level {lev} (Max Level Reached: {maxLev})", Color = new Color(0.85f, 0.88f, 0.95f) });
+                list.Add(new DeathLine { Prefix = "Physique:", Text = $"Height: {ht / 12}'{ht % 12}\" ({ht * 2.54f:F0} cm)   •   Weight: {wt} lbs ({wt * 0.4536f:F1} kg)", Color = new Color(0.75f, 0.80f, 0.90f) });
+                list.Add(new DeathLine { Prefix = "Hit Points:", Text = $"{hp} / {mhp} Max HP", Color = new Color(1.0f, 0.45f, 0.45f) });
+                if (msp > 0)
+                {
+                    list.Add(new DeathLine { Prefix = "Mana Points:", Text = $"{sp} / {msp} Max SP", Color = new Color(0.45f, 0.70f, 1.0f) });
+                }
+                list.Add(new DeathLine { Prefix = "Armour Class:", Text = $"AC {ac} [Base: {acBase}, Bonus: +{acToA}]", Color = new Color(0.70f, 0.85f, 0.70f) });
+                var speedDiff = speed - 110;
+                var speedStr = speedDiff == 0 ? "Normal (0)" : (speedDiff > 0 ? $"Fast (+{speedDiff})" : $"Slow ({speedDiff})");
+                list.Add(new DeathLine { Prefix = "Movement Speed:", Text = speedStr, Color = speedDiff >= 0 ? new Color(0.50f, 0.95f, 0.60f) : new Color(0.95f, 0.65f, 0.40f) });
+                list.Add(new DeathLine { Prefix = "Wealth & Exp:", Text = $"{gold:N0} Gold Coins   •   {exp:N0} Exp (Max: {maxExp:N0})", Color = new Color(1.0f, 0.85f, 0.40f) });
+                list.Add(new DeathLine { Prefix = "Exploration:", Text = $"Deepest Descent: Level {maxDepth} ({maxDepth * 50} ft)", Color = new Color(0.65f, 0.75f, 0.90f) });
+
+                if (player.TryGetProperty("stats", out var stats) && stats.ValueKind == JsonValueKind.Object)
+                {
+                    list.Add(new DeathLine { Text = "", IsHeader = false });
+                    list.Add(new DeathLine { Text = "[ ABILITY SCORES ]", IsHeader = true });
+                    string[] statNames = { "str", "int", "wis", "dex", "con" };
+                    string[] statLabels = { "Strength (STR):", "Intelligence (INT):", "Wisdom (WIS):", "Dexterity (DEX):", "Constitution (CON):" };
+                    for (int s = 0; s < statNames.Length; s++)
+                    {
+                        if (stats.TryGetProperty(statNames[s], out var st) && st.ValueKind == JsonValueKind.Object)
+                        {
+                            var use = st.TryGetProperty("use", out var u) ? u.GetInt32() : 10;
+                            var top = st.TryGetProperty("top", out var tp) ? tp.GetInt32() : use;
+                            var reduced = st.TryGetProperty("reduced", out var r) && r.GetBoolean();
+                            var statValStr = use > 18 ? $"18/{use - 18}" : $"{use}";
+                            var topValStr = top > 18 ? $"18/{top - 18}" : $"{top}";
+                            var desc = reduced ? $"{statValStr} (reduced from top: {topValStr})" : $"{statValStr}";
+                            var col = reduced ? new Color(0.95f, 0.55f, 0.45f) : new Color(0.90f, 0.92f, 0.98f);
+                            list.Add(new DeathLine { Prefix = statLabels[s], Text = desc, Color = col });
+                        }
+                    }
+                }
+                break;
+        }
+
+        return list;
+    }
+
+    private void DrawDeath(JsonElement frame)
+    {
+        // Atmospheric dark crimson/slate background
+        DrawRect(new Rect2(Vector2.Zero, View), new Color(0.045f, 0.012f, 0.016f));
+
+        // Ornate double border with blood-gold corners
+        DrawRect(new Rect2(20, 20, View.X - 40, View.Y - 40), new Color(0.60f, 0.15f, 0.15f, 0.65f), false, 2f);
+        DrawRect(new Rect2(24, 24, View.X - 48, View.Y - 48), new Color(0.35f, 0.08f, 0.08f, 0.45f), false, 1f);
+
+        // Corner highlights
+        var cornerSize = 16f;
+        var cornerCol = new Color(1.0f, 0.40f, 0.35f, 0.85f);
+        DrawLine(new Vector2(20, 20 + cornerSize), new Vector2(20 + cornerSize, 20), cornerCol, 2f);
+        DrawLine(new Vector2(View.X - 20, 20 + cornerSize), new Vector2(View.X - 20 - cornerSize, 20), cornerCol, 2f);
+        DrawLine(new Vector2(20, View.Y - 20 - cornerSize), new Vector2(20 + cornerSize, View.Y - 20), cornerCol, 2f);
+        DrawLine(new Vector2(View.X - 20, View.Y - 20 - cornerSize), new Vector2(View.X - 20 - cornerSize, View.Y - 20), cornerCol, 2f);
+
+        var player = frame.TryGetProperty("player", out var pl) && pl.ValueKind == JsonValueKind.Object ? pl : default;
+
+        var name = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("name", out var pName) ? pName.GetString() : "Adventurer";
+        var race = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("race", out var pRace) ? pRace.GetString() : "Human";
+        var pClass = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("class", out var pClassElem) ? pClassElem.GetString() : "Warrior";
+        var level = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("level", out var pLev) ? pLev.GetInt32() : 1;
+        var depth = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("depth", out var pDep) ? pDep.GetInt32() : 0;
+        var maxDepth = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("max_depth", out var pMDep) ? pMDep.GetInt32() : depth;
+        var gold = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("gold", out var pAu) ? pAu.GetInt32() : 0;
+        var exp = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("exp", out var pExp) ? pExp.GetInt32() : 0;
+        var diedFrom = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("died_from", out var pDied) ? pDied.GetString() : "mortal wounds";
+        if (string.IsNullOrEmpty(diedFrom)) diedFrom = "mortal wounds";
+
+        var topY = 40f;
+        DrawCenteredString("☠   Y O U   H A V E   P E R I S H E D   ☠", topY, 28, new Color(1.0f, 0.32f, 0.32f));
+
+        var epitaph = $"{name} the {race} {pClass} (Level {level})";
+        DrawCenteredString(epitaph, topY + 28f, 16, new Color(1.0f, 0.88f, 0.55f));
+
+        var depthStr = depth == 0 ? "in the Town" : $"on Dungeon Level {depth} ({depth * 50} ft)";
+        var causeStr = $"Killed by {diedFrom} {depthStr}.";
+        DrawCenteredString(causeStr, topY + 50f, 14, new Color(0.85f, 0.78f, 0.72f));
+
+        var scoreSummary = $"Gold: {gold:N0} AU   •   Experience: {exp:N0}   •   Deepest Level: {maxDepth} ({maxDepth * 50} ft)";
+        DrawCenteredString(scoreSummary, topY + 70f, 12, new Color(0.65f, 0.75f, 0.85f));
+
+        // Tabs for Tombstone & Menus, Identified Equipment, Inventory, Quiver, Character Stats
+        var eqList = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("equipment", out var eqArr) && eqArr.ValueKind == JsonValueKind.Array ? eqArr : default;
+        var invList = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("inventory", out var invArr) && invArr.ValueKind == JsonValueKind.Array ? invArr : default;
+        var quivList = player.ValueKind == JsonValueKind.Object && player.TryGetProperty("quiver", out var qArr) && qArr.ValueKind == JsonValueKind.Array ? qArr : default;
+
+        var eqCount = eqList.ValueKind == JsonValueKind.Array ? eqList.GetArrayLength() : 0;
+        var invCount = invList.ValueKind == JsonValueKind.Array ? invList.GetArrayLength() : 0;
+        var quivCount = quivList.ValueKind == JsonValueKind.Array ? quivList.GetArrayLength() : 0;
+
+        var tabs = new[]
+        {
+            "1. Tombstone & Menus",
+            $"2. Equipment ({eqCount})",
+            $"3. Inventory ({invCount})",
+            $"4. Quiver ({quivCount})",
+            "5. Stats & Attributes"
+        };
+
+        var tabMargin = 32f;
+        var tabW = (View.X - tabMargin * 2) / tabs.Length;
+        var tabH = 30f;
+        var tabY = topY + 92f;
+        _deathTabRects.Clear();
+
+        for (var i = 0; i < tabs.Length; i++)
+        {
+            var isSel = i == DeathSection;
+            var tRect = new Rect2(tabMargin + i * tabW, tabY, tabW - 4, tabH);
+            _deathTabRects.Add(tRect);
+            DrawRect(tRect, isSel ? new Color(0.35f, 0.12f, 0.12f, 0.95f) : new Color(0.08f, 0.04f, 0.05f, 0.85f));
+            DrawRect(tRect, isSel ? new Color(1.0f, 0.45f, 0.40f) : new Color(0.35f, 0.20f, 0.22f), false, isSel ? 1.5f : 1f);
+
+            var labelSize = _font.GetStringSize(tabs[i], HorizontalAlignment.Left, -1, 13);
+            DrawString(_font, new Vector2(tRect.Position.X + (tRect.Size.X - labelSize.X) / 2f, tRect.Position.Y + 20),
+                tabs[i], HorizontalAlignment.Left, -1, 13,
+                isSel ? new Color(1.0f, 0.92f, 0.70f) : new Color(0.70f, 0.65f, 0.70f));
+        }
+
+        // Main Content Panel
+        var panelRect = new Rect2(tabMargin, tabY + tabH + 8f, View.X - tabMargin * 2, View.Y - tabY - tabH - 74f);
+        DrawRect(panelRect, new Color(0.035f, 0.02f, 0.025f, 0.95f));
+        DrawRect(panelRect, new Color(0.40f, 0.20f, 0.22f, 0.75f), false, 1.2f);
+
+        if (DeathSection == 0)
+        {
+            // Tab 0: Interactive Tombstone & Original Angband Death Menus
+            DrawTerminal(frame, panelRect);
+        }
+        else
+        {
+            var lines = GetDeathLines(DeathSection, player, DeathItemsIdentified);
+            var lineHeight = 22f;
+            var startY = panelRect.Position.Y + 24f;
+            var visibleLines = Mathf.FloorToInt((panelRect.Size.Y - 32f) / lineHeight);
+            var maxScroll = Mathf.Max(0, lines.Count - visibleLines);
+            DeathScroll = Mathf.Clamp(DeathScroll, 0, maxScroll);
+
+            if (DeathScroll > 0)
+            {
+                DrawString(_font, new Vector2(panelRect.Position.X + 20, panelRect.Position.Y + 14),
+                    "▲ (more lines above - use Up Arrow / Wheel / PgUp)", HorizontalAlignment.Left, -1, 11, new Color(0.85f, 0.70f, 0.70f));
+            }
+
+            var endIdx = Mathf.Min(lines.Count, DeathScroll + visibleLines);
+            for (var i = DeathScroll; i < endIdx; i++)
+            {
+                var item = lines[i];
+                var y = startY + (i - DeathScroll) * lineHeight;
+
+                if (item.IsHeader)
+                {
+                    DrawString(_font, new Vector2(panelRect.Position.X + 20, y), item.Text,
+                        HorizontalAlignment.Left, -1, 14, new Color(1.0f, 0.85f, 0.45f));
+                }
+                else
+                {
+                    // Prefix / slot label
+                    if (!string.IsNullOrEmpty(item.Prefix))
+                    {
+                        DrawString(_font, new Vector2(panelRect.Position.X + 24, y), item.Prefix,
+                            HorizontalAlignment.Left, -1, 13, new Color(0.80f, 0.60f, 0.35f));
+                    }
+
+                    var textX = panelRect.Position.X + (string.IsNullOrEmpty(item.Prefix) ? 24 : 160);
+                    DrawString(_font, new Vector2(textX, y), item.Text,
+                        HorizontalAlignment.Left, -1, 13, item.Color);
+
+                    if (!string.IsNullOrEmpty(item.Suffix))
+                    {
+                        var sz = _font.GetStringSize(item.Suffix, HorizontalAlignment.Left, -1, 12);
+                        DrawString(_font, new Vector2(panelRect.Position.X + panelRect.Size.X - sz.X - 20, y), item.Suffix,
+                            HorizontalAlignment.Left, -1, 12, new Color(0.60f, 0.65f, 0.75f));
+                    }
+                }
+            }
+
+            if (endIdx < lines.Count)
+            {
+                DrawString(_font, new Vector2(panelRect.Position.X + 20, panelRect.Position.Y + panelRect.Size.Y - 6),
+                    "▼ (more lines below - use Down Arrow / Wheel / PgDn)", HorizontalAlignment.Left, -1, 11, new Color(0.85f, 0.70f, 0.70f));
+            }
+        }
+
+        // Bottom Action Buttons Bar
+        var footerY = View.Y - 48f;
+        DrawRect(new Rect2(0, footerY, View.X, 48), new Color(0.06f, 0.03f, 0.04f, 0.98f));
+        DrawLine(new Vector2(0, footerY), new Vector2(View.X, footerY), new Color(0.55f, 0.25f, 0.25f), 1.5f);
+
+        var btnW = (View.X - tabMargin * 2 - 48f) / 4f;
+        var btnH = 32f;
+        var btnY = footerY + 8f;
+
+        _deathIdentifyBtnRect = new Rect2(tabMargin, btnY, btnW, btnH);
+        _deathReloadBtnRect = new Rect2(tabMargin + btnW + 16f, btnY, btnW, btnH);
+        _deathRerollBtnRect = new Rect2(tabMargin + (btnW + 16f) * 2f, btnY, btnW, btnH);
+        _deathMainMenuBtnRect = new Rect2(tabMargin + (btnW + 16f) * 3f, btnY, btnW, btnH);
+
+        // Button 1: Identify Items (Reveal Runes)
+        DrawRect(_deathIdentifyBtnRect, new Color(0.12f, 0.18f, 0.25f, 0.95f));
+        DrawRect(_deathIdentifyBtnRect, new Color(0.35f, 0.70f, 1.0f), false, 1.2f);
+        var idLabel = DeathItemsIdentified ? "[U] Re-Identify Items" : "[U] Identify Items (Reveal Runes)";
+        DrawCenteredButtonText(idLabel, _deathIdentifyBtnRect, 12, new Color(0.80f, 0.92f, 1.0f));
+
+        // Button 2: Load Last Saved Game
+        DrawRect(_deathReloadBtnRect, new Color(0.22f, 0.10f, 0.08f, 0.95f));
+        DrawRect(_deathReloadBtnRect, new Color(0.90f, 0.65f, 0.30f), false, 1.2f);
+        DrawCenteredButtonText("[R] Load Last Saved Game", _deathReloadBtnRect, 13, new Color(1.0f, 0.92f, 0.75f));
+
+        // Button 3: Re-Roll / New Character
+        DrawRect(_deathRerollBtnRect, new Color(0.12f, 0.18f, 0.15f, 0.95f));
+        DrawRect(_deathRerollBtnRect, new Color(0.40f, 0.85f, 0.55f), false, 1.2f);
+        DrawCenteredButtonText("[N] Re-Roll / New Character", _deathRerollBtnRect, 13, new Color(0.85f, 1.0f, 0.88f));
+
+        // Button 4: Main Menu
+        DrawRect(_deathMainMenuBtnRect, new Color(0.15f, 0.12f, 0.20f, 0.95f));
+        DrawRect(_deathMainMenuBtnRect, new Color(0.65f, 0.55f, 0.90f), false, 1.2f);
+        DrawCenteredButtonText("[M / Esc] Main Menu", _deathMainMenuBtnRect, 13, new Color(0.90f, 0.85f, 1.0f));
+    }
+
     #region Compass & Orientation Helpers
 
     private static Vector2 GetFacingVector(string facing) => facing switch
@@ -908,7 +1294,7 @@ public partial class Overlay : Control
         }
     }
 
-    private void DrawTerminal(JsonElement frame)
+    private void DrawTerminal(JsonElement frame, Rect2? bounds = null)
     {
         if (frame.GetProperty("term").ValueKind != JsonValueKind.Object)
         {
@@ -921,10 +1307,15 @@ public partial class Overlay : Control
         var w = term.GetProperty("w").GetInt32();
         if (w <= 0 || rowCount <= 0) return;
 
+        var areaW = bounds.HasValue ? bounds.Value.Size.X : View.X;
+        var areaH = bounds.HasValue ? bounds.Value.Size.Y : View.Y;
+        var offX = bounds.HasValue ? bounds.Value.Position.X : 0f;
+        var offY = bounds.HasValue ? bounds.Value.Position.Y : 0f;
+
         // Auto-scale terminal font to fill available screen area while maintaining aspect
-        var targetCellW = View.X / (w + 2f);
-        var targetCellH = View.Y / (rowCount + 2f);
-        var termFontSize = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(targetCellW * 1.55f, targetCellH * 0.85f)), 14, 28);
+        var targetCellW = areaW / (w + 2f);
+        var targetCellH = areaH / (rowCount + 2f);
+        var termFontSize = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(targetCellW * 1.55f, targetCellH * 0.85f)), 10, 28);
 
         var termCharW = _font.GetStringSize("#", HorizontalAlignment.Left, -1, termFontSize).X;
         var termCharH = _font.GetHeight(termFontSize) + 2f;
@@ -932,8 +1323,8 @@ public partial class Overlay : Control
 
         var totalW = w * termCharW;
         var totalH = rowCount * termCharH;
-        var startX = Mathf.Max(0f, (View.X - totalW) / 2f);
-        var startY = Mathf.Max(0f, (View.Y - totalH) / 2f);
+        var startX = offX + Mathf.Max(0f, (areaW - totalW) / 2f);
+        var startY = offY + Mathf.Max(0f, (areaH - totalH) / 2f);
 
         for (var y = 0; y < rowCount; y++)
         {
@@ -1462,12 +1853,48 @@ public partial class Overlay : Control
                         }
                     }
                 }
+                else if (Mode == ViewMode.Death)
+                {
+                    if (_deathIdentifyBtnRect.HasPoint(mb.Position))
+                    {
+                        DeathIdentifyRequested?.Invoke();
+                        return;
+                    }
+                    if (_deathReloadBtnRect.HasPoint(mb.Position))
+                    {
+                        DeathReloadRequested?.Invoke();
+                        return;
+                    }
+                    if (_deathRerollBtnRect.HasPoint(mb.Position))
+                    {
+                        DeathRerollRequested?.Invoke();
+                        return;
+                    }
+                    if (_deathMainMenuBtnRect.HasPoint(mb.Position))
+                    {
+                        DeathMainMenuRequested?.Invoke();
+                        return;
+                    }
+                    for (var i = 0; i < _deathTabRects.Count; i++)
+                    {
+                        if (_deathTabRects[i].HasPoint(mb.Position))
+                        {
+                            DeathTabClicked?.Invoke(i);
+                            return;
+                        }
+                    }
+                }
             }
             else if (mb.ButtonIndex == MouseButton.WheelUp)
             {
                 if (Mode == ViewMode.Guide)
                 {
                     GuideScroll = Mathf.Max(0, GuideScroll - 3);
+                    QueueRedraw();
+                }
+                else if (Mode == ViewMode.Death)
+                {
+                    DeathScroll = Mathf.Max(0, DeathScroll - 3);
                     QueueRedraw();
                 }
                 else if (Mode == ViewMode.World)
@@ -1480,6 +1907,11 @@ public partial class Overlay : Control
                 if (Mode == ViewMode.Guide)
                 {
                     GuideScroll += 3;
+                    QueueRedraw();
+                }
+                else if (Mode == ViewMode.Death)
+                {
+                    DeathScroll += 3;
                     QueueRedraw();
                 }
                 else if (Mode == ViewMode.World)

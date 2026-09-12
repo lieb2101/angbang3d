@@ -25,6 +25,7 @@ public enum SoundEffect
     GoldPickup,
     ButtonClick,
     LevelEnter,
+    PlayerDeath,
     MenuNav,
     MenuSelect,
     MenuOpen
@@ -228,6 +229,7 @@ public partial class AudioManager : Node
         _sfxLibrary[SoundEffect.ItemPickup] = SynthChime(isGold: false);
         _sfxLibrary[SoundEffect.GoldPickup] = SynthChime(isGold: true);
         _sfxLibrary[SoundEffect.ButtonClick] = SynthMenuSelect();
+        _sfxLibrary[SoundEffect.PlayerDeath] = SynthPlayerDeath();
         _sfxLibrary[SoundEffect.MenuNav] = SynthMenuNav();
         _sfxLibrary[SoundEffect.MenuSelect] = SynthMenuSelect();
         _sfxLibrary[SoundEffect.MenuOpen] = SynthMenuOpen();
@@ -695,6 +697,32 @@ public partial class AudioManager : Node
             var sub = Mathf.Sin(2f * Mathf.Pi * (f0 * 0.5f) * t) * 0.25f; // Sub-bass (A1)
 
             samples[i] = (h1 + h2 + h3 + h4 + sub) * env * 0.65f;
+        }
+        return CreateWav(samples);
+    }
+
+    private static AudioStreamWav SynthPlayerDeath()
+    {
+        var duration = 2.6f;
+        var totalSamples = (int)(SampleRate * duration);
+        var samples = new float[totalSamples];
+        var attackSamples = (int)(SampleRate * 0.006f);
+
+        for (var i = 0; i < totalSamples; i++)
+        {
+            var t = i / (float)SampleRate;
+            var attack = i < attackSamples ? (i / (float)attackSamples) : 1.0f;
+            var env = attack * Mathf.Exp(-t * 1.5f);
+
+            // Somber resonant funeral toll: D2 fundamental (73.4Hz) with minor 3rd (87.3Hz), 5th (110Hz), and chime overtones
+            var fundamental = Mathf.Sin(2f * Mathf.Pi * 73.416f * t) * 0.55f;
+            var minorThird = Mathf.Sin(2f * Mathf.Pi * 87.307f * t) * 0.35f;
+            var fifth = Mathf.Sin(2f * Mathf.Pi * 110.00f * t) * 0.25f;
+            var octave = Mathf.Sin(2f * Mathf.Pi * 146.83f * t) * 0.20f;
+            var chime = Mathf.Sin(2f * Mathf.Pi * 293.66f * t) * Mathf.Exp(-t * 4.0f) * 0.25f;
+            var highChime = Mathf.Sin(2f * Mathf.Pi * 587.33f * t) * Mathf.Exp(-t * 8.0f) * 0.15f;
+
+            samples[i] = (fundamental + minorThird + fifth + octave + chime + highChime) * env * 0.85f;
         }
         return CreateWav(samples);
     }

@@ -14,6 +14,8 @@ When starting a session or recovering after a crash/interruption:
 - **Targeted Code Reads**: Read only 20-80 line windows containing target logic.
 - **Surgical Edits**: Use targeted replacements with ~3 lines of surrounding context. Avoid rewriting whole files.
 - **Concise Responses**: Output concise, dense, action-first responses. Avoid echoing large boilerplate.
+- **Good Code Comments**: Add clear, explanatory comments along the way for non-trivial logic, coordinate math, invariants, and state transitions.
+- **Plan & Progress Tracking**: Keep track of execution plans, update `docs/NEXT_STEPS.md` and memory notes continuously as tasks progress.
 
 ## 3. Critical Invariants
 - **Engine Isolation**: Engine changes live only in `engine/src/main-bridge.c`, `bridge-json.c`, `bridge-json.h`. Regenerate patch with:

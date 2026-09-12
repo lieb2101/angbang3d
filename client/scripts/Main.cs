@@ -4,7 +4,7 @@ using Godot;
 
 namespace Angband3D;
 
-public enum ViewMode { World, Map, Terminal, Menu, Splash, Guide }
+public enum ViewMode { World, Map, Terminal, Menu, Splash, Guide, Death }
 /// <summary>
 /// Owns the bridge, decides which view is showing, and routes input.
 /// </summary>
@@ -35,6 +35,7 @@ public partial class Main : Node
     private bool _inGuide;
     private bool _inMenu;
     private bool _inPauseMenu;
+    private bool _inDeath;
     private int _menuIndex;
     private int _autoMenuChoice;
     private readonly System.Collections.Generic.List<(string Label, Action Execute)> _menuItems = new();
@@ -50,7 +51,16 @@ public partial class Main : Node
         }
         catch { }
 
-        foreach (var arg in OS.GetCmdlineUserArgs())
+        var allArgs = new System.Collections.Generic.List<string>(OS.GetCmdlineUserArgs());
+        foreach (var a in OS.GetCmdlineArgs())
+        {
+            if (!allArgs.Contains(a))
+            {
+                allArgs.Add(a);
+            }
+        }
+
+        foreach (var arg in allArgs)
         {
             if (arg.StartsWith("--keys="))
             {
@@ -155,6 +165,21 @@ public partial class Main : Node
         _overlay.SplashQuitRequested += () =>
         {
             GetTree().Quit();
+        };
+
+        _overlay.DeathReloadRequested += OnDeathReload;
+        _overlay.DeathRerollRequested += OnDeathReroll;
+        _overlay.DeathIdentifyRequested += OnDeathIdentify;
+        _overlay.DeathMainMenuRequested += OnDeathMainMenu;
+        _overlay.DeathTabClicked += section =>
+        {
+            if (_inDeath)
+            {
+                AudioManager.Play(SoundEffect.MenuNav);
+                _overlay.DeathSection = Mathf.Clamp(section, 0, 4);
+                _overlay.DeathScroll = 0;
+                _overlay.QueueRedraw();
+            }
         };
 
         _bridge = new BridgeClient();
@@ -575,6 +600,62 @@ public partial class Main : Node
         _overlay.QueueRedraw();
     }
 
+    private void OnDeathReload()
+    {
+        AudioManager.Play(SoundEffect.MenuSelect);
+        _inDeath = false;
+        if (_bridge.Connected)
+        {
+            _bridge.Stop();
+        }
+
+        var saves = GetSaveFiles();
+        if (saves.Length > 0)
+        {
+            var topSave = GetSaveInfo(saves[0]);
+            _saveName = saves[0].Name;
+            _characterName = topSave.CharacterName;
+        }
+        StartGame();
+    }
+
+    private void OnDeathReroll()
+    {
+        AudioManager.Play(SoundEffect.MenuSelect);
+        _inDeath = false;
+        if (_bridge.Connected)
+        {
+            _bridge.Stop();
+        }
+
+        _saveName = null;
+        _characterName = null;
+        _randomRequested = true;
+        StartGame();
+    }
+
+    private void OnDeathIdentify()
+    {
+        AudioManager.Play(SoundEffect.MenuSelect);
+        _overlay.DeathItemsIdentified = true;
+        if (_bridge.Connected && !_bridge.Busy)
+        {
+            _bridge.SendKey("u");
+        }
+        _overlay.QueueRedraw();
+    }
+
+    private void OnDeathMainMenu()
+    {
+        AudioManager.Play(SoundEffect.MenuSelect);
+        _inDeath = false;
+        if (_bridge.Connected)
+        {
+            _bridge.Stop();
+        }
+        OpenMenu();
+    }
+
     private void StartGame()
     {
         var exe = FindEngine();
@@ -746,6 +827,25 @@ public partial class Main : Node
 
     private ViewMode EffectiveMode(JsonElement frame)
     {
+        if (frame.TryGetProperty("player", out var pl) && pl.ValueKind == JsonValueKind.Object
+            && pl.TryGetProperty("dead", out var dProp) && dProp.GetBoolean())
+        {
+            if (!_inDeath)
+            {
+                _inDeath = true;
+                _inMenu = false;
+                _inPauseMenu = false;
+                _inGuide = false;
+                _inSplash = false;
+                _overlay.DeathSection = 0;
+                _overlay.DeathScroll = 0;
+                _overlay.DeathItemsIdentified = false;
+                AudioManager.Play(SoundEffect.PlayerDeath);
+            }
+            return ViewMode.Death;
+        }
+
+        _inDeath = false;
         if (_forceTerminal || NeedsTerminal(frame))
         {
             return ViewMode.Terminal;
@@ -1217,6 +1317,120 @@ public partial class Main : Node
             }
             _overlay.MenuIndex = _menuIndex;
             _overlay.QueueRedraw();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        if (_inDeath)
+        {
+            switch (key.Keycode)
+            {
+                case Key.U:
+                    OnDeathIdentify();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case Key.R:
+                    OnDeathReload();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case Key.N:
+                    OnDeathReroll();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case Key.M or Key.Escape:
+                    OnDeathMainMenu();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case Key.Tab or Key.Right:
+                    AudioManager.Play(SoundEffect.MenuNav);
+                    _overlay.DeathSection = (_overlay.DeathSection + 1) % 5;
+                    _overlay.DeathScroll = 0;
+                    _overlay.QueueRedraw();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case Key.Left:
+                    AudioManager.Play(SoundEffect.MenuNav);
+                    _overlay.DeathSection = (_overlay.DeathSection + 4) % 5;
+                    _overlay.DeathScroll = 0;
+                    _overlay.QueueRedraw();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case >= Key.Key1 and <= Key.Key5:
+                    AudioManager.Play(SoundEffect.MenuNav);
+                    _overlay.DeathSection = (int)(key.Keycode - Key.Key1);
+                    _overlay.DeathScroll = 0;
+                    _overlay.QueueRedraw();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case >= Key.Kp1 and <= Key.Kp5:
+                    AudioManager.Play(SoundEffect.MenuNav);
+                    _overlay.DeathSection = (int)(key.Keycode - Key.Kp1);
+                    _overlay.DeathScroll = 0;
+                    _overlay.QueueRedraw();
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case Key.Up:
+                    if (_overlay.DeathSection == 0)
+                    {
+                        if (!_bridge.Busy) _bridge.SendKey("up");
+                    }
+                    else
+                    {
+                        _overlay.DeathScroll = Mathf.Max(0, _overlay.DeathScroll - 1);
+                        _overlay.QueueRedraw();
+                    }
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case Key.Down:
+                    if (_overlay.DeathSection == 0)
+                    {
+                        if (!_bridge.Busy) _bridge.SendKey("down");
+                    }
+                    else
+                    {
+                        _overlay.DeathScroll++;
+                        _overlay.QueueRedraw();
+                    }
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case Key.Pageup or Key.Home:
+                    if (_overlay.DeathSection == 0)
+                    {
+                        if (!_bridge.Busy) _bridge.SendKey("pageup");
+                    }
+                    else
+                    {
+                        _overlay.DeathScroll = Mathf.Max(0, _overlay.DeathScroll - 6);
+                        _overlay.QueueRedraw();
+                    }
+                    GetViewport().SetInputAsHandled();
+                    return;
+                case Key.Pagedown or Key.End:
+                    if (_overlay.DeathSection == 0)
+                    {
+                        if (!_bridge.Busy) _bridge.SendKey("pagedown");
+                    }
+                    else
+                    {
+                        _overlay.DeathScroll += 6;
+                        _overlay.QueueRedraw();
+                    }
+                    GetViewport().SetInputAsHandled();
+                    return;
+                default:
+                    // In Tab 0 (Tombstone & Original Menus), pass keyboard events directly to Angband's death menu
+                    if (_overlay.DeathSection == 0 && !_bridge.Busy)
+                    {
+                        var deathSpec = ToKeySpec(key);
+                        if (deathSpec != null)
+                        {
+                            _bridge.SendKey(deathSpec);
+                            GetViewport().SetInputAsHandled();
+                            return;
+                        }
+                    }
+                    break;
+            }
             GetViewport().SetInputAsHandled();
             return;
         }

@@ -339,33 +339,13 @@ public partial class ViewModel : Node3D
         var bowTval = player.TryGetProperty("bow_tval", out var btProp) ? btProp.GetInt32() : 0;
         var shieldItem = player.TryGetProperty("shield_item", out var siProp) ? siProp.GetString() : null;
 
-        // Left Hand: Only show what is actually equipped in the shield or light slot.
-        // Priority 1: Equipped shield in off-hand.
-        // Priority 2: Equipped light source (wooden torch, brass lantern, phial/star/crystal).
-        // If neither is equipped, the left hand remains clean & empty (no fake default items).
+        // Left Hand: Only show what is actually wielded in the off-hand (such as an equipped shield).
+        // Carrying a torch or lantern in the equipment light slot illuminates the dungeon around the player
+        // without occupying hands. Light sources only appear in hand if specifically wielded as a weapon.
         var leftModelPath = "";
         if (!string.IsNullOrEmpty(shieldItem))
         {
             leftModelPath = ResolveShieldModel(shieldItem);
-        }
-        else if (hasLightItem && !string.IsNullOrEmpty(lowerLight))
-        {
-            if (lowerLight.Contains("lantern") || lowerLight.Contains("lamp"))
-            {
-                leftModelPath = "res://assets/models/props/lantern_standing.gltf";
-            }
-            else if (lowerLight.Contains("phial") || lowerLight.Contains("star") || lowerLight.Contains("arkenstone") || lowerLight.Contains("crystal"))
-            {
-                leftModelPath = "res://assets/models/items/Crystal1.fbx";
-            }
-            else if (lowerLight.Contains("torch") || lowerLight.Contains("wooden"))
-            {
-                leftModelPath = "__torch_handheld__";
-            }
-            else
-            {
-                leftModelPath = "__torch_handheld__";
-            }
         }
 
         // Right Hand: Primary equipped melee weapon or ranged bow.
@@ -468,7 +448,12 @@ public partial class ViewModel : Node3D
         Color lightCol;
         bool hasEgo = true;
 
-        if (lowerW.Contains("flame") || lowerW.Contains("fire") || lowerW.Contains("hellfire") || lowerW.Contains("dragon") || lowerW.Contains("chaos"))
+        if (lowerW.Contains("torch") || _currentRightModel == "__torch_handheld__")
+        {
+            auraCol = new Color(1.0f, 0.70f, 0.15f, 0.80f);
+            lightCol = new Color(1.0f, 0.75f, 0.20f);
+        }
+        else if (lowerW.Contains("flame") || lowerW.Contains("fire") || lowerW.Contains("hellfire") || lowerW.Contains("dragon") || lowerW.Contains("chaos"))
         {
             auraCol = new Color(1.0f, 0.55f, 0.10f, 0.70f);
             lightCol = new Color(1.0f, 0.55f, 0.15f);
@@ -631,6 +616,16 @@ public partial class ViewModel : Node3D
         }
         else
         {
+            // Handheld Torch wielded as weapon
+            if (modelPath == "__torch_handheld__" || lower.Contains("torch"))
+            {
+                return (
+                    0.80f,
+                    new Vector3(0.24f, -0.24f, -0.32f),
+                    new Vector3(Mathf.DegToRad(14), Mathf.DegToRad(-12), Mathf.DegToRad(6)),
+                    Vector3.Zero
+                );
+            }
             // 2H Greatswords & Claymores
             if (lower.Contains("claymore") || lower.Contains("sword_big"))
             {
@@ -757,6 +752,12 @@ public partial class ViewModel : Node3D
         if (!string.IsNullOrEmpty(weaponItem))
         {
             var lowerW = weaponItem.ToLowerInvariant();
+
+            // Torches & Clubs (wielded as weapon/club)
+            if (lowerW.Contains("torch"))
+            {
+                return "__torch_handheld__";
+            }
 
             // Daggers & Small Blades
             if (lowerW.Contains("dagger") || lowerW.Contains("knife") || lowerW.Contains("main gauche") ||

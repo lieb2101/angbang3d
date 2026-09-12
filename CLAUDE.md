@@ -18,6 +18,8 @@ See `AGENTS.md` and `docs/LLM_CONTEXT.md` for full architectural documentation.
 - Refer to `AGENTS.md` section 4 for exact file paths.
 - Perform targeted replacements rather than full-file writes.
 - Keep responses compact, factual, and direct.
+- Write good, descriptive code comments along the way for non-trivial logic.
+- Keep track of plans and progress in `docs/NEXT_STEPS.md` and memory notes.
 
 ## Invariants
 - Upstream Angband C changes must stay in `main-bridge.c` / `bridge-json.c`. Always update `engine-patch/0001-bridge-frontend.patch` with `git diff 4.2.6..HEAD --output=..\engine-patch\0001-bridge-frontend.patch`.

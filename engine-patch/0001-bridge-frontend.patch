@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..1de3de69a
+index 000000000..d7630666f
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,1060 @@
+@@ -0,0 +1,1173 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -486,6 +486,8 @@ index 000000000..1de3de69a
 +	fputc(',', fp);
 +	bj_kv_bool(fp, "dead", player->is_dead);
 +	fputc(',', fp);
++	bj_kv_string(fp, "died_from", player->died_from);
++	fputc(',', fp);
 +	bj_kv_bool(fp, "wizard", player->wizard);
 +	fputc(',', fp);
 +	/* Non-zero once wizard/debug mode has been used: scores are void. */
@@ -660,6 +662,117 @@ index 000000000..1de3de69a
 +		bj_kv_int(fp, "mon", mon_feeling);
 +		fputc('}', fp);
 +	}
++
++	/* Equipment list with full descriptions */
++	fputc(',', fp);
++	bj_key(fp, "equipment");
++	fputc('[', fp);
++	bool has_eq = false;
++	if (player->body.slots) {
++		for (int i = 0; i < player->body.count; i++) {
++			struct object *obj = player->body.slots[i].obj;
++			if (!obj) continue;
++			if (has_eq) fputc(',', fp);
++			has_eq = true;
++			fputc('{', fp);
++			bj_kv_int(fp, "slot", i);
++			fputc(',', fp);
++			bj_kv_string(fp, "slot_name", player->body.slots[i].name ? player->body.slots[i].name : "");
++			fputc(',', fp);
++			const char *mention = equip_mention(player, i);
++			bj_kv_string(fp, "mention", mention ? mention : "");
++			fputc(',', fp);
++			char desc[160];
++			object_desc(desc, sizeof(desc), obj, ODESC_FULL, player);
++			bj_kv_string(fp, "name", desc);
++			fputc(',', fp);
++			bj_kv_int(fp, "tval", obj->tval);
++			fputc(',', fp);
++			bj_kv_int(fp, "sval", obj->sval);
++			fputc(',', fp);
++			bj_kv_int(fp, "number", obj->number);
++			fputc(',', fp);
++			bj_kv_int(fp, "weight", obj->weight);
++			fputc(',', fp);
++			bj_kv_int(fp, "attr", obj->kind && obj->kind->base ? obj->kind->base->attr : COLOUR_WHITE);
++			fputc('}', fp);
++		}
++	}
++	fputc(']', fp);
++
++	/* Inventory list with full descriptions */
++	fputc(',', fp);
++	bj_key(fp, "inventory");
++	fputc('[', fp);
++	bool has_inv = false;
++	if (player->upkeep && player->upkeep->inven && z_info) {
++		for (int i = 0; i < z_info->pack_size; i++) {
++			struct object *obj = player->upkeep->inven[i];
++			if (!obj) continue;
++			if (has_inv) fputc(',', fp);
++			has_inv = true;
++			fputc('{', fp);
++			bj_kv_int(fp, "slot", i);
++			fputc(',', fp);
++			char label[4];
++			label[0] = I2A(i);
++			label[1] = '\0';
++			bj_kv_string(fp, "label", label);
++			fputc(',', fp);
++			char desc[160];
++			object_desc(desc, sizeof(desc), obj, ODESC_FULL, player);
++			bj_kv_string(fp, "name", desc);
++			fputc(',', fp);
++			bj_kv_int(fp, "tval", obj->tval);
++			fputc(',', fp);
++			bj_kv_int(fp, "sval", obj->sval);
++			fputc(',', fp);
++			bj_kv_int(fp, "number", obj->number);
++			fputc(',', fp);
++			bj_kv_int(fp, "weight", obj->weight);
++			fputc(',', fp);
++			bj_kv_int(fp, "attr", obj->kind && obj->kind->base ? obj->kind->base->attr : COLOUR_WHITE);
++			fputc('}', fp);
++		}
++	}
++	fputc(']', fp);
++
++	/* Quiver list with full descriptions */
++	fputc(',', fp);
++	bj_key(fp, "quiver");
++	fputc('[', fp);
++	bool has_quiv = false;
++	if (player->upkeep && player->upkeep->quiver && z_info) {
++		for (int i = 0; i < z_info->quiver_size; i++) {
++			struct object *obj = player->upkeep->quiver[i];
++			if (!obj) continue;
++			if (has_quiv) fputc(',', fp);
++			has_quiv = true;
++			fputc('{', fp);
++			bj_kv_int(fp, "slot", i);
++			fputc(',', fp);
++			char label[4];
++			label[0] = (char)('0' + i);
++			label[1] = '\0';
++			bj_kv_string(fp, "label", label);
++			fputc(',', fp);
++			char desc[160];
++			object_desc(desc, sizeof(desc), obj, ODESC_FULL, player);
++			bj_kv_string(fp, "name", desc);
++			fputc(',', fp);
++			bj_kv_int(fp, "tval", obj->tval);
++			fputc(',', fp);
++			bj_kv_int(fp, "sval", obj->sval);
++			fputc(',', fp);
++			bj_kv_int(fp, "number", obj->number);
++			fputc(',', fp);
++			bj_kv_int(fp, "weight", obj->weight);
++			fputc(',', fp);
++			bj_kv_int(fp, "attr", obj->kind && obj->kind->base ? obj->kind->base->attr : COLOUR_WHITE);
++			fputc('}', fp);
++		}
++	}
++	fputc(']', fp);
 +
 +	fputc('}', fp);
 +}
@@ -1326,3 +1439,98 @@ index 229c696f2..caf79bb1d 100644
  extern const char help_cap[];
  extern const char help_vme[];
  extern const char help_ami[];
+diff --git a/src/ui-death.c b/src/ui-death.c
+index 695b0cee4..7c38114a3 100644
+--- a/src/ui-death.c
++++ b/src/ui-death.c
+@@ -22,6 +22,7 @@
+ #include "init.h"
+ #include "obj-desc.h"
+ #include "obj-info.h"
++#include "player-util.h"
+ #include "savefile.h"
+ #include "store.h"
+ #include "ui-death.h"
+@@ -349,21 +350,40 @@ static void death_new_game(const char *title, int row)
+     play_again = get_check("Start a new game? ");
+ }
+ 
++static bool death_items_identified = false;
++
++/**
++ * Menu command: optionally identify all items and unmask runes/history.
++ */
++static void death_identify(const char *title, int row)
++{
++	if (!death_items_identified) {
++		death_knowledge(player);
++		death_items_identified = true;
++		msg("All items, runes, and history have been identified.");
++	} else {
++		msg("Items are already identified.");
++	}
++	event_signal(EVENT_MESSAGE_FLUSH);
++	display_exit_screen();
++}
++
+ /**
+  * Menu structures for the death menu. Note that Quit must always be the
+  * last option, due to a hard-coded check in death_screen
+  */
+ static menu_action death_actions[] =
+ {
+-	{ 0, 'i', "Information",   death_info      },
+-	{ 0, 'm', "Messages",      death_messages  },
+-	{ 0, 'f', "File dump",     death_file      },
+-	{ 0, 'v', "View scores",   death_scores    },
+-	{ 0, 'x', "Examine items", death_examine   },
+-	{ 0, 'h', "History",       death_history   },
+-	{ 0, 's', "Spoilers",      death_spoilers  },
+-	{ 0, 'n', "New Game",      death_new_game  },
+-	{ 0, 'q', "Quit",          NULL            },
++	{ 0, 'i', "Information",    death_info      },
++	{ 0, 'm', "Messages",       death_messages  },
++	{ 0, 'f', "File dump",      death_file      },
++	{ 0, 'v', "View scores",    death_scores    },
++	{ 0, 'x', "Examine items",  death_examine   },
++	{ 0, 'u', "Identify items", death_identify  },
++	{ 0, 'h', "History",        death_history   },
++	{ 0, 's', "Spoilers",       death_spoilers  },
++	{ 0, 'n', "New Game",       death_new_game  },
++	{ 0, 'q', "Quit",           NULL            },
+ };
+ 
+ 
+@@ -377,6 +397,8 @@ void death_screen(void)
+ 	bool done = false;
+ 	const region area = { 51, 2, 0, N_ELEMENTS(death_actions) };
+ 
++	death_items_identified = false;
++
+ 	/* Winner */
+ 	if (player->total_winner)
+ 	{
+diff --git a/src/ui-game.c b/src/ui-game.c
+index 0f97d18d9..bdca97c1a 100644
+--- a/src/ui-game.c
++++ b/src/ui-game.c
+@@ -35,6 +35,7 @@
+ #include "player-properties.h"
+ #include "player-util.h"
+ #include "savefile.h"
++#include "score.h"
+ #include "target.h"
+ #include "ui-birth.h"
+ #include "ui-command.h"
+@@ -1128,7 +1129,10 @@ void close_game(bool prompt_failed_save)
+ 
+ 	/* Handle death or life */
+ 	if (player->is_dead) {
+-		death_knowledge(player);
++		time_t death_time = (time_t)0;
++		(void)time(&death_time);
++		enter_score(player, &death_time);
++
+ 		death_screen();
+ 
+ 		/* Save dead player */

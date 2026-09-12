@@ -48,7 +48,7 @@ public static class ItemModelResolver
         ModelMappings[glyph] = (modelPath, scale);
     }
 
-    public static Node3D CreateItemNode(JsonElement item, Vector3 worldPos)
+    public static Node3D CreateItemNode(JsonElement item, Vector3 worldPos, bool isVisibleInView = true)
     {
         var root = new Node3D { Position = worldPos };
 
@@ -73,10 +73,22 @@ public static class ItemModelResolver
         {
             var caption = CreateCaption(itemName, new Vector3(0, 0.45f, 0),
                 new Color(0.88f, 0.88f, 0.82f), 34);
+            caption.Name = "ItemCaption";
+            caption.Visible = isVisibleInView;
             root.AddChild(caption);
         }
 
         return root;
+    }
+
+    public static void UpdateItemVisibility(Node3D itemNode, bool isVisibleInView)
+    {
+        if (itemNode == null) return;
+        var caption = itemNode.GetNodeOrNull<Label3D>("ItemCaption");
+        if (caption != null)
+        {
+            caption.Visible = isVisibleInView;
+        }
     }
 
     private static Node3D CreateVisual(char glyph, Color color, string itemName = null)
@@ -400,6 +412,9 @@ public static class ItemModelResolver
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             Shaded = false,
             NoDepthTest = false,
+            VisibilityRangeEnd = 20.0f,
+            VisibilityRangeEndMargin = 3.0f,
+            VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self,
             Position = pos,
             HorizontalAlignment = HorizontalAlignment.Center,
         };

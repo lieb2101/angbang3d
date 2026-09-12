@@ -99,6 +99,28 @@ if ($Classic) {
     exit $LASTEXITCODE
 }
 
+$standaloneExe = Join-Path $repo 'Angband3D.exe'
+if ((Test-Path $standaloneExe) -and (-not $Editor)) {
+    if ($Character) {
+        $existing = Join-Path $saveDir $Character
+        if (Test-Path $existing) {
+            Write-Host "Character '$Character' found." -ForegroundColor Cyan
+        } else {
+            Write-Host "No character called '$Character' yet." -ForegroundColor Cyan
+        }
+    }
+    Write-Host "Launching standalone Angband3D..." -ForegroundColor Cyan
+    $exeArgs = @()
+    if ($Character) { $exeArgs += "--save=$Character" }
+    if ($Random) { $exeArgs += '--autobirth' }
+    if ($Manual) { $exeArgs += '--manual' }
+    if ($exeArgs.Count -gt 0) {
+        $exeArgs = @('--') + $exeArgs
+    }
+    & $standaloneExe $exeArgs
+    exit $LASTEXITCODE
+}
+
 function Find-Godot {
     $cmd = Get-Command godot -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }

@@ -36,9 +36,11 @@ namespace Angband3D;
 /// </para>
 /// <para>
 /// <b>Visibility & Fog of War:</b><br/>
-/// In dungeons (depth &gt; 0), only tiles currently in direct Line of Sight (<c>in_view</c>) are rendered in 3D.
-/// Solid earth beyond walls remains empty black void, preventing see-through wall glitches and eliminating overdraw.
-/// In town (depth 0), the full mapped town street is visible under open daylight sky.
+/// Explored/mapped tiles (<c>known</c>) and tiles in direct Line of Sight (<c>in_view</c>) are rendered in 3D.
+/// Tiles in active line-of-sight are dynamically illuminated by torchlight and ambient light, while explored
+/// areas outside immediate line-of-sight are rendered with a subtle, atmospheric fog-of-war memory shade.
+/// Unexplored solid rock beyond walls remains dark void, preventing see-through wall glitches while preserving
+/// continuous enclosed corridor and room architecture.
 /// </para>
 /// </remarks>
 public partial class DungeonWorld : Node3D
@@ -146,11 +148,14 @@ public partial class DungeonWorld : Node3D
     private readonly List<CombatFloater> _activeFloaters = new();
     private float _trauma = 0f;
     private string _lastProcessedMessage = "";
+    private int _lastProcessedCombatSeq = -1;
     private string _lastTerrainLabelsSignature = "";
 
     private Vector3 _targetPos;
     private float _targetYaw;
     private float _yaw;
+    private float _targetPitch;
+    private float _pitch;
     /// <summary>Camera compass facing: 0 = north, 1 = east, 2 = south, 3 = west.</summary>
     private int _facing;
     private string _levelKey = "";
@@ -1876,6 +1881,20 @@ public partial class DungeonWorld : Node3D
                 var fPos = _targetPos + forward * 0.9f + new Vector3((GD.Randf() - 0.5f) * 0.3f, 0.15f, 0);
                 SpawnFloatingText($"-{dmg}", fPos, new Color(1.0f, 0.25f, 0.25f), 1.25f);
                 SpawnHitSparks(fPos, -forward, new Color(0.95f, 0.15f, 0.15f), 18);
+
+                // Any adjacent attacking monsters immediately face the player
+                foreach (var monster in _activeMonsters.Values)
+                {
+                    if (!monster.IsAfraid && !monster.IsAsleep)
+                    {
+                        var toP = _targetPos - monster.CurrentPos;
+                        toP.Y = 0;
+                        if (toP.LengthSquared() <= (Cell * 1.6f) * (Cell * 1.6f) && toP.LengthSquared() > 0.001f)
+                        {
+                            MonsterModelResolver.FaceTarget(monster, _targetPos, snapImmediately: true);
+                        }
+                    }
+                }
             }
             else if (_lastPlayerHp >= 0 && curHp > _lastPlayerHp)
             {
@@ -1960,6 +1979,10 @@ public partial class DungeonWorld : Node3D
         // Clamp eye height to realistic dungeon crawling bounds [0.70m (small halfling/yeek), 2.25m (half-troll with ceiling clearance)]
         CurrentEyeHeight = Mathf.Clamp(targetEyeHeight, 0.70f, 2.25f);
         CurrentHeightRatio = CurrentEyeHeight / BaseEyeHeight;
+
+        // View angle compensation: tall characters tilt view down slightly (negative pitch),
+        // short characters tilt view up slightly (positive pitch) to keep dungeon corridors and foes in natural focus.
+        _targetPitch = Mathf.DegToRad((BaseEyeHeight - CurrentEyeHeight) * 10.0f);
 
         if (_camera != null)
         {
@@ -2067,6 +2090,21 @@ public partial class DungeonWorld : Node3D
             return 0;
         }
         return (AngbandColors.HexVal(f[x * 2]) << 4) | AngbandColors.HexVal(f[x * 2 + 1]);
+    }
+
+    private static int FlagAt(JsonElement map, int x, int y)
+    {
+        if (y < 0 || y >= map.GetProperty("h").GetInt32()
+            || x < 0 || x >= map.GetProperty("w").GetInt32())
+        {
+            return 0;
+        }
+        var l = map.GetProperty("rows")[y].GetProperty("l").GetString() ?? "";
+        if (x >= l.Length)
+        {
+            return 0;
+        }
+        return AngbandColors.HexVal(l[x]);
     }
 
     private static bool IsWallOrVoid(JsonElement map, int x, int y, int w, int h)
@@ -2232,7 +2270,7 @@ public partial class DungeonWorld : Node3D
         }
 
         // Bounding box around player for active sightline (MAX_SIGHT in Angband is 20)
-        const int sightRange = 24;
+        const int sightRange = 32;
         var minX = _outdoors ? 0 : Math.Max(0, px - sightRange);
         var maxX = _outdoors ? w - 1 : Math.Min(w - 1, px + sightRange);
         var minY = _outdoors ? 0 : Math.Max(0, py - sightRange);
@@ -2254,18 +2292,7 @@ public partial class DungeonWorld : Node3D
                 var flag = AngbandColors.HexVal(flags[x]);
                 var known = (flag & 0x1) != 0;
                 var inView = (flag & 0x2) != 0;
-
-                // In dungeon, only geometry currently in direct line-of-sight is rendered in 3D.
-                // Out-of-LOS solid rock and distant unmapped rooms remain black void and do not
-                // reveal floating walls through solid earth.
-                if (!_outdoors && !inView)
-                {
-                    continue;
-                }
-                if (_outdoors && !known && !inView)
-                {
-                    continue;
-                }
+                var lighting = (flag >> 2) & 0x3;
 
                 var feat = (AngbandColors.HexVal(feats[x * 2]) << 4) | AngbandColors.HexVal(feats[x * 2 + 1]);
                 var kind = KindOf(feat);
@@ -2274,21 +2301,111 @@ public partial class DungeonWorld : Node3D
                     continue;
                 }
 
+                // Check if this is a solid wall tile (Wall, Magma, Quartz)
+                var isWallKind = kind is Kind.Wall or Kind.Magma or Kind.Quartz;
+
+                // For wall tiles adjacent to visible/explored walkable tiles, infer visibility
+                // so walls bordering lit corridors/rooms render cleanly without pitch-black gaps.
+                if (isWallKind && !inView && !known)
+                {
+                    // Check if any neighboring tile is inView or known walkable floor/door
+                    for (int dy = -1; dy <= 1 && (!inView || !known); dy++)
+                    {
+                        for (int dx = -1; dx <= 1 && (!inView || !known); dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            var nx = x + dx;
+                            var ny = y + dy;
+                            if (nx >= 0 && nx < w && ny >= 0 && ny < h)
+                            {
+                                var nflag = FlagAt(map, nx, ny);
+                                var nInView = (nflag & 0x2) != 0;
+                                var nKnown = (nflag & 0x1) != 0;
+                                if (nInView || nKnown)
+                                {
+                                    var nfeat = FeatAt(map, nx, ny);
+                                    var nkind = KindOf(nfeat);
+                                    if (IsWalkableOrPortal(nkind))
+                                    {
+                                        if (nInView) inView = true;
+                                        if (nKnown) known = true;
+                                        if (lighting == 3) lighting = (nflag >> 2) & 0x3;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Render tiles that are known (explored memory) or currently in line of sight (inView).
+                // Also render unknown solid rock bordering known/in-view space as dark solid wall barriers.
+                if (!known && !inView)
+                {
+                    // If this unmapped rock borders known/inView walkable space, render it as dark solid wall to prevent see-through void
+                    bool bordersExplored = false;
+                    for (int dy = -1; dy <= 1 && !bordersExplored; dy++)
+                    {
+                        for (int dx = -1; dx <= 1 && !bordersExplored; dx++)
+                        {
+                            if (dx == 0 && dy == 0) continue;
+                            var nx = x + dx;
+                            var ny = y + dy;
+                            if (nx >= 0 && nx < w && ny >= 0 && ny < h)
+                            {
+                                var nflag = FlagAt(map, nx, ny);
+                                if ((nflag & 0x3) != 0)
+                                {
+                                    var nkind = KindOf(FeatAt(map, nx, ny));
+                                    if (IsWalkableOrPortal(nkind)) bordersExplored = true;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!bordersExplored)
+                    {
+                        continue;
+                    }
+
+                    // Render as dark boundary wall
+                    kind = Kind.Wall;
+                    known = true;
+                    lighting = 3;
+                }
+
                 // Determine lighting level: 0=LOS, 1=torch, 2=lit room/feature, 3=dark
-                var lighting = (flag >> 2) & 0x3;
+                if (lighting == 3 && inView)
+                {
+                    // If player is close (within torch radius), illuminate the wall face
+                    var distSq = (x - px) * (x - px) + (y - py) * (y - py);
+                    if (distSq <= (_torchRadius + 1) * (_torchRadius + 1))
+                    {
+                        lighting = 1;
+                    }
+                }
+
                 Color shade;
-                if (_outdoors || lighting == 2)
+                if (_outdoors || (inView && lighting == 2))
                 {
                     shade = BaseColour(kind);
                 }
-                else if (lighting is 0 or 1)
+                else if (inView && lighting is 0 or 1)
                 {
                     shade = BaseColour(kind);
+                }
+                else if (inView && lighting == 3)
+                {
+                    // In direct LOS but unlit / dark corridor
+                    shade = BaseColour(kind) * new Color(0.24f, 0.26f, 0.32f);
                 }
                 else
                 {
-                    // Dark / unlit space in line of sight (recedes smoothly into pitch blackness)
-                    shade = BaseColour(kind) * new Color(0.24f, 0.26f, 0.32f);
+                    // Explored / Known but currently out-of-LOS (Fog of war / player memory).
+                    // Dimmed with subtle cool slate memory tint so architecture remains clear
+                    // without glowing in unilluminated areas.
+                    shade = BaseColour(kind) * (lighting == 2
+                        ? new Color(0.55f, 0.58f, 0.65f)
+                        : new Color(0.22f, 0.24f, 0.30f));
                 }
 
                 if (kind is Kind.Wall or Kind.Magma or Kind.Quartz)
@@ -2357,9 +2474,21 @@ public partial class DungeonWorld : Node3D
                 {
                     _xf[Kind.Ceiling].Add(new Transform3D(Basis.Identity,
                         new Vector3(x * Cell, WallHeight + 0.05f, y * Cell)));
-                    var cc = (lighting == 3)
-                        ? BaseColour(Kind.Ceiling) * new Color(0.20f, 0.22f, 0.28f)
-                        : BaseColour(Kind.Ceiling);
+                    Color cc;
+                    if (!inView)
+                    {
+                        cc = BaseColour(Kind.Ceiling) * (lighting == 2
+                            ? new Color(0.50f, 0.52f, 0.60f)
+                            : new Color(0.20f, 0.22f, 0.28f));
+                    }
+                    else if (lighting == 3)
+                    {
+                        cc = BaseColour(Kind.Ceiling) * new Color(0.20f, 0.22f, 0.28f);
+                    }
+                    else
+                    {
+                        cc = BaseColour(Kind.Ceiling);
+                    }
                     _col[Kind.Ceiling].Add(cc);
                 }
             }
@@ -2387,7 +2516,7 @@ public partial class DungeonWorld : Node3D
         var storePositions = new Dictionary<int, List<Vector2>>();
         var stairsList = new List<(Vector3 Pos, string Name)>();
 
-        const int labelRange = 24;
+        const int labelRange = 32;
         var minX = _outdoors ? 0 : Math.Max(0, px - labelRange);
         var maxX = _outdoors ? w - 1 : Math.Min(w - 1, px + labelRange);
         var minY = _outdoors ? 0 : Math.Max(0, py - labelRange);
@@ -2402,11 +2531,7 @@ public partial class DungeonWorld : Node3D
                 var flag = AngbandColors.HexVal(flags[x]);
                 var inView = (flag & 0x2) != 0;
                 var known = (flag & 0x1) != 0;
-                if (!_outdoors && !inView)
-                {
-                    continue;
-                }
-                if (_outdoors && !known && !inView)
+                if (!known && !inView)
                 {
                     continue;
                 }
@@ -2502,6 +2627,9 @@ public partial class DungeonWorld : Node3D
             Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
             Shaded = false,
             NoDepthTest = noDepthTest,
+            VisibilityRangeEnd = noDepthTest ? 45.0f : 25.0f,
+            VisibilityRangeEndMargin = 4.0f,
+            VisibilityRangeFadeMode = GeometryInstance3D.VisibilityRangeFadeModeEnum.Self,
             RenderPriority = noDepthTest ? 15 : 0,
             Position = pos,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -2538,6 +2666,7 @@ public partial class DungeonWorld : Node3D
     {
         _frameSeq++;
         var playerPos = _targetPos;
+        var map = frame.TryGetProperty("map", out var mProp) ? mProp : default;
 
         // Process Monsters
         string targetMonsterId = null;
@@ -2560,6 +2689,15 @@ public partial class DungeonWorld : Node3D
             var targetWorldPos = new Vector3(gx * Cell, 0, gy * Cell);
             var isTargeted = targetMonsterId != null && monId == targetMonsterId;
 
+            // Visibility & Illumination rules:
+            // Check tile flag: bit 1 = inView (line of sight), bits 2-3 = lighting (0=LOS lit, 1=torch, 2=room lit, 3=dark)
+            var flag = map.ValueKind == JsonValueKind.Object ? FlagAt(map, gx, gy) : 0;
+            var inView = _outdoors || (flag & 0x2) != 0;
+            var lighting = (flag >> 2) & 0x3;
+            // In outdoors or when actively in view and illuminated (or nearby torch radius), label is visible
+            var isIlluminated = _outdoors || lighting is 0 or 1 or 2;
+            var isVisibleInView = inView && isIlluminated;
+
             seenMonsterIds.Add(monId);
 
             if (_activeMonsters.TryGetValue(monId, out var entity))
@@ -2577,7 +2715,7 @@ public partial class DungeonWorld : Node3D
                     AudioManager.PlayAt(SoundEffect.MeleeHit, entity.CurrentPos);
                 }
 
-                MonsterModelResolver.UpdateMonsterVisual(entity, m, isTargeted);
+                MonsterModelResolver.UpdateMonsterVisual(entity, m, isTargeted, isVisibleInView);
 
                 if (entity.GridX != gx || entity.GridY != gy)
                 {
@@ -2617,7 +2755,7 @@ public partial class DungeonWorld : Node3D
             {
                 // Newly appeared monster
                 var newEntity = MonsterModelResolver.CreateMonsterEntity(m, targetWorldPos, playerPos, monId);
-                MonsterModelResolver.UpdateMonsterVisual(newEntity, m, isTargeted);
+                MonsterModelResolver.UpdateMonsterVisual(newEntity, m, isTargeted, isVisibleInView);
                 newEntity.LastSeenFrame = _frameSeq;
                 _entities.AddChild(newEntity.RootNode);
                 _activeMonsters[monId] = newEntity;
@@ -2654,10 +2792,20 @@ public partial class DungeonWorld : Node3D
             var key = $"{gx}_{gy}_{glyphStr}";
             seenItems.Add(key);
 
-            if (!_activeItems.ContainsKey(key))
+            var flag = map.ValueKind == JsonValueKind.Object ? FlagAt(map, gx, gy) : 0;
+            var inView = _outdoors || (flag & 0x2) != 0;
+            var lighting = (flag >> 2) & 0x3;
+            var isIlluminated = _outdoors || lighting is 0 or 1 or 2;
+            var isVisibleInView = inView && isIlluminated;
+
+            if (_activeItems.TryGetValue(key, out var existingItemNode))
+            {
+                ItemModelResolver.UpdateItemVisibility(existingItemNode, isVisibleInView);
+            }
+            else
             {
                 var pos = new Vector3(gx * Cell, 0, gy * Cell);
-                var itemNode = ItemModelResolver.CreateItemNode(o, pos);
+                var itemNode = ItemModelResolver.CreateItemNode(o, pos, isVisibleInView);
                 _entities.AddChild(itemNode);
                 _activeItems[key] = itemNode;
             }
@@ -2922,6 +3070,56 @@ public partial class DungeonWorld : Node3D
         });
     }
 
+    /// <summary>
+    /// Identifies which active monster is performing an attack or action mentioned in a message.
+    /// Matches by monster race name, or defaults to the closest adjacent/awake candidate.
+    /// </summary>
+    private MonsterEntity FindAttackingMonster(string messageText, bool isMelee)
+    {
+        if (_activeMonsters.Count == 0 || string.IsNullOrEmpty(messageText))
+            return null;
+
+        MonsterEntity bestMatch = null;
+        float bestDistSq = float.MaxValue;
+        var lowerMsg = messageText.ToLowerInvariant();
+
+        // 1. Check for exact or substring match with monster RaceName
+        foreach (var monster in _activeMonsters.Values)
+        {
+            if (string.IsNullOrEmpty(monster.RaceName)) continue;
+            var lowerRace = monster.RaceName.ToLowerInvariant();
+
+            if (lowerMsg.Contains(lowerRace) ||
+                (lowerRace.Length > 4 && lowerMsg.Contains(lowerRace.Substring(0, Math.Min(lowerRace.Length, 8)))))
+            {
+                var d2 = monster.CurrentPos.DistanceSquaredTo(_targetPos);
+                if (d2 < bestDistSq)
+                {
+                    bestDistSq = d2;
+                    bestMatch = monster;
+                }
+            }
+        }
+
+        if (bestMatch != null)
+            return bestMatch;
+
+        // 2. Proximity fallback: for melee, pick closest adjacent awake monster
+        var maxDistSq = isMelee ? (Cell * 1.6f) * (Cell * 1.6f) : float.MaxValue;
+        foreach (var monster in _activeMonsters.Values)
+        {
+            if (monster.IsAsleep) continue;
+            var d2 = monster.CurrentPos.DistanceSquaredTo(_targetPos);
+            if (d2 <= maxDistSq && d2 < bestDistSq)
+            {
+                bestDistSq = d2;
+                bestMatch = monster;
+            }
+        }
+
+        return bestMatch;
+    }
+
     private void ProcessCombatEvents(JsonElement frame)
     {
         if (!frame.TryGetProperty("messages", out var msgs) || msgs.ValueKind != JsonValueKind.Array || msgs.GetArrayLength() == 0)
@@ -2942,10 +3140,50 @@ public partial class DungeonWorld : Node3D
         var right = _camera != null ? _camera.Transform.Basis.X : Vector3.Right;
         var spawnInFront = _targetPos + forward * 1.6f + new Vector3(0, 0.2f, 0);
 
+        // Check if player is being attacked by a creature (melee, ranged, breath, spells, or gaze)
+        bool isMonsterAttackingPlayer =
+            lower.Contains("hits you") || lower.Contains("bites you") || lower.Contains("touches you") ||
+            lower.Contains("claws you") || lower.Contains("crushes you") || lower.Contains("burns you") ||
+            lower.Contains("shoots you") || lower.Contains("stings you") || lower.Contains("casts a spell") ||
+            lower.Contains("casts an evil spell") || lower.Contains("misses you") || lower.Contains("breathes") ||
+            lower.Contains("spits") || lower.Contains("gazes") || lower.Contains("wails") ||
+            lower.Contains("screams") || lower.Contains("shrieks") || lower.Contains("drains you") ||
+            lower.Contains("kicks you") || lower.Contains("butts you") || lower.Contains("charges you") ||
+            lower.Contains("engulfs you") || lower.Contains("lashes you") || lower.Contains("moans");
+
+        if (isMonsterAttackingPlayer)
+        {
+            bool isRangedOrSpell = lower.Contains("casts") || lower.Contains("shoots") || lower.Contains("breathes") || lower.Contains("spits") || lower.Contains("burns");
+            var attacker = FindAttackingMonster(text, isMelee: !isRangedOrSpell);
+
+            if (attacker != null)
+            {
+                // Attacking creature faces player immediately and triggers attack animation/lunge
+                MonsterModelResolver.TriggerAttackAction(attacker, _targetPos);
+            }
+            else
+            {
+                // If specific monster could not be resolved from message, orient all adjacent active monsters
+                foreach (var m in _activeMonsters.Values)
+                {
+                    if (!m.IsAfraid && !m.IsAsleep)
+                    {
+                        var toP = _targetPos - m.CurrentPos;
+                        toP.Y = 0;
+                        if (toP.LengthSquared() <= (Cell * 1.6f) * (Cell * 1.6f) && toP.LengthSquared() > 0.001f)
+                        {
+                            MonsterModelResolver.TriggerAttackAction(m, _targetPos);
+                        }
+                    }
+                }
+            }
+        }
+
         // Player taking damage
         if (lower.Contains("hits you") || lower.Contains("bites you") || lower.Contains("touches you") ||
             lower.Contains("claws you") || lower.Contains("crushes you") || lower.Contains("burns you") ||
-            lower.Contains("shoots you") || lower.Contains("stings you") || lower.Contains("casts a spell"))
+            lower.Contains("shoots you") || lower.Contains("stings you") || lower.Contains("casts a spell") ||
+            lower.Contains("breathes"))
         {
             AddTrauma(0.40f);
             _viewModel?.TriggerHurt();
@@ -2954,10 +3192,19 @@ public partial class DungeonWorld : Node3D
             SpawnFloatingText("OUCH!", hitPos, new Color(1.0f, 0.30f, 0.30f), 1.1f);
             SpawnHitSparks(hitPos, -forward, new Color(0.9f, 0.2f, 0.2f), 14);
 
-            if (lower.Contains("casts a spell") || lower.Contains("shoots you") || lower.Contains("burns you"))
+            if (lower.Contains("casts a spell") || lower.Contains("shoots you") || lower.Contains("burns you") || lower.Contains("breathes"))
             {
-                var srcPos = _targetPos + forward * 4.0f + new Vector3(0, 0.4f, 0);
-                var projCol = lower.Contains("burns") ? new Color(1.0f, 0.45f, 0.10f) : new Color(0.85f, 0.35f, 1.0f);
+                var attacker = FindAttackingMonster(text, isMelee: false);
+                var srcPos = attacker != null
+                    ? attacker.CurrentPos + new Vector3(0, attacker.ModelHeight * 0.5f, 0)
+                    : _targetPos + forward * 4.0f + new Vector3(0, 0.4f, 0);
+
+                var projCol = lower.Contains("burns") || lower.Contains("fire") ? new Color(1.0f, 0.45f, 0.10f)
+                            : lower.Contains("frost") || lower.Contains("cold") ? new Color(0.40f, 0.85f, 1.0f)
+                            : lower.Contains("lightning") || lower.Contains("elec") ? new Color(1.0f, 0.95f, 0.30f)
+                            : lower.Contains("poison") || lower.Contains("acid") ? new Color(0.35f, 0.95f, 0.30f)
+                            : new Color(0.85f, 0.35f, 1.0f);
+
                 SpawnProjectile(srcPos, _targetPos + new Vector3(0, 0.2f, 0), projCol, "enemy_spell");
             }
         }
@@ -3007,6 +3254,12 @@ public partial class DungeonWorld : Node3D
             AudioManager.Play(SoundEffect.MeleeHit);
             SpawnFloatingText("HIT", spawnInFront, new Color(1.0f, 0.75f, 0.20f), 1.0f);
             SpawnHitSparks(spawnInFront, forward, new Color(1.0f, 0.70f, 0.25f), 14);
+
+            var defender = FindAttackingMonster(text, isMelee: true);
+            if (defender != null)
+            {
+                MonsterModelResolver.FaceTarget(defender, _targetPos, snapImmediately: false);
+            }
         }
         // Misses
         else if (lower.Contains("you miss") || lower.Contains("misses you"))
@@ -3014,6 +3267,11 @@ public partial class DungeonWorld : Node3D
             if (lower.Contains("you miss"))
             {
                 _viewModel?.TriggerAttack();
+                var defender = FindAttackingMonster(text, isMelee: true);
+                if (defender != null)
+                {
+                    MonsterModelResolver.FaceTarget(defender, _targetPos, snapImmediately: false);
+                }
             }
             AudioManager.Play(SoundEffect.MeleeSwing);
             SpawnFloatingText("MISS", spawnInFront, new Color(0.70f, 0.72f, 0.78f), 0.9f);
@@ -3073,15 +3331,17 @@ public partial class DungeonWorld : Node3D
         }
         _camera.Position = new Vector3(_camera.Position.X, CurrentEyeHeight + bob, _camera.Position.Z);
 
+        _pitch = Mathf.Lerp(_pitch, _targetPitch, t);
         _yaw = Mathf.LerpAngle(_yaw, _targetYaw, t);
 
-        // Subtle camera roll on turn
+        // Subtle camera roll on turn and pitch delta for viewmodel inertia
         var yawDelta = Mathf.Wrap(_targetYaw - _yaw, -Mathf.Pi, Mathf.Pi);
+        var pitchDelta = _targetPitch - _pitch;
         var roll = Mathf.Clamp(-yawDelta * 0.08f, -0.04f, 0.04f);
-        _camera.Rotation = new Vector3(0, _yaw, roll);
+        _camera.Rotation = new Vector3(_pitch, _yaw, roll);
 
         // Update first-person viewmodel motion, bobbing & inertia sway
-        _viewModel?.ProcessMotion(delta, isMoving, yawDelta, 0f);
+        _viewModel?.ProcessMotion(delta, isMoving, yawDelta, pitchDelta);
 
         // Keep atmospheric particulate emitter anchored to camera view
         if (_biomeParticles != null)
@@ -3188,7 +3448,7 @@ public partial class DungeonWorld : Node3D
                         monster.TargetYaw = Mathf.Atan2(-toPlayer.X, -toPlayer.Z);
                     }
                 }
-                else if (toPlayer.LengthSquared() < (Cell * 2.5f) * (Cell * 2.5f) && toPlayer.LengthSquared() > 0.001f)
+                else if (toPlayer.LengthSquared() <= (Cell * 2.5f) * (Cell * 2.5f) && toPlayer.LengthSquared() > 0.001f)
                 {
                     monster.TargetYaw = Mathf.Atan2(toPlayer.X, toPlayer.Z);
                 }
@@ -3201,6 +3461,16 @@ public partial class DungeonWorld : Node3D
                 if (toPlayer.LengthSquared() > 0.001f)
                 {
                     monster.TargetYaw = Mathf.Atan2(-toPlayer.X, -toPlayer.Z);
+                }
+            }
+            else if (!monster.IsMoving && !monster.IsAfraid && !monster.IsAsleep)
+            {
+                // Continuously orient adjacent awake monsters towards player so they always face player in melee
+                var toPlayer = _targetPos - monster.CurrentPos;
+                toPlayer.Y = 0;
+                if (toPlayer.LengthSquared() <= (Cell * 1.6f) * (Cell * 1.6f) && toPlayer.LengthSquared() > 0.001f)
+                {
+                    monster.TargetYaw = Mathf.Atan2(toPlayer.X, toPlayer.Z);
                 }
             }
 

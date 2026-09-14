@@ -11,15 +11,18 @@ Whether you are interested in adding 3D models, composing ambient music and soun
 2. [Development Environment Setup](#development-environment-setup)
 3. [Architecture & Project Tour](#architecture--project-tour)
 4. [Contribution Recipes & How-Tos](#contribution-recipes--how-tos)
-   - [Recipe 1: Adding a 3D Monster Model](#recipe-1-adding-a-3d-monster-model)
+   - [Recipe 1: Adding a 3D Monster Model & Rig](#recipe-1-adding-a-3d-monster-model--rig)
    - [Recipe 2: Adding a 3D Item Pickup](#recipe-2-adding-a-3d-item-pickup)
    - [Recipe 3: Adding Combat Juice, Audio & VFX](#recipe-3-adding-combat-juice-audio--vfx)
    - [Recipe 4: Customizing Shaders, Materials & Geometry](#recipe-4-customizing-shaders-materials--geometry)
-   - [Recipe 5: Modifying the Engine Bridge](#recipe-5-modifying-the-engine-bridge)
+   - [Recipe 5: Adding First-Person Weapon Rigs & Animations](#recipe-5-adding-first-person-weapon-rigs--animations)
+   - [Recipe 6: Tuning Procedural 3D Audio Synthesis](#recipe-6-tuning-procedural-3d-audio-synthesis)
+   - [Recipe 7: Modifying the Engine Bridge](#recipe-7-modifying-the-engine-bridge)
 5. [Input & Coordinate Conventions](#input--coordinate-conventions)
 6. [Testing & Verification](#testing--verification)
-7. [Submitting a Pull Request](#submitting-a-pull-request)
-8. [Code Style & Conventions](#code-style--conventions)
+7. [Packaging Standalone Releases](#packaging-standalone-releases)
+8. [Submitting a Pull Request](#submitting-a-pull-request)
+9. [Code Style & Conventions](#code-style--conventions)
 
 ---
 
@@ -192,10 +195,32 @@ Dungeon walls, floors, doors, and features are constructed in `client/scripts/Du
 - **MultiMesh Batches**: Repeated static elements (walls, floors, ceiling tiles, stairs, rubble) are batched using `MultiMeshInstance3D` to keep draw calls minimal ($\le 10$ draw calls for an entire 12,000-tile dungeon level).
 - **Procedural PBR Textures**: High-resolution procedural masonry textures, normal maps, and emissive veins (Magma, Quartz, Lava) are generated in `CreateTexture()` and cached in static materials.
 - **Orientation-Aware Doors**: Corridors dynamically choose door orientation (North-South vs East-West) by inspecting adjacent orthogonal walkable cells in `BuildDoorMesh()`.
+- **Depth Biomes**: Biome parameters (fog density, ambient lighting energy, particle emitters) are configured via `GetBiomeForDepth(int depth)`.
 
 ---
 
-### Recipe 5: Modifying the Engine Bridge
+### Recipe 5: Adding First-Person Weapon Rigs & Animations
+
+Viewmodels and player arm kinematics are managed in `client/scripts/ViewModel.cs`:
+- **Held Equipment Matching**: `ViewModel.cs` inspects `frame.player.weapon_item`, `bow_item`, and `shield_item` every frame.
+- **Procedural Kinematics**:
+  - `UpdateWalkBobbing(double delta, bool moving)` generates natural sinusoidal vertical and lateral arm movements.
+  - `UpdateWeaponSway(double delta)` creates smooth camera inertia lag when turning.
+  - `TriggerMeleeAttack()`, `TriggerRangedAttack()`, and `TriggerCastSpell()` initiate kinetic slash, thrust, release, and glowing surge animations.
+- **Racial Proportions**: Arm length, hand scale, and resting position dynamically adapt to `frame.player.ht` and player race.
+
+---
+
+### Recipe 6: Tuning Procedural 3D Audio Synthesis
+
+`client/scripts/AudioManager.cs` generates all game audio dynamically as 16-bit PCM waveform buffers:
+- **Procedural Sounds**: Footsteps (dungeon stone vs outdoor gravel), weapon slashes/impacts, spell zaps, wooden door creaks, funeral death bells, and staircase transitions.
+- **Pitch Modulation**: Footstep frequency automatically shifts lower for heavy races (Half-Troll, Dwarf) and higher for light races (Halfling, Gnome).
+- **Zero Allocations**: Sounds are synthesized on initialization and cached in pre-allocated `AudioStreamPlayer3D` and `AudioStreamPlayer` sound pools.
+
+---
+
+### Recipe 7: Modifying the Engine Bridge
 
 If you need to expose additional Angband state to the JSON stream:
 1. Open `engine/src/main-bridge.c` or `engine/src/bridge-json.c`.
@@ -207,6 +232,7 @@ If you need to expose additional Angband state to the JSON stream:
    cd engine
    git diff 4.2.6..HEAD --output=..\engine-patch\0001-bridge-frontend.patch
    ```
+   *(Note: Always use `--output=`, never `>` to avoid UTF-16 encoding errors on Windows PowerShell).*
 
 ---
 
@@ -268,13 +294,37 @@ print(f"Monsters visible: {len(b.frame['monsters'])}")
 
 ---
 
+## Packaging Standalone Releases
+
+To test the standalone release packaging pipeline locally:
+
+```powershell
+# Run the automated packaging script:
+.\tools\package.ps1
+```
+
+This will:
+1. Compile the native Angband C engine.
+2. Export the headless Godot standalone executable `Angband3D.exe` and `Angband3D.pck`.
+3. Assemble the distribution structure under `dist/Angband3D-Windows-x64/`.
+4. Bundle and compress the output into `dist/Angband3D-Windows-x64.zip`.
+
+Verify that extracting the zip and double-clicking `Angband3D.exe` starts the game cleanly without any developer dependencies installed.
+
+---
+
 ## Submitting a Pull Request
 
 1. **Fork the repository** on GitHub.
 2. **Create a feature branch** (`git checkout -b feature/awesome-feature`).
 3. **Commit your changes** with descriptive commit messages.
-4. **Ensure all tests pass** (`python tools/smoke_test.py` and `dotnet build client/angband3d.csproj`).
-5. **Open a Pull Request** against the `main` branch with a summary of changes and screenshots/GIFs for visual features.
+4. **Run the contributor pre-flight checklist**:
+   - [ ] C# code builds with zero errors or warnings (`dotnet build client/angband3d.csproj`).
+   - [ ] All 11 smoke tests pass (`python tools/smoke_test.py`).
+   - [ ] Upstream savefiles remain 100% binary compatible.
+   - [ ] Any modified engine C files have their patch updated (`engine-patch/0001-bridge-frontend.patch`).
+   - [ ] Any newly added assets are CC0/MIT with license attribution in `client/assets/CREDITS.md`.
+5. **Open a Pull Request** against the `main` branch with a summary of changes, rationale, and screenshots/GIFs for visual features.
 
 ---
 
@@ -286,6 +336,7 @@ print(f"Monsters visible: {len(b.frame['monsters'])}")
   - Avoid per-frame allocations (`GC churn`) inside `_Process` and `UpdateDungeon`.
 - **C Engine Code**:
   - Match Angband's style: tabs for indentation, K&R brace style, C89/C99 compatibility.
+  - Contain all bridge logic within `src/main-bridge.c` and `src/bridge-json.c`.
 - **Documentation**:
   - Document *why* rather than *what*. Provide XML doc comments on public APIs and helper methods.
 

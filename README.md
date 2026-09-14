@@ -5,7 +5,12 @@ built as a high-performance fork of the game rather than a reimplementation of i
 
 The goal is *Dungeon Master*-style immersion with Angband's full roguelike depth: every monster, item, artifact, curse, vault, and level generator, completely unchanged.
 
-**Status: Phase 2b+ — fully playable 3D dungeon crawler with Godot 4 & .NET 8.**
+**Status: Version 1.0.0 — fully playable standalone 3D dungeon crawler with Godot 4 & .NET 8.**
+
+[![License: GPL v2](https://img.shields.io/badge/License-GPL_v2-blue.svg)](LICENSE)
+[![Engine: Angband 4.2.6](https://img.shields.io/badge/Angband-4.2.6-darkgreen.svg)](https://github.com/angband/angband)
+[![Client: Godot 4.3+ .NET](https://img.shields.io/badge/Godot-4.3+_.NET-blueviolet.svg)](https://godotengine.org/)
+[![Smoke Tests: 11/11 Passing](https://img.shields.io/badge/Smoke_Tests-11%2F11_Passing-success.svg)](tools/smoke_test.py)
 
 ---
 
@@ -33,6 +38,11 @@ Your character's rolled race and physical height stat directly scale the entire 
 - **Depth-Tested Nameplates & Status Reticles**: Monster nameplates, status badges (`💤 Sleep`, `⚠ Fleeing`, `🌀 Confused`), and target reticles enforce strict depth buffer testing and LOS gating so creature positions are never spoiled through solid walls.
 - **Living Visual Behaviors**: Monsters smoothly interpolate across tiles, turn to face you when adjacent, track their health with color-coded 3D nameplates, and play custom Idle/Walk animations.
 
+### ✨ 4. Animated 3D Item Pickups & Kinetic VFX
+- **3D Ground Pickups**: Rendered 3D objects with continuous gentle bobbing, slow ambient rotation, and emissive color accents matching Angband item qualities.
+- **Kinetic Combat Juice**: Floating damage numbers, critical strike popups, directional hit sparks, and camera trauma screen-shake.
+- **Active Spell Projectiles**: Glowing 3D kinetic projectiles with particle trails for player spellcasting, monster breath weapons, and ranged missile attacks.
+
 ### 🏰 5. Procedural PBR Masonry, Depth Biomes & Solid Barrier Walls
 - **Multi-Octave PBR Materials**: Ashlar limestone masonry, weathered flagstone floors, cavern ceilings, glowing magma veins, and crystalline quartz seams with normal maps and calibrated roughness.
 - **6 Subterranean Depth Biomes**: Town & Overworld (0), Upper Crypts (1-15), Overgrown Catacombs (16-35), Crystal Caverns (36-60), Magma Underworld (61-85), and Abyssal Throne (86-100+).
@@ -57,6 +67,20 @@ Your character's rolled race and physical height stat directly scale the entire 
 ### 📜 9. 100% Faithful Angband 4.2.6 Engine Depth
 - **Zero Compromises on Roguelike Depth**: Every item, artifact, ego-type, spell, monster AI behavior, and dungeon generator is running directly from unmodified Angband 4.2.6 C code.
 - **Seamless Terminal Overlay**: Inventory, stores, character creation, targeting, and wizard debug menus pop up seamlessly via the terminal overlay without breaking immersion or game state.
+
+### 📦 10. Standalone Zero-Install Packaging
+- **One-Click Distribution**: Easily packaged via `package.cmd` into `Angband3D-Windows-x64.zip` containing the standalone `Angband3D.exe`, `.pck` assets, and native C binaries. End-users require zero prerequisites.
+
+---
+
+## 📋 Release Notes & Changelog
+
+See **[CHANGELOG.md](CHANGELOG.md)** for detailed version-by-version release notes.
+
+- **v1.0.0 (Latest)**: Comprehensive Release — Standalone distribution packaging, full visual overhaul with PBR parallax materials, procedural 3D creature tokens and fallback rigs, dynamic racial scaling and viewmodel kinematics, depth biomes with volumetric fog, atmospheric death experience with runes disclosure, procedural 3D audio, and decoupled minimap controls.
+- **v0.3.0**: Standalone release bundle, packaging pipeline & executable export.
+- **v0.2.0**: GitHub Actions release automation, 3D pickup models, combat feedback juice, and expanded smoke tests.
+- **v0.1.0**: Initial working prototype of the C JSON bridge and Godot 4 3D client.
 
 ---
 

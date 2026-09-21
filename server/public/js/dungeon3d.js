@@ -923,7 +923,7 @@ class Dungeon3D {
     }
 
     initMeshes() {
-        this.maxInstances = 4096;
+        this.maxInstances = 8192;
         // 45-degree chamfered geometry creates a visible 0.57m aperture between diagonal blocks
         const wallGeo = createChamferedWallGeometry(this.cellSize, this.wallHeight, 0.40);
         const floorGeo = new THREE.PlaneGeometry(this.cellSize, this.cellSize);
@@ -2119,6 +2119,14 @@ class Dungeon3D {
 
                 // Magma fissures (list-terrain.h feat 17=MAGMA, 19=MAGMA_K)
                 if (feat === 17 || feat === 19) {
+                    // Seal chamfered corner base with floor quad
+                    this.dummy.position.set(wx, -0.05, wz);
+                    this.dummy.rotation.set(0, 0, 0);
+                    this.dummy.updateMatrix();
+                    this.floorMesh.setMatrixAt(floorCount, this.dummy.matrix);
+                    this.floorMesh.setColorAt(floorCount, floorShade);
+                    floorCount++;
+
                     this.dummy.position.set(wx, wallYCenter, wz);
                     this.dummy.rotation.set(0, 0, 0);
                     this.dummy.updateMatrix();
@@ -2130,6 +2138,14 @@ class Dungeon3D {
 
                 // Quartz crystal veins (list-terrain.h feat 18=QUARTZ, 20=QUARTZ_K)
                 if (feat === 18 || feat === 20) {
+                    // Seal chamfered corner base with floor quad
+                    this.dummy.position.set(wx, -0.05, wz);
+                    this.dummy.rotation.set(0, 0, 0);
+                    this.dummy.updateMatrix();
+                    this.floorMesh.setMatrixAt(floorCount, this.dummy.matrix);
+                    this.floorMesh.setColorAt(floorCount, floorShade);
+                    floorCount++;
+
                     this.dummy.position.set(wx, wallYCenter, wz);
                     this.dummy.rotation.set(0, 0, 0);
                     this.dummy.updateMatrix();
@@ -2158,6 +2174,14 @@ class Dungeon3D {
                         if (hasExposedFace) break;
                     }
                     if (!hasExposedFace) continue; // Interior bedrock culling
+
+                    // Seal chamfered corner base with floor quad
+                    this.dummy.position.set(wx, -0.05, wz);
+                    this.dummy.rotation.set(0, 0, 0);
+                    this.dummy.updateMatrix();
+                    this.floorMesh.setMatrixAt(floorCount, this.dummy.matrix);
+                    this.floorMesh.setColorAt(floorCount, floorShade);
+                    floorCount++;
 
                     this.dummy.position.set(wx, wallYCenter, wz);
                     this.dummy.rotation.set(0, 0, 0);

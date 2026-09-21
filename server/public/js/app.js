@@ -26,16 +26,69 @@ window.addEventListener('DOMContentLoaded', () => {
         updateViewMode();
     };
 
+    let quickBirthActive = false;
+    let quickBirthStep = 0;
+
+    const cancelQuickBirth = () => {
+        quickBirthActive = false;
+        quickBirthStep = 0;
+    };
+
+    function stepQuickBirth(frame) {
+        if (!quickBirthActive || !frame) return;
+        if (frame.phase === 'play' && frame.map) {
+            quickBirthActive = false;
+            return;
+        }
+        if (++quickBirthStep > 35) {
+            quickBirthActive = false;
+            console.warn('[QuickStart] Exceeded maximum auto-birth steps; stopping.');
+            return;
+        }
+        const screenText = (frame.term && frame.term.rows ? frame.term.rows.map(r => r.g || '').join('\n') : '').toLowerCase();
+
+        // 1. More prompts
+        if (screenText.includes('-more-')) {
+            network.sendKey('enter');
+            return;
+        }
+        // 2. Character confirmation / review screen ('y': use as is)
+        if (screenText.includes("use as is") || screenText.includes("'y': use")) {
+            network.sendKey('Y');
+            return;
+        }
+        // 3. Quit or overwrite confirmation
+        if (screenText.includes('[y/n]') || screenText.includes('are you sure')) {
+            network.sendKey('y');
+            return;
+        }
+        // 4. Press any key / space pauses
+        if (screenText.includes('press any key') || screenText.includes('[press') || screenText.includes('press space')) {
+            network.sendKey('enter');
+            return;
+        }
+        // 5. Final birth review screen ('to start over' / 'r to reroll' / 'ESC to quit')
+        if (screenText.includes('to start over') || screenText.includes('r to reroll') || screenText.includes('reroll')) {
+            network.sendKey('enter');
+            return;
+        }
+        // 6. Selection menu: trait, race, class, roller -> send '@' for random
+        network.sendKey('@');
+    }
+
     // Terminal Toolbar action buttons
     const quickBirthBtn = document.getElementById('btn-quick-birth');
     if (quickBirthBtn) {
         quickBirthBtn.addEventListener('click', () => {
             if (audio) audio.unlock();
-            // 4-step birth pipeline: Splash (Enter) -> Trait choice (@) -> Random hero (@) -> Enter Town (space)
-            network.sendKey('enter');
-            setTimeout(() => network.sendKey('@'), 500);
-            setTimeout(() => network.sendKey('@'), 1200);
-            setTimeout(() => network.sendKey('space'), 2000);
+            cancelQuickBirth();
+            quickBirthActive = true;
+            quickBirthStep = 0;
+            if (lastFrame) {
+                stepQuickBirth(lastFrame);
+            } else {
+                network.sendKey('enter');
+            }
         });
     }
 
@@ -43,8 +96,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (termAdvanceBtn) {
         termAdvanceBtn.addEventListener('click', () => {
             if (audio) audio.unlock();
-            network.sendKey('space');
-            setTimeout(() => network.sendKey('enter'), 100);
+            cancelQuickBirth();
+            network.sendKey('enter');
         });
     }
 
@@ -52,10 +105,11 @@ window.addEventListener('DOMContentLoaded', () => {
     if (termEscapeBtn) {
         termEscapeBtn.addEventListener('click', () => {
             if (audio) audio.unlock();
+            cancelQuickBirth();
+            if (audio) audio.playMenuNav();
+            network.sendKey('escape');
             if (forceTerminal) {
                 toggleTerminalView();
-            } else {
-                network.sendKey('escape');
             }
         });
     }
@@ -73,7 +127,8 @@ window.addEventListener('DOMContentLoaded', () => {
         audio,
         isForceTerminal: () => forceTerminal,
         setForceTerminal: (val) => { forceTerminal = val; updateViewMode(); },
-        toggleTerminalView
+        toggleTerminalView,
+        cancelQuickBirth
     };
 
     let lastFrame = null;
@@ -119,6 +174,11 @@ window.addEventListener('DOMContentLoaded', () => {
         if (window.__app) window.__app.lastFrame = frame;
         currentPhase = frame.phase || 'play';
 
+        // Automated quick-birth advancement
+        if (quickBirthActive) {
+            stepQuickBirth(frame);
+        }
+
         // Check if player died
         if (frame.player && frame.player.dead) {
             if (audio) audio.playDeathBell();
@@ -153,14 +213,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
     network.onBye = (detail) => {
         console.warn('[Angband3D] Disconnected:', detail);
-        if (hud.messageText) {
-            hud.messageText.textContent = `Disconnected: ${detail}`;
+        if (hud.setStatus) {
+            hud.setStatus('Cloud [Disconnected]');
+        } else if (hud.pingBadge) {
+            hud.pingBadge.textContent = 'Cloud [Disconnected]';
         }
     };
 
     network.onStatus = (status) => {
-        if (hud.messageText) {
-            hud.messageText.textContent = status;
+        if (hud.setStatus) {
+            hud.setStatus(status.includes('Connecting') ? 'Cloud [Connecting...]' : (status.includes('Connected') ? 'Cloud [Connected]' : status));
+        } else if (hud.pingBadge) {
+            hud.pingBadge.textContent = status;
         }
     };
 

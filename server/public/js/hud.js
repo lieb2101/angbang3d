@@ -115,6 +115,26 @@ class WebHUD {
         }
     }
 
+    setPing(ms) {
+        if (this.pingBadge) {
+            this.pingBadge.textContent = `Cloud [${ms}ms]`;
+            this.pingBadge.style.color = ms < 100 ? '#62e062' : (ms < 250 ? '#ffd700' : '#ff7777');
+        }
+    }
+
+    setStatus(status) {
+        if (this.pingBadge) {
+            this.pingBadge.textContent = status;
+            if (status.includes('Connecting')) {
+                this.pingBadge.style.color = '#ffd700';
+            } else if (status.includes('Connected')) {
+                this.pingBadge.style.color = '#62e062';
+            } else if (status.includes('Disconnected') || status.includes('Error')) {
+                this.pingBadge.style.color = '#ff5555';
+            }
+        }
+    }
+
     cycleMinimapSize(delta = 1) {
         this.minimapSizeIndex = (this.minimapSizeIndex + delta + this.minimapSizes.length) % this.minimapSizes.length;
         if (this.audio) this.audio.playMenuNav();
@@ -691,11 +711,26 @@ class WebHUD {
             }
         }
 
-        // Messages
+        // Header Game Messages (Streams real Angband narrative, combat, and environment logs)
         if (frame.messages && frame.messages.length > 0) {
             const last = frame.messages[frame.messages.length - 1];
             if (last && last.text) {
-                this.messageText.textContent = last.text;
+                let text = last.text;
+                if (last.count && last.count > 1) {
+                    text += ` (x${last.count})`;
+                }
+                this.messageText.textContent = text;
+                if (window.getAngbandColorString && last.attr !== undefined) {
+                    this.messageText.style.color = window.getAngbandColorString(last.attr);
+                } else {
+                    this.messageText.style.color = '#f1f5f9';
+                }
+            }
+        } else if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
+            const line0 = frame.term.rows[0].g.trim();
+            if (line0 && line0.length > 0 && !line0.startsWith('---') && !line0.startsWith('===') && !line0.includes('Select') && !line0.includes('Angband')) {
+                this.messageText.textContent = line0;
+                this.messageText.style.color = '#ffd700';
             }
         }
 

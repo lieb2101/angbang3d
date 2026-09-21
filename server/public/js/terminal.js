@@ -95,10 +95,16 @@ class WebTerminal {
             return;
         }
 
-        // Check if row has a letter menu item e.g. "a) Human"
-        const match = line.match(/^\s*([a-zA-Z0-9])[\)\.\:]/);
+        // Check if row has a letter or symbol menu item e.g. "a) Human", "@) Random", "*) All"
+        const match = line.match(/^\s*([a-zA-Z0-9@*?])[\)\.\:]/);
         if (match) {
             this.onSelectKey(match[1]);
+            return;
+        }
+
+        // Check if row indicates random selection with @
+        if (line.match(/^\s*@\b/) || line.includes('@ to generate') || line.includes('@ for random') || line.includes('@) Random')) {
+            this.onSelectKey('@');
             return;
         }
 

@@ -129,6 +129,11 @@ class InputController {
                 return;
             }
 
+            // Any manual key cancels automated quick birth
+            if (window.__app && window.__app.cancelQuickBirth) {
+                window.__app.cancelQuickBirth();
+            }
+
             // Tab toggles 3D Dungeon vs CRT Terminal view (when not in death screen)
             if (e.key === 'Tab') {
                 e.preventDefault();
@@ -136,12 +141,14 @@ class InputController {
                 return;
             }
 
-            // In Tab Classic Mode, Escape returns to 3D view just as hitting Tab again would
-            if (e.key === 'Escape' && window.__app && window.__app.isForceTerminal && window.__app.isForceTerminal()) {
+            // Escape: reliably cancel prompts, dismiss menus/overlays, and return from forced terminal view
+            if (e.key === 'Escape') {
                 e.preventDefault();
                 if (this.audio) this.audio.playMenuNav();
                 this.network.sendKey('escape');
-                if (this.toggleTerminalView) this.toggleTerminalView();
+                if (window.__app && window.__app.isForceTerminal && window.__app.isForceTerminal()) {
+                    if (this.toggleTerminalView) this.toggleTerminalView();
+                }
                 return;
             }
 

@@ -27,7 +27,12 @@ RUN git apply /src/0001-bridge-frontend.patch
 
 # Build headless Angband with bridge frontend
 RUN mkdir -p build && cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+             -DSUPPORT_BRIDGE_FRONTEND=ON \
+             -DSUPPORT_GCU_FRONTEND=ON \
+             -DSUPPORT_X11_FRONTEND=OFF \
+             -DSUPPORT_SDL_FRONTEND=OFF \
+             -DSUPPORT_SDL2_FRONTEND=OFF && \
     make -j$(nproc)
 
 # Stage 2: Runtime Image with Node.js WebSocket Daemon

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Angband3D — First-Person Roguelike</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/dungeon.css">
+</head>
+<body>
+    <div id="app-container">
+        <!-- 3D Dungeon WebGL Viewport -->
+        <canvas id="viewport-canvas"></canvas>
+
+        <!-- 80x24 CRT Terminal Overlay -->
+        <div id="terminal-container">
+            <canvas id="terminal-canvas"></canvas>
+            <div class="crt-overlay"></div>
+        </div>
+
+        <!-- Top Message Banner -->
+        <div id="message-banner">
+            <div id="message-text">Welcome to Angband 3D. Prepare your hero.</div>
+        </div>
+
+        <!-- Top Right Telemetry & Controls -->
+        <div id="top-right-bar">
+            <div id="ping-badge" class="badge">Cloud [Connecting...]</div>
+            <button id="btn-sound" class="icon-btn">🔊 Sound</button>
+            <button id="btn-fullscreen" class="icon-btn">⛶ Fullscreen</button>
+        </div>
+
+        <!-- 2D Minimap Radar -->
+        <div id="minimap-container">
+            <div class="minimap-header">
+                <span>RADAR</span>
+                <span id="val-depth" style="color:#ffd700;">Town</span>
+            </div>
+            <canvas id="minimap-canvas"></canvas>
+        </div>
+
+        <!-- Prompt Bar (e.g. -more-) -->
+        <div id="prompt-bar">
+            <span id="prompt-text">[-more-] Press Space or Enter</span>
+        </div>
+
+        <!-- On-Screen Virtual Touch D-Pad (Mobile / Tablet) -->
+        <div id="touch-controls">
+            <div id="dpad-up" class="dpad-btn dpad-up">▲</div>
+            <div id="dpad-down" class="dpad-btn dpad-down">▼</div>
+            <div id="dpad-left" class="dpad-btn dpad-left">◀</div>
+            <div id="dpad-right" class="dpad-btn dpad-right">▶</div>
+            <div id="dpad-center" class="dpad-btn dpad-center">⚔</div>
+        </div>
+
+        <!-- Bottom HUD -->
+        <div id="hud-overlay">
+            <!-- Character Status & Vitals -->
+            <div id="char-panel" class="hud-panel">
+                <div id="char-title" class="char-title">Hero of Angband</div>
+                <div class="gauge-container gauge-hp">
+                    <div class="gauge-header">
+                        <span>HEALTH</span>
+                        <span id="hp-text">100 / 100</span>
+                    </div>
+                    <div class="gauge-track">
+                        <div id="hp-fill" class="gauge-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+                <div class="gauge-container gauge-sp">
+                    <div class="gauge-header">
+                        <span>MANA</span>
+                        <span id="sp-text">0 / 0</span>
+                    </div>
+                    <div class="gauge-track">
+                        <div id="sp-fill" class="gauge-fill" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div id="stats-strip">
+                    <div class="stat-item"><span class="stat-label">STR</span><span id="stat-str" class="stat-value">10</span></div>
+                    <div class="stat-item"><span class="stat-label">INT</span><span id="stat-int" class="stat-value">10</span></div>
+                    <div class="stat-item"><span class="stat-label">WIS</span><span id="stat-wis" class="stat-value">10</span></div>
+                    <div class="stat-item"><span class="stat-label">DEX</span><span id="stat-dex" class="stat-value">10</span></div>
+                    <div class="stat-item"><span class="stat-label">CON</span><span id="stat-con" class="stat-value">10</span></div>
+                </div>
+            </div>
+
+            <!-- Quick Action Bar -->
+            <div id="action-bar" class="hud-panel">
+                <button id="btn-attack" class="action-btn">⚔ Attack <kbd>Space</kbd></button>
+                <button id="btn-cast" class="action-btn">✨ Cast <kbd>m</kbd></button>
+                <button id="btn-rest" class="action-btn">⏳ Rest <kbd>R</kbd></button>
+                <button id="btn-pickup" class="action-btn">💎 Get <kbd>g</kbd></button>
+                <button id="btn-inventory" class="action-btn">🎒 Pack <kbd>i</kbd></button>
+                <button id="btn-equipment" class="action-btn">🛡 Gear <kbd>e</kbd></button>
+                <button id="btn-terminal" class="action-btn">📜 Classic <kbd>Tab</kbd></button>
+            </div>
+
+            <!-- Economy & Defense Panel -->
+            <div class="hud-panel" style="display: flex; gap: 18px; font-family: var(--font-terminal); font-size: 13px;">
+                <div class="stat-item">
+                    <span class="stat-label">ARMOR</span>
+                    <span id="val-ac" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">GOLD</span>
+                    <span id="val-gold" class="stat-value" style="color: #ffd700;">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Initial Connection Spinner -->
+        <div id="loading-overlay">
+            <div class="spinner"></div>
+            <h2 style="color: var(--gold-bright); letter-spacing: 2px;">ANGBAND 3D</h2>
+            <p style="color: var(--text-muted); font-size: 14px;">Connecting to Cloud Realm & Spawning Engine...</p>
+        </div>
+    </div>
+
+    <!-- Three.js r128 via reliable CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- Client Subsystems -->
+    <script src="/js/audio.js"></script>
+    <script src="/js/terminal.js"></script>
+    <script src="/js/dungeon3d.js"></script>
+    <script src="/js/hud.js"></script>
+    <script src="/js/network.js"></script>
+    <script src="/js/input.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

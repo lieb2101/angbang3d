@@ -97,6 +97,24 @@ async function runTests() {
         console.log('  -> Cleaned up test save file');
     }
 
+    // Test 5: Static web client delivery
+    console.log('Test 5: Static web client delivery');
+    const indexRes = await get('/');
+    assert.strictEqual(indexRes.status, 200);
+    assert(indexRes.body.includes('<title>Angband3D'));
+    assert(indexRes.headers['content-type'].includes('text/html'));
+    console.log('  -> / serves index.html (200 OK)');
+
+    const cssRes = await get('/css/dungeon.css');
+    assert.strictEqual(cssRes.status, 200);
+    assert(cssRes.body.includes('--font-fantasy'));
+    console.log('  -> /css/dungeon.css serves CSS (200 OK)');
+
+    const jsRes = await get('/js/dungeon3d.js');
+    assert.strictEqual(jsRes.status, 200);
+    assert(jsRes.body.includes('class Dungeon3D'));
+    console.log('  -> /js/dungeon3d.js serves 3D engine (200 OK)');
+
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);
 }

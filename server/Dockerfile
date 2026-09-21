@@ -63,6 +63,7 @@ WORKDIR /app/server
 RUN npm install --omit=dev
 
 COPY server/src/ /app/server/src/
+COPY server/public/ /app/public/
 
 # Prepare directories for persistent player saves, standalone dist, and web client
 RUN mkdir -p /data/save /app/dist /app/public && \

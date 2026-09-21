@@ -1,0 +1,13 @@
+.git/
+.gitignore
+client/
+engine/
+dist/
+tools/
+resources/
+node_modules/
+server/node_modules/
+*.zip
+*.exe
+*.png
+*.log

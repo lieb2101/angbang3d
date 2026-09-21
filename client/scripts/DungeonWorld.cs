@@ -403,7 +403,7 @@ public partial class DungeonWorld : Node3D
     private static StandardMaterial3D _wallMaterial;
     private static StandardMaterial3D _floorMaterial;
     private static StandardMaterial3D _ceilingMaterial;
-    private static StandardMaterial3D _magmaMaterial;
+    private static Material _magmaMaterial;
     private static StandardMaterial3D _quartzMaterial;
     private static StandardMaterial3D _storeMaterial;
     private static StandardMaterial3D _doorFrameMaterial;
@@ -411,7 +411,7 @@ public partial class DungeonWorld : Node3D
     private static readonly StandardMaterial3D[] _shopDoorMaterials = new StandardMaterial3D[8];
     private static StandardMaterial3D _stairsMaterial;
     private static StandardMaterial3D _rubbleMaterial;
-    private static StandardMaterial3D _lavaMaterial;
+    private static Material _lavaMaterial;
 
     private static readonly Dictionary<Kind, Mesh> _meshCache = new();
 
@@ -1261,21 +1261,14 @@ public partial class DungeonWorld : Node3D
             Metallic = 0.0f,
         };
 
-        _magmaMaterial = new StandardMaterial3D
-        {
-            VertexColorUseAsAlbedo = true,
-            AlbedoTexture = magmaTex,
-            EmissionEnabled = true,
-            EmissionTexture = magmaEmission,
-            Emission = new Color(1.0f, 0.40f, 0.06f),
-            EmissionEnergyMultiplier = 1.25f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
-            Uv1Triplanar = true,
-            Uv1WorldTriplanar = true,
-            Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
-            Roughness = 0.72f,
-            Metallic = 0.04f,
-        };
+        _magmaMaterial = CreateEmissiveTerrainMaterial(
+            magmaTex,
+            magmaEmission,
+            new Color(1.0f, 0.40f, 0.06f),
+            1.25f,
+            0.72f,
+            0.04f,
+            0.5f);
 
         _quartzMaterial = new StandardMaterial3D
         {
@@ -1380,21 +1373,93 @@ public partial class DungeonWorld : Node3D
             Metallic = 0.02f,
         };
 
-        _lavaMaterial = new StandardMaterial3D
+        _lavaMaterial = CreateEmissiveTerrainMaterial(
+            lavaTex,
+            lavaEmission,
+            new Color(1.0f, 0.40f, 0.06f),
+            1.25f,
+            0.45f,
+            0.0f,
+            0.5f);
+    }
+
+    /// <summary>
+    /// Constructs a high-performance triplanar shader material with instance-color-driven emission gating.
+    /// In StandardMaterial3D, Emission is a uniform material property that ignores MultiMesh instance color,
+    /// causing out-of-LOS or dark/unexplored tiles to incandescently glow through walls and memory fog.
+    /// This shader modulates emission by instance alpha (<c>COLOR.a</c>), enabling 100% full incandescent glow
+    /// in direct line of sight while completely extinguishing emission (0.0) in player memory or dark voids.
+    /// </summary>
+    private static ShaderMaterial CreateEmissiveTerrainMaterial(
+        Texture2D albedoTex,
+        Texture2D emissionTex,
+        Color emissionColor,
+        float emissionEnergy,
+        float roughness,
+        float metallic,
+        float uvScale = 0.5f)
+    {
+        var shader = new Shader
         {
-            VertexColorUseAsAlbedo = true,
-            AlbedoTexture = lavaTex,
-            EmissionEnabled = true,
-            EmissionTexture = lavaEmission,
-            Emission = new Color(1.0f, 0.40f, 0.06f),
-            EmissionEnergyMultiplier = 1.25f,
-            TextureFilter = BaseMaterial3D.TextureFilterEnum.LinearWithMipmapsAnisotropic,
-            Uv1Triplanar = true,
-            Uv1WorldTriplanar = true,
-            Uv1Scale = new Vector3(0.5f, 0.5f, 0.5f),
-            Roughness = 0.45f,
-            Metallic = 0.0f,
+            Code = @"
+shader_type spatial;
+render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
+
+uniform sampler2D albedo_texture : source_color, filter_linear_mipmap_anisotropic;
+uniform sampler2D emission_texture : source_color, filter_linear_mipmap_anisotropic;
+uniform vec4 emission_color : source_color = vec4(1.0, 0.40, 0.06, 1.0);
+uniform float emission_energy : hint_range(0.0, 16.0) = 1.25;
+uniform float uv_scale = 0.5;
+uniform float roughness : hint_range(0.0, 1.0) = 0.45;
+uniform float metallic : hint_range(0.0, 1.0) = 0.0;
+
+varying vec3 world_pos;
+varying vec3 world_normal;
+varying vec4 v_color;
+
+void vertex() {
+    world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+    v_color = COLOR;
+}
+
+void fragment() {
+    vec3 w_norm = abs(world_normal);
+    float sum = w_norm.x + w_norm.y + w_norm.z;
+    w_norm = sum > 0.0001 ? w_norm / sum : vec3(0.0, 1.0, 0.0);
+
+    vec2 uv_y = world_pos.xz * uv_scale;
+    vec2 uv_x = world_pos.zy * uv_scale;
+    vec2 uv_z = world_pos.xy * uv_scale;
+
+    vec3 alb_x = texture(albedo_texture, uv_x).rgb;
+    vec3 alb_y = texture(albedo_texture, uv_y).rgb;
+    vec3 alb_z = texture(albedo_texture, uv_z).rgb;
+    vec3 alb = (alb_x * w_norm.x + alb_y * w_norm.y + alb_z * w_norm.z) * v_color.rgb;
+
+    vec3 em_x = texture(emission_texture, uv_x).rgb;
+    vec3 em_y = texture(emission_texture, uv_y).rgb;
+    vec3 em_z = texture(emission_texture, uv_z).rgb;
+    vec3 em_sample = em_x * w_norm.x + em_y * w_norm.y + em_z * w_norm.z;
+    vec3 emi = em_sample * emission_color.rgb * emission_energy * v_color.a;
+
+    ALBEDO = alb;
+    ROUGHNESS = roughness;
+    METALLIC = metallic;
+    EMISSION = emi;
+}
+"
         };
+
+        var mat = new ShaderMaterial { Shader = shader };
+        mat.SetShaderParameter("albedo_texture", albedoTex);
+        mat.SetShaderParameter("emission_texture", emissionTex);
+        mat.SetShaderParameter("emission_color", emissionColor);
+        mat.SetShaderParameter("emission_energy", emissionEnergy);
+        mat.SetShaderParameter("uv_scale", uvScale);
+        mat.SetShaderParameter("roughness", roughness);
+        mat.SetShaderParameter("metallic", metallic);
+        return mat;
     }
 
     #endregion
@@ -1725,7 +1790,7 @@ public partial class DungeonWorld : Node3D
         return mesh;
     }
 
-    private static StandardMaterial3D MaterialFor(Kind k) => k switch
+    private static Material MaterialFor(Kind k) => k switch
     {
         Kind.Wall => _wallMaterial,
         Kind.Floor => _floorMaterial,
@@ -2123,7 +2188,8 @@ public partial class DungeonWorld : Node3D
 
     private static bool IsWalkableOrPortal(Kind k) =>
         k is Kind.Floor or Kind.DoorClosed or Kind.DoorOpen or Kind.DoorBroken
-            or Kind.StairsDown or Kind.StairsUp or Kind.Lava or Kind.Rubble;
+            or Kind.StairsDown or Kind.StairsUp or Kind.Lava or Kind.Rubble
+            || IsStoreKind(k);
 
     private static float DetermineDoorOrientation(JsonElement map, int x, int y, int w, int h)
     {
@@ -2296,52 +2362,12 @@ public partial class DungeonWorld : Node3D
 
                 var feat = (AngbandColors.HexVal(feats[x * 2]) << 4) | AngbandColors.HexVal(feats[x * 2 + 1]);
                 var kind = KindOf(feat);
-                if (kind == Kind.Skip)
-                {
-                    continue;
-                }
 
-                // Check if this is a solid wall tile (Wall, Magma, Quartz)
-                var isWallKind = kind is Kind.Wall or Kind.Magma or Kind.Quartz;
-
-                // For wall tiles adjacent to visible/explored walkable tiles, infer visibility
-                // so walls bordering lit corridors/rooms render cleanly without pitch-black gaps.
-                if (isWallKind && !inView && !known)
+                // Handle unmapped/unexplored dark space (FEAT_NONE or not known and not in view).
+                // If this tile borders known/inView walkable or portal space, seal the perimeter
+                // by rendering it as a dark solid boundary wall to prevent see-through voids into the unmapped world.
+                if (kind == Kind.Skip || (!known && !inView))
                 {
-                    // Check if any neighboring tile is inView or known walkable floor/door
-                    for (int dy = -1; dy <= 1 && (!inView || !known); dy++)
-                    {
-                        for (int dx = -1; dx <= 1 && (!inView || !known); dx++)
-                        {
-                            if (dx == 0 && dy == 0) continue;
-                            var nx = x + dx;
-                            var ny = y + dy;
-                            if (nx >= 0 && nx < w && ny >= 0 && ny < h)
-                            {
-                                var nflag = FlagAt(map, nx, ny);
-                                var nInView = (nflag & 0x2) != 0;
-                                var nKnown = (nflag & 0x1) != 0;
-                                if (nInView || nKnown)
-                                {
-                                    var nfeat = FeatAt(map, nx, ny);
-                                    var nkind = KindOf(nfeat);
-                                    if (IsWalkableOrPortal(nkind))
-                                    {
-                                        if (nInView) inView = true;
-                                        if (nKnown) known = true;
-                                        if (lighting == 3) lighting = (nflag >> 2) & 0x3;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Render tiles that are known (explored memory) or currently in line of sight (inView).
-                // Also render unknown solid rock bordering known/in-view space as dark solid wall barriers.
-                if (!known && !inView)
-                {
-                    // If this unmapped rock borders known/inView walkable space, render it as dark solid wall to prevent see-through void
                     bool bordersExplored = false;
                     for (int dy = -1; dy <= 1 && !bordersExplored; dy++)
                     {
@@ -2356,7 +2382,10 @@ public partial class DungeonWorld : Node3D
                                 if ((nflag & 0x3) != 0)
                                 {
                                     var nkind = KindOf(FeatAt(map, nx, ny));
-                                    if (IsWalkableOrPortal(nkind)) bordersExplored = true;
+                                    if (IsWalkableOrPortal(nkind))
+                                    {
+                                        bordersExplored = true;
+                                    }
                                 }
                             }
                         }
@@ -2367,11 +2396,81 @@ public partial class DungeonWorld : Node3D
                         continue;
                     }
 
-                    // Render as dark boundary wall
+                    // Render as dark solid boundary wall to occlude void and background features
                     kind = Kind.Wall;
                     known = true;
+                    inView = false;
                     lighting = 3;
                 }
+
+                if (!_outdoors)
+                {
+                    var dxP = x - px;
+                    var dyP = y - py;
+                    if (dxP * dxP + dyP * dyP > 28 * 28)
+                    {
+                        continue;
+                    }
+                }
+
+                // For known/in-view wall tiles, infer visibility from adjacent lit walkable floor/doors
+                // so walls bordering illuminated corridors/rooms render cleanly without pitch-black gaps.
+                var isWallKind = kind is Kind.Wall or Kind.Magma or Kind.Quartz;
+                    if (isWallKind)
+                    {
+                        // Interior rock culling: if all 8 neighbors are solid walls/skip (no adjacent floor, door, or open space),
+                        // this wall is completely buried within the dungeon bedrock and has no exposed visible faces.
+                        bool hasAdjacentOpen = false;
+                        for (int dy = -1; dy <= 1 && !hasAdjacentOpen; dy++)
+                        {
+                            for (int dx = -1; dx <= 1 && !hasAdjacentOpen; dx++)
+                            {
+                                if (dx == 0 && dy == 0) continue;
+                                var nx = x + dx;
+                                var ny = y + dy;
+                                if (nx >= 0 && nx < w && ny >= 0 && ny < h)
+                                {
+                                    var nkind = KindOf(FeatAt(map, nx, ny));
+                                    if (IsWalkableOrPortal(nkind))
+                                    {
+                                        hasAdjacentOpen = true;
+                                    }
+                                }
+                            }
+                        }
+                        if (!hasAdjacentOpen)
+                        {
+                            continue;
+                        }
+
+                        if (!inView)
+                        {
+                            for (int dy = -1; dy <= 1 && !inView; dy++)
+                            {
+                                for (int dx = -1; dx <= 1 && !inView; dx++)
+                                {
+                                    if (dx == 0 && dy == 0) continue;
+                                    var nx = x + dx;
+                                    var ny = y + dy;
+                                    if (nx >= 0 && nx < w && ny >= 0 && ny < h)
+                                    {
+                                        var nflag = FlagAt(map, nx, ny);
+                                        var nInView = (nflag & 0x2) != 0;
+                                        if (nInView)
+                                        {
+                                            var nfeat = FeatAt(map, nx, ny);
+                                            var nkind = KindOf(nfeat);
+                                            if (IsWalkableOrPortal(nkind))
+                                            {
+                                                inView = true;
+                                                if (lighting == 3) lighting = (nflag >> 2) & 0x3;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                 // Determine lighting level: 0=LOS, 1=torch, 2=lit room/feature, 3=dark
                 if (lighting == 3 && inView)
@@ -2385,11 +2484,7 @@ public partial class DungeonWorld : Node3D
                 }
 
                 Color shade;
-                if (_outdoors || (inView && lighting == 2))
-                {
-                    shade = BaseColour(kind);
-                }
-                else if (inView && lighting is 0 or 1)
+                if (inView && (_outdoors || lighting == 2 || lighting is 0 or 1))
                 {
                     shade = BaseColour(kind);
                 }
@@ -2407,6 +2502,9 @@ public partial class DungeonWorld : Node3D
                         ? new Color(0.55f, 0.58f, 0.65f)
                         : new Color(0.22f, 0.24f, 0.30f));
                 }
+
+                // Alpha channel modulates dynamic shader emission (1.0 = active emission in LOS, 0.0 = zero emission in memory/void)
+                shade.A = inView ? 1.0f : 0.0f;
 
                 if (kind is Kind.Wall or Kind.Magma or Kind.Quartz)
                 {
@@ -2468,9 +2566,9 @@ public partial class DungeonWorld : Node3D
                     _col[Kind.Lava].Add(shade);
                 }
 
-                // Ceiling over walkable areas and doorways in the dungeon
+                // Ceiling over walkable areas and doorways in the dungeon (including subterranean lava pools)
                 if (!_outdoors && (kind is Kind.Floor or Kind.StairsDown or Kind.StairsUp
-                    or Kind.DoorClosed or Kind.DoorOpen or Kind.DoorBroken or Kind.Rubble || IsStoreKind(kind)))
+                    or Kind.DoorClosed or Kind.DoorOpen or Kind.DoorBroken or Kind.Rubble or Kind.Lava || IsStoreKind(kind)))
                 {
                     _xf[Kind.Ceiling].Add(new Transform3D(Basis.Identity,
                         new Vector3(x * Cell, WallHeight + 0.05f, y * Cell)));
@@ -2649,7 +2747,7 @@ public partial class DungeonWorld : Node3D
     }
 
     /// <summary>Terrain names from the engine, so nothing is hard-coded here.</summary>
-    public System.Collections.Generic.Dictionary<int, (string Name, bool Passable)> Features { get; set; }
+    public System.Collections.Generic.IReadOnlyDictionary<int, (string Name, bool Passable)> Features { get; set; }
 
     private string TerrainName(int feat)
     {

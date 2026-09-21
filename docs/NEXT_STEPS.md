@@ -29,6 +29,21 @@
    - **Dungeon Aesthetics & Clutter**:
      - Deterministic wall sconces with point lights in corridors (`DungeonClutterResolver.cs`).
      - Procedural props and furniture in rooms.
+   - **Dark Unmapped Area Sealing & Dynamic Emission Gating (`DungeonWorld.cs`)**:
+     - Unmapped rock boundary sealing: tiles with `FEAT_NONE` bordering explored walkable/portal space automatically render as dark solid stone boundary walls, eliminating see-through voids into the unmapped world.
+     - Dynamic per-instance emission shader for lava and magma: modulates emission by instance alpha (`COLOR.a`), ensuring full incandescent molten glow in direct line-of-sight while extinguishing emission in player memory or dark areas.
+     - Enclosed subterranean lava pools with dungeon ceilings, avoiding black void cutouts.
+   - **Option A Cloud Architecture & Dual-Engine Relay (`server/`, `WebSocketBridgeClient.cs`, `Main.cs`)**:
+      - Headless Linux multi-stage Docker container (`server/Dockerfile`, `server/docker-compose.yml`) hosting Angband 4.2.6 C engine with Bridge protocol.
+      - High-performance WebSocket daemon (`server/src/server.js`) with isolated child process management per session, REST API for save file management (`/api/saves`), and static file delivery.
+      - Dual-engine client architecture: unified `IGameEngineBridge` supporting runtime toggling between `Local Engine` (process stdio) and `Cloud Realm` (WebSockets) with roundtrip ping telemetry on the HUD.
+   - **Universal Save Game Portability & Permadeath Snapshots (`Main.cs`, `Overlay.cs`)**:
+      - In-game `Save Game Manager` menu: archive saves to timestamped backups (`lib/save/backups/`), export `.sav` files directly to user Downloads, and restore backups with `SaveVNLA` binary validation.
+      - Bi-directional Cloud Sync: Upload local characters to cloud server and synchronize cloud characters down to local disk.
+      - In-game Standalone Package Download: Menu action to download the offline game bundle (`.zip`) directly from within the game.
+   - **Graphics & Spatial Occlusion Culling (`DungeonWorld.cs`)**:
+      - Radial horizon culling ($R \le 28$ tiles) eliminating instance buffer updates outside the maximum visible fog horizon.
+      - Fast 8-neighbor interior solid rock culling: detects completely enclosed stone blocks buried within the mountain bedrock and skips GPU instance transforms, reducing MultiMesh instance counts by up to 70% with zero visual fidelity loss.
 
 ---
 

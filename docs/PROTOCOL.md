@@ -203,6 +203,25 @@ key C-s          # save
 
 `tools/bridge.py` is the reference client and wraps all of this.
 
+## Cloud WebSocket Transport (v1-ws)
+
+The bridge protocol can be carried over WebSockets (`ws://` or `wss://`) through the cloud server relay (`server/`):
+
+- **Endpoint**: `/ws` (supports query params `?user=<id>&save=<slot>`).
+- **Framing**: Each WebSocket text frame corresponds to one line of the standard Bridge Protocol.
+  - Client sends command frames (e.g. `key left`, `frame`, `quit`).
+  - Server emits JSON text frames (`{"t":"hello",...}`, `{"t":"frame",...}`, `{"t":"bye",...}`).
+- **Keep-alive**: Ping/pong heartbeat frames measure roundtrip network latency (displayed on the client HUD).
+
+### REST Endpoints
+The cloud daemon also exposes REST endpoints alongside the WebSocket gateway:
+- `GET /health` — Service uptime and engine health status.
+- `GET /download/angband3d-standalone.zip` — Download pre-packaged standalone client & engine zip.
+- `GET /api/saves` — List saved characters with metadata.
+- `GET /api/saves/:name` — Download a binary `.sav` file.
+- `POST /api/saves/upload` — Upload a validated `SaveVNLA` binary save file.
+- `DELETE /api/saves/:name` — Delete a save slot.
+
 ## Compatibility
 
 New fields may be added to any object within protocol version 1. Clients must

@@ -1,0 +1,14 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/resonant-1679933304535/angband3d-cloud:latest'
+      - '-f'
+      - 'server/Dockerfile'
+      - '.'
+images:
+  - 'gcr.io/resonant-1679933304535/angband3d-cloud:latest'
+timeout: '1200s'
+options:
+  machineType: 'E2_HIGHCPU_8'

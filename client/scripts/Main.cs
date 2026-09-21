@@ -11,7 +11,12 @@ public enum ViewMode { World, Map, Terminal, Menu, Splash, Guide, Death }
 public partial class Main : Node
 {
     private static readonly string[] Facings = { "N", "E", "S", "W" };
-    private BridgeClient _bridge;
+    private IGameEngineBridge _bridge;
+    private BridgeClient _localBridge;
+    private WebSocketBridgeClient _cloudBridge;
+    private bool _cloudMode;
+    private string _cloudUrl = "ws://localhost:8080/ws";
+    private string _downloadUrl = "http://localhost:8080/download/angband3d-standalone.zip";
     private DungeonWorld _world;
     private Overlay _overlay;
 
@@ -92,6 +97,24 @@ public partial class Main : Node
             {
                 int.TryParse(arg["--menu=".Length..], out _autoMenuChoice);
             }
+            else if (arg == "--cloud")
+            {
+                _cloudMode = true;
+            }
+            else if (arg.StartsWith("--server="))
+            {
+                _cloudMode = true;
+                _cloudUrl = arg["--server=".Length..];
+            }
+            else if (arg.StartsWith("--download-url="))
+            {
+                _downloadUrl = arg["--download-url=".Length..];
+            }
+        }
+
+        if (OS.HasFeature("web"))
+        {
+            _cloudMode = true;
         }
 
         AddChild(new AudioManager());
@@ -182,21 +205,24 @@ public partial class Main : Node
             }
         };
 
-        _bridge = new BridgeClient();
-        AddChild(_bridge);
-        _bridge.FrameReceived += OnFrame;
-        _bridge.Disconnected += reason =>
-        {
-            _overlay.Status = $"disconnected: {reason}";
-            _overlay.QueueRedraw();
-        };
+        _localBridge = new BridgeClient();
+        AddChild(_localBridge);
+        _localBridge.FrameReceived += OnFrame;
+        _localBridge.Disconnected += OnBridgeDisconnected;
+
+        _cloudBridge = new WebSocketBridgeClient();
+        AddChild(_cloudBridge);
+        _cloudBridge.FrameReceived += OnFrame;
+        _cloudBridge.Disconnected += OnBridgeDisconnected;
 
         var exe = FindEngine();
-        if (exe == null)
+        if (exe == null && !_cloudMode)
         {
-            _overlay.Status = "angband.exe not found - build the engine first (build.cmd)";
-            return;
+            _cloudMode = true;
+            GD.Print("Local engine not found; automatically defaulting to Cloud Mode.");
         }
+
+        _bridge = _cloudMode ? _cloudBridge : _localBridge;
 
         // A flag or test script means the caller already decided; otherwise show splash.
         if (_autoBirth || _manualRequested)
@@ -371,7 +397,12 @@ public partial class Main : Node
                 StartGame();
             }));
             _menuItems.Add(("Load Saved Game...", OpenLoadMenu));
+            _menuItems.Add(("Save Game Manager (Backup / Export / Import)", OpenSaveManagerMenu));
             _menuItems.Add(("Delete Saved Game...", OpenDeleteMenu));
+        }
+        else
+        {
+            _menuItems.Add(("Save Game Manager (Import / Cloud Sync)", OpenSaveManagerMenu));
         }
 
         _menuItems.Add(("New Character (Custom - Race/Class/Stats)", () =>
@@ -389,6 +420,24 @@ public partial class Main : Node
             _inMenu = false;
             StartGame();
         }));
+
+        var modeLabel = _cloudMode
+            ? "Engine Mode: [Cloud Realm] (Click to switch to Local Engine)"
+            : "Engine Mode: [Local Engine] (Click to switch to Cloud Realm)";
+        _menuItems.Add((modeLabel, () =>
+        {
+            AudioManager.Play(SoundEffect.MenuSelect);
+            _cloudMode = !_cloudMode;
+            _bridge = _cloudMode ? _cloudBridge : _localBridge;
+            OpenMenu();
+        }));
+
+        _menuItems.Add(("Download Standalone Game Package (.zip)", () =>
+        {
+            AudioManager.Play(SoundEffect.MenuSelect);
+            OS.ShellOpen(_downloadUrl);
+        }));
+
         _menuItems.Add(("Game Guide & Primer (Controls, Survival, Wiki)", OpenGuide));
         _menuItems.Add(("Toggle Fullscreen / Windowed (F11)", () =>
         {
@@ -512,6 +561,247 @@ public partial class Main : Node
         RefreshMenuDisplay("CONFIRM DELETE", $"Are you sure you want to permanently delete '{info.DisplaySummary}'?");
     }
 
+    private static string BackupDir()
+    {
+        var saveDir = SaveDir();
+        var bDir = System.IO.Path.Combine(saveDir, "backups");
+        if (!System.IO.Directory.Exists(bDir))
+        {
+            try { System.IO.Directory.CreateDirectory(bDir); } catch { }
+        }
+        return bDir;
+    }
+
+    private void OpenSaveManagerMenu()
+    {
+        AudioManager.Play(SoundEffect.MenuOpen);
+        _inMenu = true;
+        _menuIndex = 0;
+        _menuItems.Clear();
+
+        var saves = GetSaveFiles();
+        if (saves.Length > 0)
+        {
+            _menuItems.Add(("Backup All Saves to Local Archive", () =>
+            {
+                var bDir = BackupDir();
+                int count = 0;
+                foreach (var s in saves)
+                {
+                    try
+                    {
+                        var dest = System.IO.Path.Combine(bDir, $"{System.IO.Path.GetFileNameWithoutExtension(s.Name)}_{DateTime.Now:yyyyMMdd_HHmmss}.sav");
+                        System.IO.File.Copy(s.FullName, dest, true);
+                        count++;
+                    }
+                    catch (Exception ex)
+                    {
+                        GD.PushWarning($"Save backup error: {ex.Message}");
+                    }
+                }
+                AudioManager.Play(SoundEffect.MenuSelect);
+                RefreshMenuDisplay("SAVES ARCHIVED", $"Successfully archived {count} save file(s) to:\n{bDir}");
+            }));
+
+            _menuItems.Add(("Export Save to Downloads Folder...", OpenExportMenu));
+        }
+
+        _menuItems.Add(("Import Save from Backup Archive...", OpenImportMenu));
+
+        _menuItems.Add(("Upload Local Save to Cloud Realm...", OpenCloudUploadMenu));
+
+        _menuItems.Add(("Download Saves from Cloud Realm", DownloadCloudSaves));
+
+        _menuItems.Add(("Back to Main Menu", OpenMenu));
+
+        RefreshMenuDisplay("SAVE GAME MANAGER", "Backup, export, and move save games between local & cloud");
+    }
+
+    private void OpenExportMenu()
+    {
+        AudioManager.Play(SoundEffect.MenuOpen);
+        _inMenu = true;
+        _menuIndex = 0;
+        _menuItems.Clear();
+
+        var saves = GetSaveFiles();
+        foreach (var file in saves)
+        {
+            var saveFile = file;
+            var info = GetSaveInfo(saveFile);
+            _menuItems.Add(($"Export {info.DisplayName}", () =>
+            {
+                try
+                {
+                    string targetDir = System.IO.Path.Combine(
+                        System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                        "Downloads"
+                    );
+                    if (!System.IO.Directory.Exists(targetDir))
+                    {
+                        targetDir = BackupDir();
+                    }
+                    var dest = System.IO.Path.Combine(targetDir, $"{saveFile.Name}.sav");
+                    System.IO.File.Copy(saveFile.FullName, dest, true);
+                    AudioManager.Play(SoundEffect.MenuSelect);
+                    RefreshMenuDisplay("SAVE EXPORTED", $"Exported '{saveFile.Name}' successfully to:\n{dest}");
+                }
+                catch (Exception ex)
+                {
+                    RefreshMenuDisplay("EXPORT FAILED", ex.Message);
+                }
+            }));
+        }
+
+        _menuItems.Add(("Back to Save Manager", OpenSaveManagerMenu));
+        RefreshMenuDisplay("EXPORT SAVE FILE", "Select a save file to export to your Downloads folder");
+    }
+
+    private void OpenImportMenu()
+    {
+        AudioManager.Play(SoundEffect.MenuOpen);
+        _inMenu = true;
+        _menuIndex = 0;
+        _menuItems.Clear();
+
+        var bDir = BackupDir();
+        var di = new System.IO.DirectoryInfo(bDir);
+        var files = di.Exists ? di.GetFiles("*.sav") : Array.Empty<System.IO.FileInfo>();
+        Array.Sort(files, (a, b) => b.LastWriteTime.CompareTo(a.LastWriteTime));
+
+        if (files.Length == 0)
+        {
+            _menuItems.Add(("No backup files found in backups folder", OpenSaveManagerMenu));
+        }
+        else
+        {
+            foreach (var file in files)
+            {
+                var bFile = file;
+                _menuItems.Add(($"Restore {bFile.Name} ({bFile.LastWriteTime:yyyy-MM-dd HH:mm})", () =>
+                {
+                    try
+                    {
+                        var destDir = SaveDir();
+                        var targetName = bFile.Name;
+                        if (targetName.EndsWith(".sav"))
+                        {
+                            targetName = targetName[..^4];
+                        }
+                        var destPath = System.IO.Path.Combine(destDir, targetName);
+                        System.IO.File.Copy(bFile.FullName, destPath, true);
+                        AudioManager.Play(SoundEffect.MenuSelect);
+                        RefreshMenuDisplay("SAVE RESTORED", $"Restored '{targetName}' to active saves.\nReady to load.");
+                    }
+                    catch (Exception ex)
+                    {
+                        RefreshMenuDisplay("RESTORE FAILED", ex.Message);
+                    }
+                }));
+            }
+        }
+
+        _menuItems.Add(("Back to Save Manager", OpenSaveManagerMenu));
+        RefreshMenuDisplay("IMPORT SAVE FILE", $"Select a backup file to restore into {SaveDir()}");
+    }
+
+    private void OpenCloudUploadMenu()
+    {
+        AudioManager.Play(SoundEffect.MenuOpen);
+        _inMenu = true;
+        _menuIndex = 0;
+        _menuItems.Clear();
+
+        var saves = GetSaveFiles();
+        if (saves.Length == 0)
+        {
+            _menuItems.Add(("No local saves found to upload", OpenSaveManagerMenu));
+        }
+        else
+        {
+            foreach (var file in saves)
+            {
+                var saveFile = file;
+                var info = GetSaveInfo(saveFile);
+                _menuItems.Add(($"Upload {info.DisplayName} to Cloud", () =>
+                {
+                    UploadSaveToCloud(info);
+                }));
+            }
+        }
+
+        _menuItems.Add(("Back to Save Manager", OpenSaveManagerMenu));
+        RefreshMenuDisplay("UPLOAD TO CLOUD", "Select a local character to send to the cloud server");
+    }
+
+    private async void UploadSaveToCloud(SaveFileInfo save)
+    {
+        try
+        {
+            _overlay.Status = $"uploading {save.DisplayName} to cloud...";
+            _overlay.QueueRedraw();
+            using var client = new System.Net.Http.HttpClient();
+            var httpBase = _cloudUrl.Replace("ws://", "http://").Replace("wss://", "https://");
+            var uri = new Uri(httpBase);
+            var uploadUrl = $"{uri.Scheme}://{uri.Authority}/api/saves/upload";
+
+            var fileBytes = await System.IO.File.ReadAllBytesAsync(save.File.FullName);
+            using var content = new System.Net.Http.ByteArrayContent(fileBytes);
+            content.Headers.Add("X-Character-Name", save.File.Name);
+            var response = await client.PostAsync(uploadUrl, content);
+            if (response.IsSuccessStatusCode)
+            {
+                RefreshMenuDisplay("UPLOAD SUCCESSFUL", $"Save '{save.DisplayName}' uploaded to cloud realm.");
+            }
+            else
+            {
+                RefreshMenuDisplay("UPLOAD FAILED", $"Server returned HTTP {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            RefreshMenuDisplay("UPLOAD ERROR", ex.Message);
+        }
+    }
+
+    private async void DownloadCloudSaves()
+    {
+        try
+        {
+            _overlay.Status = "fetching cloud saves...";
+            _overlay.QueueRedraw();
+            using var client = new System.Net.Http.HttpClient();
+            var httpBase = _cloudUrl.Replace("ws://", "http://").Replace("wss://", "https://");
+            var uri = new Uri(httpBase);
+            var listUrl = $"{uri.Scheme}://{uri.Authority}/api/saves";
+
+            var response = await client.GetStringAsync(listUrl);
+            using var doc = JsonDocument.Parse(response);
+            var savesArray = doc.RootElement.GetProperty("saves");
+            int downloaded = 0;
+            var saveDir = SaveDir();
+
+            foreach (var s in savesArray.EnumerateArray())
+            {
+                var fname = s.GetProperty("filename").GetString();
+                if (!string.IsNullOrEmpty(fname))
+                {
+                    var fileUrl = $"{uri.Scheme}://{uri.Authority}/api/saves/{Uri.EscapeDataString(fname)}";
+                    var data = await client.GetByteArrayAsync(fileUrl);
+                    var dest = System.IO.Path.Combine(saveDir, fname);
+                    await System.IO.File.WriteAllBytesAsync(dest, data);
+                    downloaded++;
+                }
+            }
+
+            RefreshMenuDisplay("CLOUD SYNC COMPLETE", $"Downloaded {downloaded} save file(s) from cloud realm.");
+        }
+        catch (Exception ex)
+        {
+            RefreshMenuDisplay("CLOUD SYNC ERROR", ex.Message);
+        }
+    }
+
     private void OpenPauseMenu()
     {
         AudioManager.Play(SoundEffect.MenuOpen);
@@ -543,6 +833,33 @@ public partial class Main : Node
                 _overlay.Mode = EffectiveMode(f);
             }
             _overlay.QueueRedraw();
+        }));
+
+        _menuItems.Add(("Backup Active Character Save (.sav)", () =>
+        {
+            var saves = GetSaveFiles();
+            if (saves.Length > 0)
+            {
+                var bDir = BackupDir();
+                var s = saves[0];
+                var dest = System.IO.Path.Combine(bDir, $"{s.Name}_{DateTime.Now:yyyyMMdd_HHmmss}.sav");
+                try
+                {
+                    System.IO.File.Copy(s.FullName, dest, true);
+                    AudioManager.Play(SoundEffect.MenuSelect);
+                    RefreshMenuDisplay("BACKUP CREATED", $"Active save archived to:\n{dest}");
+                }
+                catch (Exception ex)
+                {
+                    RefreshMenuDisplay("BACKUP FAILED", ex.Message);
+                }
+            }
+        }));
+
+        _menuItems.Add(("Download Standalone Game Package (.zip)", () =>
+        {
+            AudioManager.Play(SoundEffect.MenuSelect);
+            OS.ShellOpen(_downloadUrl);
         }));
 
         _menuItems.Add(("Game Guide & Primer", OpenGuide));
@@ -656,13 +973,35 @@ public partial class Main : Node
         OpenMenu();
     }
 
+    private void OnBridgeDisconnected(string reason)
+    {
+        _overlay.Status = $"disconnected: {reason}";
+        _overlay.QueueRedraw();
+    }
+
     private void StartGame()
     {
-        var exe = FindEngine();
         _overlay.Mode = ViewMode.Terminal;
-        _overlay.Status = "starting...";
+        _overlay.Status = _cloudMode ? "connecting to cloud realm..." : "starting...";
         _overlay.QueueRedraw();
-        _bridge.Start(exe, _saveName, newCharacter: false);
+
+        if (_cloudMode)
+        {
+            _bridge = _cloudBridge;
+            _cloudBridge.ConnectToServer(_cloudUrl, _saveName);
+        }
+        else
+        {
+            var exe = FindEngine();
+            if (exe == null)
+            {
+                _overlay.Status = "angband.exe not found locally - switch to Cloud mode or build engine";
+                _overlay.QueueRedraw();
+                return;
+            }
+            _bridge = _localBridge;
+            _localBridge.Start(exe, _saveName, newCharacter: false);
+        }
     }
 
     private static string FindEngine()
@@ -1064,6 +1403,19 @@ public partial class Main : Node
         if (wasStalled != _waiting > 2.0)
         {
             _overlay.QueueRedraw();
+        }
+
+        if (_cloudMode && _cloudBridge != null && _cloudBridge.Connected)
+        {
+            _overlay.NetworkBadge = $"Cloud [{_cloudBridge.PingMs}ms]";
+        }
+        else if (_cloudMode)
+        {
+            _overlay.NetworkBadge = "Cloud [Connecting...]";
+        }
+        else
+        {
+            _overlay.NetworkBadge = null;
         }
 
         if (_shotPath != null && !_shotTaken && ++_frames >= _shotAfter)

@@ -156,7 +156,10 @@ if (-not $SkipZip) {
     }
     Write-Host "[5/5] Compressing to $zipPath..." -ForegroundColor Yellow
     Compress-Archive -Path "$stageDir\*" -DestinationPath $zipPath -CompressionLevel Optimal
+    $canonicalZip = Join-Path $distRoot "angband3d-standalone.zip"
+    Copy-Item $zipPath $canonicalZip -Force
     Write-Host "Package created: $zipPath" -ForegroundColor Green
+    Write-Host "Canonical server download: $canonicalZip" -ForegroundColor Green
 } else {
     Write-Host "[5/5] Skipping ZIP compression as requested." -ForegroundColor Gray
 }

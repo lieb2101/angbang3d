@@ -35,6 +35,9 @@ public partial class Overlay : Control
     public int DeathScroll { get; set; } = 0;
     public bool DeathItemsIdentified { get; set; } = false;
 
+    /// <summary>Optional network telemetry badge (e.g. "Cloud [38ms]").</summary>
+    public string NetworkBadge { get; set; }
+
     // Discovery Pulses & Fog Smoothing (Step 13)
     private struct DiscoveryPulse
     {
@@ -1581,6 +1584,13 @@ public partial class Overlay : Control
         DrawRect(new Rect2(0, 0, View.X, _cell.Y + 6), bg);
         DrawString(_font, new Vector2(6, _font.GetAscent(_fontSize) + 3), text,
             HorizontalAlignment.Left, -1, _fontSize, fg);
+
+        if (!string.IsNullOrEmpty(NetworkBadge))
+        {
+            var badgeSize = _font.GetStringSize(NetworkBadge, HorizontalAlignment.Right, -1, _fontSize);
+            DrawString(_font, new Vector2(View.X - badgeSize.X - 10, _font.GetAscent(_fontSize) + 3), NetworkBadge,
+                HorizontalAlignment.Right, -1, _fontSize, new Color(0.35f, 0.85f, 1.0f));
+        }
 
         var wizard = p.GetProperty("wizard").GetBoolean() ? " [WIZARD]" : "";
         var depth = p.GetProperty("depth").GetInt32();

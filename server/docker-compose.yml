@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  angband3d-cloud:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    image: angband3d-cloud:latest
+    container_name: angband3d-cloud
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - NODE_ENV=production
+    volumes:
+      - angband3d-saves:/data/save
+      - ../dist:/app/dist:ro
+    restart: unless-stopped
+
+volumes:
+  angband3d-saves:
+    name: angband3d-player-saves

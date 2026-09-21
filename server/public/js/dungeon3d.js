@@ -1,12 +1,15 @@
 /**
  * Angband3D WebGL Renderer — High-Fidelity Three.js 3D Dungeon Crawler
  * Features:
- * - 1:1 Parity with Godot C# client's wire protocol (decodes map.rows[y].f and map.rows[y].l)
+ * - 1:1 Parity with Godot C# client's wire protocol (decodes 2-hex map.rows[y].f and hex map.rows[y].l)
  * - Authentic 2K PBR stone, uneven brick, rock trim, and wood trim textures with normal & roughness maps
- * - ACESFilmic tone mapping, warm organic torchlight attenuation, and atmospheric distance fog
- * - Dynamic Molten Lava: glowing emissive when in LOS, cooled dark basalt in memory (0 glow-through)
- * - InstancedMesh batching with 8-neighbor rock culling, radial horizon culling, and memory shading
- * - 3D Steel Weapon (OBJLoader + PBR materials) and animated 3D Torch in first-person viewmodel
+ * - Dynamic Town vs Subterranean Lighting:
+ *   - Town (depth 0): Open daylight sky, Directional Sunlight (intensity 1.35), broad horizon, NO ceiling!
+ *   - Dungeon (depth > 0): Pitch-black void, atmospheric depth fog, ceilings over tunnels, warm torchlight!
+ * - Equipment Rule Parity with Godot ViewModel.cs:
+ *   - Carrying a torch in the light slot illuminates the player without cluttering their hands!
+ *   - Left hand ONLY shows an equipped shield or wielded torch weapon. Empty by default!
+ *   - Right hand ONLY shows an equipped melee weapon or bow, tucked cleanly in lower corner. Empty if unarmed!
  * - High-DPI 512x512 Runic Monster Medallions with health bars, glyphs, and nameplates
  * - Distinct 3D pickups (Gold stacks, Potions, Scrolls, Weapons, Rings) with hovering bobbing kinematics
  * - 1:1 Camera Facing and Turning (0=North, 1=East, 2=South, 3=West) with smooth spring yaw rotation
@@ -44,8 +47,8 @@ class Dungeon3D {
 
     initThree() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x07090e);
-        this.scene.fog = new THREE.FogExp2(0x07090e, 0.038);
+        this.scene.background = new THREE.Color(0x2d3a50); // Initial town sky
+        this.scene.fog = new THREE.FogExp2(0x2d3a50, 0.008);
 
         this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 140);
         this.camera.position.set(0, this.eyeHeight, 0);
@@ -62,9 +65,14 @@ class Dungeon3D {
         this.renderer.toneMappingExposure = 1.25;
         this.renderer.outputEncoding = THREE.sRGBEncoding;
 
-        // Ambient dungeon light with cool slate blue tint
-        this.ambientLight = new THREE.AmbientLight(0x182030, 0.55);
+        // Ambient light (dynamically adjusted per depth / town)
+        this.ambientLight = new THREE.AmbientLight(0xb0c4de, 0.85);
         this.scene.add(this.ambientLight);
+
+        // Directional Sunlight for outdoors (Town) matching Godot _sunLight
+        this.sunLight = new THREE.DirectionalLight(0xfffaed, 1.35);
+        this.sunLight.position.set(-20, 35, 15);
+        this.scene.add(this.sunLight);
 
         // Player Torch PointLight: warm amber glow with realistic falloff
         this.torchLight = new THREE.PointLight(0xff9e42, 2.8, 22, 1.8);
@@ -238,61 +246,36 @@ class Dungeon3D {
         this.camera.add(this.viewmodelGroup);
         this.scene.add(this.camera);
 
-        // Right Hand Weapon: Steel Broadsword
-        const swordGroup = new THREE.Group();
+        // Right Hand Weapon: Primary melee weapon / bow.
+        // Hidden by default when unarmed, matching Godot client!
+        this.rightHandGroup = new THREE.Group();
+        this.rightHandGroup.position.set(0.25, -0.24, -0.36);
+        this.rightHandGroup.rotation.set(0.18, -0.22, 0.15);
+        this.rightHandGroup.visible = false;
+        this.viewmodelGroup.add(this.rightHandGroup);
 
-        // High-Quality Procedural Base Blade
-        const bladeGeo = new THREE.BoxGeometry(0.042, 0.78, 0.012);
-        const bladeMat = new THREE.MeshStandardMaterial({
-            color: 0xd8e4ed,
-            roughness: 0.16,
-            metalness: 0.95
-        });
-        const blade = new THREE.Mesh(bladeGeo, bladeMat);
-        blade.position.y = 0.39;
-        swordGroup.add(blade);
+        // Left Hand: Shield or wielded torch weapon.
+        // Hidden by default when off-hand is empty, matching Godot client!
+        this.leftHandGroup = new THREE.Group();
+        this.leftHandGroup.position.set(-0.25, -0.24, -0.34);
+        this.leftHandGroup.rotation.set(0.12, 0.18, -0.10);
+        this.leftHandGroup.visible = false;
+        this.viewmodelGroup.add(this.leftHandGroup);
 
-        // Crossguard
-        const guardGeo = new THREE.BoxGeometry(0.20, 0.026, 0.038);
-        const guardMat = new THREE.MeshStandardMaterial({
-            color: 0xc99c3a,
-            roughness: 0.30,
-            metalness: 0.88
-        });
-        const guard = new THREE.Mesh(guardGeo, guardMat);
-        guard.position.y = 0.01;
-        swordGroup.add(guard);
+        const objLoader = (typeof THREE.OBJLoader !== 'undefined') ? new THREE.OBJLoader() : null;
 
-        // Leather Grip
-        const gripGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.15, 8);
-        const gripMat = new THREE.MeshStandardMaterial({
-            color: 0x3d2618,
-            roughness: 0.88
-        });
-        const grip = new THREE.Mesh(gripGeo, gripMat);
-        grip.position.y = -0.075;
-        swordGroup.add(grip);
+        const bladeMat = new THREE.MeshStandardMaterial({ color: 0xd8e4ed, roughness: 0.16, metalness: 0.95 });
+        const goldMat = new THREE.MeshStandardMaterial({ color: 0xc99c3a, roughness: 0.30, metalness: 0.88 });
+        const gripMat = new THREE.MeshStandardMaterial({ color: 0x3d2618, roughness: 0.88 });
 
-        // Pommel
-        const pommelGeo = new THREE.SphereGeometry(0.028, 8, 8);
-        const pommel = new THREE.Mesh(pommelGeo, guardMat);
-        pommel.position.y = -0.16;
-        swordGroup.add(pommel);
-
-        swordGroup.position.set(0.35, -0.30, -0.60);
-        swordGroup.rotation.set(0.12, -0.18, 0.28);
-        this.weaponMesh = swordGroup;
-        this.viewmodelGroup.add(swordGroup);
-
-        // Asynchronously load 3D OBJ model if OBJLoader is present
-        if (typeof THREE.OBJLoader !== 'undefined') {
-            const objLoader = new THREE.OBJLoader();
+        if (objLoader) {
+            // Load 3D Sword for right hand
             objLoader.load('/assets/models/weapons/Sword.obj', (obj) => {
                 obj.traverse((child) => {
                     if (child.isMesh) {
                         const n = (child.name || '').toLowerCase();
                         if (n.includes('guard') || n.includes('pommel') || n.includes('gold')) {
-                            child.material = guardMat;
+                            child.material = goldMat;
                         } else if (n.includes('grip') || n.includes('handle') || n.includes('wood')) {
                             child.material = gripMat;
                         } else {
@@ -300,55 +283,89 @@ class Dungeon3D {
                         }
                     }
                 });
-                obj.scale.set(0.26, 0.26, 0.26);
-                obj.position.set(0, 0.05, 0);
+                obj.scale.set(0.14, 0.14, 0.14);
+                obj.position.set(0, -0.02, 0);
                 obj.rotation.set(0, Math.PI / 2, 0);
+                this.rightHandGroup.add(obj);
+                this.swordMesh = obj;
+            }, undefined, () => {});
 
-                while (swordGroup.children.length > 0) {
-                    swordGroup.remove(swordGroup.children[0]);
-                }
-                swordGroup.add(obj);
+            // Load 3D Shield for left hand
+            objLoader.load('/assets/models/weapons/Shield_Round.obj', (obj) => {
+                obj.traverse((child) => {
+                    if (child.isMesh) {
+                        child.material = goldMat;
+                    }
+                });
+                obj.scale.set(0.11, 0.11, 0.11);
+                obj.position.set(0, 0, 0);
+                this.leftHandGroup.add(obj);
+                this.shieldMesh = obj;
+                this.shieldMesh.visible = false;
             }, undefined, () => {});
         }
 
-        // Left Hand: 3D Wooden Torch with Flickering Flame & Embers
-        const torchGroup = new THREE.Group();
-
-        const torchStaffGeo = new THREE.CylinderGeometry(0.022, 0.030, 0.55, 8);
-        const torchStaffMat = new THREE.MeshStandardMaterial({
-            map: this.doorTex,
-            roughness: 0.85
-        });
+        // Compact handheld torch (ONLY visible if specifically wielding a torch weapon)
+        const torchStaffGeo = new THREE.CylinderGeometry(0.015, 0.020, 0.38, 8);
+        const torchStaffMat = new THREE.MeshStandardMaterial({ map: this.doorTex, roughness: 0.85 });
         const torchStaff = new THREE.Mesh(torchStaffGeo, torchStaffMat);
-        torchStaff.position.y = -0.15;
-        torchGroup.add(torchStaff);
+        torchStaff.position.y = -0.10;
 
-        const sconceGeo = new THREE.CylinderGeometry(0.045, 0.035, 0.08, 8);
+        const sconceGeo = new THREE.CylinderGeometry(0.030, 0.025, 0.06, 8);
         const sconceMat = new THREE.MeshStandardMaterial({ color: 0x1e1e1e, metalness: 0.85, roughness: 0.35 });
         const sconce = new THREE.Mesh(sconceGeo, sconceMat);
-        sconce.position.y = 0.12;
-        torchGroup.add(sconce);
+        sconce.position.y = 0.10;
 
-        // Outer Flame Cone
-        const flameGeo = new THREE.ConeGeometry(0.058, 0.18, 8);
+        const flameGeo = new THREE.ConeGeometry(0.035, 0.12, 8);
         const flameMat = new THREE.MeshBasicMaterial({ color: 0xff8811 });
         this.flameMesh = new THREE.Mesh(flameGeo, flameMat);
-        this.flameMesh.position.y = 0.23;
-        torchGroup.add(this.flameMesh);
+        this.flameMesh.position.y = 0.18;
 
-        // Inner Core Flame (Bright Yellow/White)
-        const innerFlameGeo = new THREE.ConeGeometry(0.032, 0.12, 8);
+        const innerFlameGeo = new THREE.ConeGeometry(0.018, 0.08, 8);
         const innerFlameMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
         this.innerFlameMesh = new THREE.Mesh(innerFlameGeo, innerFlameMat);
-        this.innerFlameMesh.position.y = 0.21;
-        torchGroup.add(this.innerFlameMesh);
+        this.innerFlameMesh.position.y = 0.16;
 
-        torchGroup.position.set(-0.35, -0.28, -0.56);
-        torchGroup.rotation.set(0.15, 0.25, -0.15);
-        this.torchHandle = torchGroup;
-        this.viewmodelGroup.add(torchGroup);
+        this.torchMesh = new THREE.Group();
+        this.torchMesh.add(torchStaff);
+        this.torchMesh.add(sconce);
+        this.torchMesh.add(this.flameMesh);
+        this.torchMesh.add(this.innerFlameMesh);
+        this.torchMesh.visible = false;
+        this.leftHandGroup.add(this.torchMesh);
 
         this.attackAnimationTime = 0;
+    }
+
+    updateViewmodel(player) {
+        if (!player) return;
+
+        const weaponItem = player.weapon_item || '';
+        const bowItem = player.bow_item || '';
+        const shieldItem = player.shield_item || '';
+
+        // LEFT HAND RULE:
+        // Carrying a torch/lantern in the equipment light slot illuminates without occupying hands!
+        // The left hand only shows an item if wielding a shield or using a torch as a weapon.
+        const isWieldingTorch = weaponItem.toLowerCase().includes('torch');
+        const hasShield = Boolean(shieldItem);
+
+        if (hasShield && this.shieldMesh) {
+            this.leftHandGroup.visible = true;
+            this.shieldMesh.visible = true;
+            if (this.torchMesh) this.torchMesh.visible = false;
+        } else if (isWieldingTorch && this.torchMesh) {
+            this.leftHandGroup.visible = true;
+            if (this.shieldMesh) this.shieldMesh.visible = false;
+            this.torchMesh.visible = true;
+        } else {
+            this.leftHandGroup.visible = false;
+        }
+
+        // RIGHT HAND RULE:
+        // Shows primary equipped weapon or bow. If unarmed, hands are clean & empty!
+        const hasWeapon = Boolean(weaponItem || bowItem);
+        this.rightHandGroup.visible = hasWeapon;
     }
 
     triggerAttackAnimation() {
@@ -366,16 +383,28 @@ class Dungeon3D {
         this.targetYaw = -this.facing * (Math.PI / 2);
     }
 
+    /**
+     * Canonical 2-hex feature index decoder matching Angband JSON bridge protocol
+     */
     getFeatAt(map, x, y) {
-        if (!map || !map.rows || !map.rows[y] || !map.rows[y].f) return 0;
-        const row = map.rows[y].f;
-        return (row.length > x) ? row[x] : 0;
+        if (!map || !map.rows || y < 0 || y >= map.h || x < 0 || x >= map.w) return 0;
+        const row = map.rows[y];
+        if (!row || !row.f) return 0;
+        const idx = x * 2;
+        if (idx + 1 >= row.f.length) return 0;
+        const hi = parseInt(row.f[idx], 16) || 0;
+        const lo = parseInt(row.f[idx + 1], 16) || 0;
+        return (hi << 4) | lo;
     }
 
+    /**
+     * Canonical 1-hex flag decoder matching Angband JSON bridge protocol
+     */
     getFlagAt(map, x, y) {
-        if (!map || !map.rows || !map.rows[y] || !map.rows[y].l) return 0;
-        const row = map.rows[y].l;
-        return (row.length > x) ? row[x] : 0;
+        if (!map || !map.rows || y < 0 || y >= map.h || x < 0 || x >= map.w) return 0;
+        const row = map.rows[y];
+        if (!row || !row.l || x >= row.l.length) return 0;
+        return parseInt(row.l[x], 16) || 0;
     }
 
     update(frame) {
@@ -385,12 +414,40 @@ class Dungeon3D {
 
     updateDungeon(frame) {
         const map = frame.map;
-        const w = map.w || (map.rows && map.rows[0] && map.rows[0].f ? map.rows[0].f.length : 0);
+        const w = map.w || (map.rows && map.rows[0] && map.rows[0].f ? map.rows[0].f.length / 2 : 0);
         const h = map.h || (map.rows ? map.rows.length : 0);
         if (!w || !h) return;
 
         const px = frame.player ? frame.player.x : Math.floor(w / 2);
         const py = frame.player ? frame.player.y : Math.floor(h / 2);
+        const depth = (frame.player && frame.player.depth !== undefined) ? frame.player.depth : 0;
+        const outdoors = depth === 0; // Town is outdoors under daylight
+
+        // Update Viewmodel Equipment rules
+        this.updateViewmodel(frame.player);
+
+        // Apply Town vs Dungeon Lighting & Atmosphere
+        if (outdoors) {
+            this.sunLight.visible = true;
+            this.sunLight.intensity = 1.35;
+            this.ambientLight.intensity = 0.85;
+            this.ambientLight.color.setHex(0xb0c4de);
+            this.scene.background.setHex(0x2d3a50);
+            this.scene.fog.color.setHex(0x2d3a50);
+            this.scene.fog.density = 0.008; // Clear vistas in town
+            this.torchLight.intensity = 0.5; // Subtle in daylight
+            this.torchFillLight.intensity = 0.0;
+        } else {
+            this.sunLight.visible = false;
+            this.sunLight.intensity = 0.0;
+            this.ambientLight.intensity = 0.45;
+            this.ambientLight.color.setHex(0x182030);
+            this.scene.background.setHex(0x06070a);
+            this.scene.fog.color.setHex(0x06070a);
+            this.scene.fog.density = 0.038; // Atmospheric dungeon fog
+            this.torchLight.intensity = 2.8;
+            this.torchFillLight.intensity = 0.8;
+        }
 
         this.targetCamPos.set(px * this.cellSize, this.eyeHeight, py * this.cellSize);
 
@@ -412,27 +469,41 @@ class Dungeon3D {
         let lavaCooledCount = 0;
         let stairsCount = 0;
 
-        const maxR = 28; // Radial horizon culling matching Godot DungeonWorld.cs
+        // Sight bounding box: Town has full sightline, dungeon uses radial horizon culling
+        const sightRange = outdoors ? 45 : 28;
+        const minX = Math.max(0, px - sightRange);
+        const maxX = Math.min(w - 1, px + sightRange);
+        const minY = Math.max(0, py - sightRange);
+        const maxY = Math.min(h - 1, py + sightRange);
 
         const colInView = new THREE.Color(1.0, 1.0, 1.0);
         const colMemory = new THREE.Color(0.28, 0.30, 0.38); // Cool dark slate memory tint
 
-        for (let y = Math.max(0, py - maxR); y < Math.min(h, py + maxR); y++) {
-            for (let x = Math.max(0, px - maxR); x < Math.min(w, px + maxR); x++) {
+        for (let y = minY; y <= maxY; y++) {
+            for (let x = minX; x <= maxX; x++) {
                 const feat = this.getFeatAt(map, x, y);
                 const flag = this.getFlagAt(map, x, y);
 
-                const known = (flag & 0x1) !== 0;
-                const inView = (flag & 0x2) !== 0;
+                // In Town, all grids are explored & visible
+                const known = outdoors || (flag & 0x1) !== 0;
+                const inView = outdoors || (flag & 0x2) !== 0;
+
                 // Strict Fog-of-War Invariant: Unexplored tiles are skipped completely and remain pure dark void!
                 if (!known && !inView) continue;
+
+                if (!outdoors) {
+                    const dx = x - px;
+                    const dy = y - py;
+                    if (dx * dx + dy * dy > 28 * 28) continue;
+                }
 
                 const wx = x * this.cellSize;
                 const wz = y * this.cellSize;
                 const tileCol = inView ? colInView : colMemory;
 
-                // Solid stone / Granite / Perm wall
-                if (feat >= 17 && feat <= 22) {
+                // Solid stone / Granite / Perm / Secret wall
+                const isWall = feat === 15 || (feat >= 17 && feat <= 22);
+                if (isWall) {
                     let hasExposedFace = false;
                     for (let dy = -1; dy <= 1; dy++) {
                         for (let dx = -1; dx <= 1; dx++) {
@@ -441,7 +512,8 @@ class Dungeon3D {
                             const ny = y + dy;
                             if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
                                 const nFeat = this.getFeatAt(map, nx, ny);
-                                if (nFeat === 1 || nFeat === 2 || nFeat === 3 || nFeat === 4 || nFeat === 5 || nFeat === 6 || nFeat === 23) {
+                                // Open space: floor (1, 24), doors (2, 3, 4), stairs (5, 6), stores (7-14), lava (23)
+                                if (nFeat === 1 || nFeat === 2 || nFeat === 3 || nFeat === 4 || nFeat === 5 || nFeat === 6 || (nFeat >= 7 && nFeat <= 14) || nFeat === 23 || nFeat === 24) {
                                     hasExposedFace = true;
                                     break;
                                 }
@@ -460,24 +532,27 @@ class Dungeon3D {
                 }
 
                 // Floor / Walkable corridor / Store entrance
-                if (feat === 1 || feat === 3 || feat === 4 || (feat >= 7 && feat <= 14)) {
+                if (feat === 1 || feat === 3 || feat === 4 || feat === 24 || (feat >= 7 && feat <= 14)) {
                     this.dummy.position.set(wx, 0, wz);
                     this.dummy.updateMatrix();
                     this.floorMesh.setMatrixAt(floorCount, this.dummy.matrix);
                     this.floorMesh.setColorAt(floorCount, tileCol);
                     floorCount++;
 
-                    // Ceiling above walkable floor
-                    this.dummy.position.set(wx, this.wallHeight, wz);
-                    this.dummy.updateMatrix();
-                    this.ceilingMesh.setMatrixAt(ceilingCount, this.dummy.matrix);
-                    this.ceilingMesh.setColorAt(ceilingCount, tileCol);
-                    ceilingCount++;
+                    // CEILING RULE: Ceilings only exist in subterranean dungeons (!outdoors)!
+                    // Town streets are outdoors under the open sky!
+                    if (!outdoors) {
+                        this.dummy.position.set(wx, this.wallHeight, wz);
+                        this.dummy.updateMatrix();
+                        this.ceilingMesh.setMatrixAt(ceilingCount, this.dummy.matrix);
+                        this.ceilingMesh.setColorAt(ceilingCount, tileCol);
+                        ceilingCount++;
+                    }
                     continue;
                 }
 
                 // Closed Door
-                if (feat === 2 || feat === 15) {
+                if (feat === 2) {
                     this.dummy.position.set(wx, this.wallHeight / 2, wz);
                     this.dummy.updateMatrix();
                     this.doorMesh.setMatrixAt(doorCount, this.dummy.matrix);
@@ -491,10 +566,8 @@ class Dungeon3D {
                     this.dummy.position.set(wx, -0.05, wz);
                     this.dummy.updateMatrix();
                     if (inView) {
-                        // Molten, glowing, emissive lava in line-of-sight
                         this.lavaMesh.setMatrixAt(lavaCount++, this.dummy.matrix);
                     } else {
-                        // Cooled dark basalt in memory: ZERO emission
                         this.lavaCooledMesh.setMatrixAt(lavaCooledCount++, this.dummy.matrix);
                     }
                     continue;
@@ -815,7 +888,6 @@ class Dungeon3D {
             Math.sin(tNow * 0.037) * 0.08;
         this.torchLight.intensity = flicker;
 
-        // Torch flame mesh scale flicker
         if (this.flameMesh) {
             this.flameMesh.scale.set(
                 1.0 + Math.sin(tNow * 0.015) * 0.14,
@@ -842,14 +914,14 @@ class Dungeon3D {
             this.camera.rotation.y = targetYaw;
         }
 
-        // Attack animation
+        // Attack animation on right hand
         if (this.attackAnimationTime > 0) {
             this.attackAnimationTime -= delta;
-            this.weaponMesh.position.z = -0.60 - Math.sin((0.22 - this.attackAnimationTime) * Math.PI * 4.5) * 0.25;
-            this.weaponMesh.rotation.z = 0.28 - Math.sin((0.22 - this.attackAnimationTime) * Math.PI * 4.5) * 0.45;
+            this.rightHandGroup.position.z = -0.36 - Math.sin((0.22 - this.attackAnimationTime) * Math.PI * 4.5) * 0.18;
+            this.rightHandGroup.rotation.z = 0.15 - Math.sin((0.22 - this.attackAnimationTime) * Math.PI * 4.5) * 0.35;
         } else {
-            this.weaponMesh.position.z = -0.60;
-            this.weaponMesh.rotation.z = 0.28;
+            this.rightHandGroup.position.z = -0.36;
+            this.rightHandGroup.rotation.z = 0.15;
         }
 
         // Monsters gentle hover & movement interpolation

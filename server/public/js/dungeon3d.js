@@ -1,10 +1,12 @@
 /**
  * Angband3D WebGL Renderer — High-Fidelity Three.js 3D Dungeon Crawler
  * Features:
- * - Procedural PBR stone textures, normal maps, and animated molten lava
- * - InstancedMesh batching with 8-neighbor rock culling and radial horizon culling
+ * - 1:1 Parity with Godot C# client's wire protocol (decodes map.rows[y].f and map.rows[y].l)
+ * - Procedural PBR stone textures, tangent-space normal maps, and dynamic lighting
+ * - Dynamic Molten Lava: glowing emissive when in LOS, cooled dark basalt in memory (0 glow-through)
+ * - InstancedMesh batching with 8-neighbor rock culling, radial horizon culling, and memory shading
  * - Dynamic flickering torchlight, smooth camera kinematics, and head-bobbing
- * - Monster billboards, rotating 3D item pickups, and animated first-person viewmodel hands
+ * - Monster billboards, rotating 3D item pickups, and animated first-person viewmodel hands/torch
  */
 
 class Dungeon3D {
@@ -51,14 +53,14 @@ class Dungeon3D {
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.1;
+        this.renderer.toneMappingExposure = 1.15;
 
         // Ambient darkness with deep blue tinge
-        this.ambientLight = new THREE.AmbientLight(0x181c28, 0.28);
+        this.ambientLight = new THREE.AmbientLight(0x1a2030, 0.35);
         this.scene.add(this.ambientLight);
 
         // Player Torch PointLight
-        this.torchLight = new THREE.PointLight(0xffaa44, 2.2, 24, 1.4);
+        this.torchLight = new THREE.PointLight(0xff9933, 2.5, 26, 1.3);
         this.torchLight.position.set(0, this.eyeHeight + 0.2, 0);
         this.scene.add(this.torchLight);
 
@@ -67,6 +69,46 @@ class Dungeon3D {
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         });
+    }
+
+    generateNormalMap(sourceCanvas, strength = 2.0) {
+        const w = sourceCanvas.width;
+        const h = sourceCanvas.height;
+        const srcCtx = sourceCanvas.getContext('2d');
+        const srcData = srcCtx.getImageData(0, 0, w, h).data;
+
+        const normCanvas = document.createElement('canvas');
+        normCanvas.width = w;
+        normCanvas.height = h;
+        const normCtx = normCanvas.getContext('2d');
+        const normImg = normCtx.createImageData(w, h);
+        const normData = normImg.data;
+
+        const getLum = (x, y) => {
+            const px = (x + w) % w;
+            const py = (y + h) % h;
+            const i = (py * w + px) * 4;
+            return (srcData[i] * 0.299 + srcData[i + 1] * 0.587 + srcData[i + 2] * 0.114) / 255.0;
+        };
+
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const idx = (y * w + x) * 4;
+                const dx = (getLum(x + 1, y) - getLum(x - 1, y)) * strength;
+                const dy = (getLum(x, y + 1) - getLum(x, y - 1)) * strength;
+
+                const len = Math.hypot(dx, dy, 1.0);
+                normData[idx]     = Math.floor(((-dx / len) * 0.5 + 0.5) * 255);
+                normData[idx + 1] = Math.floor(((-dy / len) * 0.5 + 0.5) * 255);
+                normData[idx + 2] = Math.floor(((1.0 / len) * 0.5 + 0.5) * 255);
+                normData[idx + 3] = 255;
+            }
+        }
+        normCtx.putImageData(normImg, 0, 0);
+        const tex = new THREE.CanvasTexture(normCanvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        return tex;
     }
 
     initTextures() {
@@ -78,7 +120,6 @@ class Dungeon3D {
         wCtx.fillStyle = '#22252c';
         wCtx.fillRect(0, 0, 512, 512);
 
-        // Brick patterns & mortar
         wCtx.strokeStyle = '#111317';
         wCtx.lineWidth = 6;
         const rowH = 64;
@@ -96,7 +137,6 @@ class Dungeon3D {
                 wCtx.stroke();
             }
         }
-        // Subtle noise specks
         for (let i = 0; i < 4000; i++) {
             const val = Math.floor(Math.random() * 40 + 20);
             wCtx.fillStyle = `rgba(${val}, ${val}, ${val}, 0.15)`;
@@ -105,6 +145,7 @@ class Dungeon3D {
         this.wallTexture = new THREE.CanvasTexture(wallCanvas);
         this.wallTexture.wrapS = THREE.RepeatWrapping;
         this.wallTexture.wrapT = THREE.RepeatWrapping;
+        this.wallNormalMap = this.generateNormalMap(wallCanvas, 2.5);
 
         // Procedural Flagstone Floor Canvas
         const floorCanvas = document.createElement('canvas');
@@ -128,6 +169,7 @@ class Dungeon3D {
         this.floorTexture = new THREE.CanvasTexture(floorCanvas);
         this.floorTexture.wrapS = THREE.RepeatWrapping;
         this.floorTexture.wrapT = THREE.RepeatWrapping;
+        this.floorNormalMap = this.generateNormalMap(floorCanvas, 2.0);
 
         // Procedural Wood Door Canvas
         const doorCanvas = document.createElement('canvas');
@@ -144,7 +186,6 @@ class Dungeon3D {
             dCtx.lineTo(x, 512);
             dCtx.stroke();
         }
-        // Iron studs
         dCtx.fillStyle = '#151515';
         for (let y = 80; y < 450; y += 140) {
             dCtx.fillRect(16, y, 224, 16);
@@ -155,23 +196,25 @@ class Dungeon3D {
         }
         this.doorTexture = new THREE.CanvasTexture(doorCanvas);
 
-        // Materials
+        // Materials with PBR Normal Maps
         this.wallMaterial = new THREE.MeshStandardMaterial({
             map: this.wallTexture,
-            roughness: 0.88,
-            metalness: 0.05
+            normalMap: this.wallNormalMap,
+            roughness: 0.82,
+            metalness: 0.08
         });
 
         this.floorMaterial = new THREE.MeshStandardMaterial({
             map: this.floorTexture,
-            roughness: 0.85,
-            metalness: 0.02
+            normalMap: this.floorNormalMap,
+            roughness: 0.78,
+            metalness: 0.04
         });
 
         this.ceilingMaterial = new THREE.MeshStandardMaterial({
             map: this.wallTexture,
-            color: 0x555555,
-            roughness: 0.95,
+            color: 0x666666,
+            roughness: 0.92,
             metalness: 0.0
         });
 
@@ -181,11 +224,20 @@ class Dungeon3D {
             metalness: 0.2
         });
 
+        // In-View Molten Lava (Glows, pulsates)
         this.lavaMaterial = new THREE.MeshStandardMaterial({
             color: 0xff3300,
             emissive: 0xff4400,
             emissiveIntensity: 1.8,
-            roughness: 0.4
+            roughness: 0.35,
+            metalness: 0.1
+        });
+
+        // Cooled Basalt (Memory/Fog-of-War Lava: Dark, ZERO emission)
+        this.lavaCooledMaterial = new THREE.MeshStandardMaterial({
+            color: 0x181512,
+            roughness: 0.95,
+            metalness: 0.0
         });
 
         this.stairsMaterial = new THREE.MeshStandardMaterial({
@@ -224,9 +276,21 @@ class Dungeon3D {
         this.lavaMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.scene.add(this.lavaMesh);
 
+        this.lavaCooledMesh = new THREE.InstancedMesh(floorGeo, this.lavaCooledMaterial, 512);
+        this.lavaCooledMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.scene.add(this.lavaCooledMesh);
+
         this.stairsMesh = new THREE.InstancedMesh(boxGeo, this.stairsMaterial, 128);
         this.stairsMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.scene.add(this.stairsMesh);
+
+        // Pre-allocate instance color buffers
+        const white = new THREE.Color(1, 1, 1);
+        this.wallMesh.setColorAt(0, white);
+        this.floorMesh.setColorAt(0, white);
+        this.ceilingMesh.setColorAt(0, white);
+        this.doorMesh.setColorAt(0, white);
+        this.stairsMesh.setColorAt(0, white);
 
         this.dummy = new THREE.Object3D();
     }
@@ -236,31 +300,77 @@ class Dungeon3D {
         this.camera.add(this.viewmodelGroup);
         this.scene.add(this.camera);
 
-        // Right Hand (Weapon: Steel Blade)
-        const bladeGeo = new THREE.CylinderGeometry(0.015, 0.045, 0.9, 8);
-        bladeGeo.rotateZ(Math.PI / 6);
+        // Right Hand Weapon: Steel Broadsword
+        const swordGroup = new THREE.Group();
+
+        // Blade
+        const bladeGeo = new THREE.BoxGeometry(0.04, 0.75, 0.012);
         const bladeMat = new THREE.MeshStandardMaterial({
-            color: 0xcccccc,
-            roughness: 0.25,
-            metalness: 0.9
+            color: 0xe0e6ed,
+            roughness: 0.18,
+            metalness: 0.95
         });
-        this.weaponMesh = new THREE.Mesh(bladeGeo, bladeMat);
-        this.weaponMesh.position.set(0.35, -0.28, -0.65);
-        this.viewmodelGroup.add(this.weaponMesh);
+        const blade = new THREE.Mesh(bladeGeo, bladeMat);
+        blade.position.y = 0.38;
+        swordGroup.add(blade);
 
-        // Left Hand (Torch)
-        const torchHandleGeo = new THREE.CylinderGeometry(0.025, 0.035, 0.6, 8);
-        const torchHandleMat = new THREE.MeshStandardMaterial({ color: 0x5a3d28, roughness: 0.9 });
-        this.torchHandle = new THREE.Mesh(torchHandleGeo, torchHandleMat);
-        this.torchHandle.position.set(-0.35, -0.32, -0.6);
+        // Crossguard
+        const guardGeo = new THREE.BoxGeometry(0.18, 0.025, 0.035);
+        const guardMat = new THREE.MeshStandardMaterial({
+            color: 0xc89d3b,
+            roughness: 0.35,
+            metalness: 0.85
+        });
+        const guard = new THREE.Mesh(guardGeo, guardMat);
+        guard.position.y = 0.01;
+        swordGroup.add(guard);
 
-        // Flame head
-        const flameGeo = new THREE.ConeGeometry(0.06, 0.18, 8);
+        // Leather-wrapped Grip
+        const gripGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.14, 8);
+        const gripMat = new THREE.MeshStandardMaterial({
+            color: 0x3d2817,
+            roughness: 0.9
+        });
+        const grip = new THREE.Mesh(gripGeo, gripMat);
+        grip.position.y = -0.07;
+        swordGroup.add(grip);
+
+        // Golden Pommel
+        const pommelGeo = new THREE.SphereGeometry(0.026, 8, 8);
+        const pommel = new THREE.Mesh(pommelGeo, guardMat);
+        pommel.position.y = -0.15;
+        swordGroup.add(pommel);
+
+        swordGroup.position.set(0.36, -0.32, -0.62);
+        swordGroup.rotation.set(0.1, -0.2, 0.3);
+        this.weaponMesh = swordGroup;
+        this.viewmodelGroup.add(swordGroup);
+
+        // Left Hand: Wooden Torch with Flame
+        const torchGroup = new THREE.Group();
+
+        const torchStaffGeo = new THREE.CylinderGeometry(0.022, 0.03, 0.55, 8);
+        const torchStaffMat = new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.9 });
+        const torchStaff = new THREE.Mesh(torchStaffGeo, torchStaffMat);
+        torchStaff.position.y = -0.15;
+        torchGroup.add(torchStaff);
+
+        const sconceGeo = new THREE.CylinderGeometry(0.045, 0.035, 0.08, 8);
+        const sconceMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.4 });
+        const sconce = new THREE.Mesh(sconceGeo, sconceMat);
+        sconce.position.y = 0.12;
+        torchGroup.add(sconce);
+
+        const flameGeo = new THREE.ConeGeometry(0.055, 0.16, 8);
         const flameMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
-        const flame = new THREE.Mesh(flameGeo, flameMat);
-        flame.position.set(0, 0.35, 0);
-        this.torchHandle.add(flame);
-        this.viewmodelGroup.add(this.torchHandle);
+        this.flameMesh = new THREE.Mesh(flameGeo, flameMat);
+        this.flameMesh.position.y = 0.22;
+        torchGroup.add(this.flameMesh);
+
+        torchGroup.position.set(-0.36, -0.28, -0.58);
+        torchGroup.rotation.set(0.15, 0.25, -0.15);
+        this.torchHandle = torchGroup;
+        this.viewmodelGroup.add(torchGroup);
 
         this.attackAnimationTime = 0;
     }
@@ -270,9 +380,26 @@ class Dungeon3D {
     }
 
     turn(dir) {
-        // Instant 90 deg turn
         this.targetFacing = (this.targetFacing + dir + 4) % 4;
         this.facing = this.targetFacing;
+    }
+
+    getFeatAt(map, x, y) {
+        if (!map || !map.rows || y < 0 || y >= map.h || x < 0 || x >= map.w) return 0;
+        const row = map.rows[y];
+        if (!row || !row.f) return 0;
+        const idx = x * 2;
+        if (idx + 1 >= row.f.length) return 0;
+        const hi = parseInt(row.f[idx], 16) || 0;
+        const lo = parseInt(row.f[idx + 1], 16) || 0;
+        return (hi << 4) | lo;
+    }
+
+    getFlagAt(map, x, y) {
+        if (!map || !map.rows || y < 0 || y >= map.h || x < 0 || x >= map.w) return 0;
+        const row = map.rows[y];
+        if (!row || !row.l || x >= row.l.length) return 0;
+        return parseInt(row.l[x], 16) || 0;
     }
 
     updateDungeon(frame) {
@@ -283,7 +410,6 @@ class Dungeon3D {
         const map = frame.map;
         const w = map.w;
         const h = map.h;
-        const cells = map.cells;
 
         // Target camera position
         const targetX = px * this.cellSize;
@@ -295,33 +421,34 @@ class Dungeon3D {
             this.stepTime = 0;
         }
 
-        // Feature indices from Angband engine/src/list-terrain.h
-        // 0=None, 1=Floor, 2=Closed, 3=Open, 4=Broken, 5=Less (stairs up), 6=More (stairs down), 17..22=Wall/Granite/Perm, 23=Lava
         let wallCount = 0;
         let floorCount = 0;
         let ceilingCount = 0;
         let doorCount = 0;
         let lavaCount = 0;
+        let lavaCooledCount = 0;
         let stairsCount = 0;
 
         const maxR = 28; // Radial horizon culling matching DungeonWorld.cs
 
+        const colInView = new THREE.Color(1.0, 1.0, 1.0);
+        const colMemory = new THREE.Color(0.28, 0.30, 0.38); // Cool dark slate memory tint
+
         for (let y = Math.max(0, py - maxR); y < Math.min(h, py + maxR); y++) {
             for (let x = Math.max(0, px - maxR); x < Math.min(w, px + maxR); x++) {
-                const idx = y * w + x;
-                const cell = cells[idx];
-                if (!cell) continue;
+                const feat = this.getFeatAt(map, x, y);
+                const flag = this.getFlagAt(map, x, y);
 
-                const feat = cell.f;
-                const known = cell.k;
-                const inView = cell.v;
+                const known = (flag & 0x1) !== 0;
+                const inView = (flag & 0x2) !== 0;
                 if (!known && !inView) continue;
 
                 const wx = x * this.cellSize;
                 const wz = y * this.cellSize;
+                const tileCol = inView ? colInView : colMemory;
 
-                // 8-neighbor enclosed solid rock occlusion culling
-                if (feat >= 17 && feat <= 22) { // Wall / Granite
+                // Solid stone / Granite / Perm wall
+                if (feat >= 17 && feat <= 22) {
                     let hasExposedFace = false;
                     for (let dy = -1; dy <= 1; dy++) {
                         for (let dx = -1; dx <= 1; dx++) {
@@ -329,8 +456,8 @@ class Dungeon3D {
                             const nx = x + dx;
                             const ny = y + dy;
                             if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                                const nCell = cells[ny * w + nx];
-                                if (nCell && (nCell.f === 1 || nCell.f === 3 || nCell.f === 5 || nCell.f === 6 || nCell.f === 23)) {
+                                const nFeat = this.getFeatAt(map, nx, ny);
+                                if (nFeat === 1 || nFeat === 2 || nFeat === 3 || nFeat === 4 || nFeat === 5 || nFeat === 6 || nFeat === 23) {
                                     hasExposedFace = true;
                                     break;
                                 }
@@ -338,48 +465,64 @@ class Dungeon3D {
                         }
                         if (hasExposedFace) break;
                     }
-                    if (!hasExposedFace) continue; // Skip interior solid rock
+                    if (!hasExposedFace) continue; // Skip interior bedrock
 
                     this.dummy.position.set(wx, this.wallHeight / 2, wz);
                     this.dummy.updateMatrix();
-                    this.wallMesh.setMatrixAt(wallCount++, this.dummy.matrix);
+                    this.wallMesh.setMatrixAt(wallCount, this.dummy.matrix);
+                    this.wallMesh.setColorAt(wallCount, tileCol);
+                    wallCount++;
                     continue;
                 }
 
-                // Floor / Walkable space
-                if (feat === 1 || feat === 3 || feat === 4) {
+                // Floor / Walkable corridor / Store entrance
+                if (feat === 1 || feat === 3 || feat === 4 || (feat >= 7 && feat <= 14)) {
                     this.dummy.position.set(wx, 0, wz);
                     this.dummy.updateMatrix();
-                    this.floorMesh.setMatrixAt(floorCount++, this.dummy.matrix);
+                    this.floorMesh.setMatrixAt(floorCount, this.dummy.matrix);
+                    this.floorMesh.setColorAt(floorCount, tileCol);
+                    floorCount++;
 
-                    // Ceiling above floor
+                    // Ceiling above walkable floor
                     this.dummy.position.set(wx, this.wallHeight, wz);
                     this.dummy.updateMatrix();
-                    this.ceilingMesh.setMatrixAt(ceilingCount++, this.dummy.matrix);
+                    this.ceilingMesh.setMatrixAt(ceilingCount, this.dummy.matrix);
+                    this.ceilingMesh.setColorAt(ceilingCount, tileCol);
+                    ceilingCount++;
                     continue;
                 }
 
                 // Closed Door
-                if (feat === 2) {
+                if (feat === 2 || feat === 15) {
                     this.dummy.position.set(wx, this.wallHeight / 2, wz);
                     this.dummy.updateMatrix();
-                    this.doorMesh.setMatrixAt(doorCount++, this.dummy.matrix);
+                    this.doorMesh.setMatrixAt(doorCount, this.dummy.matrix);
+                    this.doorMesh.setColorAt(doorCount, tileCol);
+                    doorCount++;
                     continue;
                 }
 
                 // Molten Lava
                 if (feat === 23) {
-                    this.dummy.position.set(wx, -0.1, wz);
+                    this.dummy.position.set(wx, -0.05, wz);
                     this.dummy.updateMatrix();
-                    this.lavaMesh.setMatrixAt(lavaCount++, this.dummy.matrix);
+                    if (inView) {
+                        // Molten, glowing, emissive lava in line-of-sight
+                        this.lavaMesh.setMatrixAt(lavaCount++, this.dummy.matrix);
+                    } else {
+                        // Cooled dark basalt in memory: ZERO emission
+                        this.lavaCooledMesh.setMatrixAt(lavaCooledCount++, this.dummy.matrix);
+                    }
                     continue;
                 }
 
-                // Stairs
+                // Stairs Up/Down
                 if (feat === 5 || feat === 6) {
                     this.dummy.position.set(wx, 0.4, wz);
                     this.dummy.updateMatrix();
-                    this.stairsMesh.setMatrixAt(stairsCount++, this.dummy.matrix);
+                    this.stairsMesh.setMatrixAt(stairsCount, this.dummy.matrix);
+                    this.stairsMesh.setColorAt(stairsCount, tileCol);
+                    stairsCount++;
                     continue;
                 }
             }
@@ -387,56 +530,64 @@ class Dungeon3D {
 
         this.wallMesh.count = wallCount;
         this.wallMesh.instanceMatrix.needsUpdate = true;
+        if (this.wallMesh.instanceColor) this.wallMesh.instanceColor.needsUpdate = true;
 
         this.floorMesh.count = floorCount;
         this.floorMesh.instanceMatrix.needsUpdate = true;
+        if (this.floorMesh.instanceColor) this.floorMesh.instanceColor.needsUpdate = true;
 
         this.ceilingMesh.count = ceilingCount;
         this.ceilingMesh.instanceMatrix.needsUpdate = true;
+        if (this.ceilingMesh.instanceColor) this.ceilingMesh.instanceColor.needsUpdate = true;
 
         this.doorMesh.count = doorCount;
         this.doorMesh.instanceMatrix.needsUpdate = true;
+        if (this.doorMesh.instanceColor) this.doorMesh.instanceColor.needsUpdate = true;
 
         this.lavaMesh.count = lavaCount;
         this.lavaMesh.instanceMatrix.needsUpdate = true;
 
+        this.lavaCooledMesh.count = lavaCooledCount;
+        this.lavaCooledMesh.instanceMatrix.needsUpdate = true;
+
         this.stairsMesh.count = stairsCount;
         this.stairsMesh.instanceMatrix.needsUpdate = true;
+        if (this.stairsMesh.instanceColor) this.stairsMesh.instanceColor.needsUpdate = true;
 
         this.updateMonsters(frame.monsters || []);
-        this.updateItems(frame.items || []);
+        this.updateItems(frame.objects || frame.items || []);
     }
 
     updateMonsters(monsters) {
         const activeIds = new Set();
 
         monsters.forEach(m => {
-            activeIds.add(m.id || `${m.x}_${m.y}`);
-            let sprite = this.monsters.get(m.id || `${m.x}_${m.y}`);
+            const id = m.id || `${m.x}_${m.y}_${m.glyph}`;
+            activeIds.add(id);
+            let sprite = this.monsters.get(id);
 
             if (!sprite) {
                 const canvas = document.createElement('canvas');
                 canvas.width = 128;
                 canvas.height = 128;
                 const ctx = canvas.getContext('2d');
-                ctx.font = 'bold 72px "Fira Code", monospace';
+                ctx.font = 'bold 76px "Fira Code", monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillStyle = m.color || '#ff4444';
                 ctx.fillText(m.glyph || 'M', 64, 64);
 
                 const tex = new THREE.CanvasTexture(canvas);
-                const mat = new THREE.SpriteMaterial({ map: tex });
+                const mat = new THREE.SpriteMaterial({ map: tex, depthWrite: false });
                 sprite = new THREE.Sprite(mat);
                 sprite.scale.set(1.4, 1.4, 1.4);
                 this.scene.add(sprite);
-                this.monsters.set(m.id || `${m.x}_${m.y}`, sprite);
+                this.monsters.set(id, sprite);
             }
 
             sprite.position.set(m.x * this.cellSize, 0.8, m.y * this.cellSize);
         });
 
-        // Remove stale monsters
         for (const [id, sprite] of this.monsters.entries()) {
             if (!activeIds.has(id)) {
                 this.scene.remove(sprite);
@@ -449,17 +600,17 @@ class Dungeon3D {
         const activeIds = new Set();
 
         items.forEach(it => {
-            const id = `${it.x}_${it.y}_${it.name}`;
+            const id = `${it.x}_${it.y}_${it.name || it.glyph}`;
             activeIds.add(id);
             let mesh = this.items.get(id);
 
             if (!mesh) {
-                const geo = new THREE.OctahedronGeometry(0.25, 0);
+                const geo = new THREE.OctahedronGeometry(0.24, 0);
                 const mat = new THREE.MeshStandardMaterial({
                     color: 0xffd700,
-                    emissive: 0xaa8800,
-                    metalness: 0.8,
-                    roughness: 0.2
+                    emissive: 0x886600,
+                    metalness: 0.85,
+                    roughness: 0.25
                 });
                 mesh = new THREE.Mesh(geo, mat);
                 this.scene.add(mesh);
@@ -481,7 +632,7 @@ class Dungeon3D {
     animate() {
         requestAnimationFrame(this.animate);
 
-        const delta = 0.016; // 60fps delta approx
+        const delta = 0.016;
 
         // Camera movement tween
         if (this.isStepping) {
@@ -497,13 +648,22 @@ class Dungeon3D {
         }
 
         // Camera head-bob
-        const bob = Math.sin(this.cameraBobPhase) * 0.04;
+        const bob = Math.sin(this.cameraBobPhase) * 0.035;
         this.camera.position.set(this.currentCamPos.x, this.currentCamPos.y + bob, this.currentCamPos.z);
         this.torchLight.position.set(this.currentCamPos.x, this.currentCamPos.y + 0.3, this.currentCamPos.z);
 
-        // Torch flicker
-        const flicker = 2.0 + Math.sin(Date.now() * 0.01) * 0.25 + Math.cos(Date.now() * 0.023) * 0.15;
+        // Torch flame intensity flicker
+        const flicker = 2.2 + Math.sin(Date.now() * 0.012) * 0.28 + Math.cos(Date.now() * 0.027) * 0.15;
         this.torchLight.intensity = flicker;
+
+        // Torch flame mesh scale flicker
+        if (this.flameMesh) {
+            this.flameMesh.scale.set(
+                1.0 + Math.sin(Date.now() * 0.015) * 0.12,
+                1.0 + Math.cos(Date.now() * 0.02) * 0.2,
+                1.0 + Math.sin(Date.now() * 0.015) * 0.12
+            );
+        }
 
         // Facing yaw rotation: 0=S (0), 1=W (PI/2), 2=N (PI), 3=E (3PI/2)
         const targetYaw = (this.facing * Math.PI) / 2;
@@ -512,11 +672,11 @@ class Dungeon3D {
         // Attack animation
         if (this.attackAnimationTime > 0) {
             this.attackAnimationTime -= delta;
-            this.weaponMesh.position.z = -0.65 - Math.sin((0.22 - this.attackAnimationTime) * Math.PI * 4.5) * 0.3;
-            this.weaponMesh.rotation.z = Math.PI / 6 - Math.sin((0.22 - this.attackAnimationTime) * Math.PI * 4.5) * 0.5;
+            this.weaponMesh.position.z = -0.62 - Math.sin((0.22 - this.attackAnimationTime) * Math.PI * 4.5) * 0.25;
+            this.weaponMesh.rotation.z = 0.3 - Math.sin((0.22 - this.attackAnimationTime) * Math.PI * 4.5) * 0.45;
         } else {
-            this.weaponMesh.position.z = -0.65;
-            this.weaponMesh.rotation.z = Math.PI / 6;
+            this.weaponMesh.position.z = -0.62;
+            this.weaponMesh.rotation.z = 0.3;
         }
 
         this.renderer.render(this.scene, this.camera);

@@ -49,26 +49,27 @@ class WebHUD {
         }
 
         // HP Bar
-        const curHp = player.hp !== undefined ? player.hp : 100;
-        const maxHp = player.max_hp !== undefined ? player.max_hp : 100;
+        const curHp = player.hp !== undefined ? player.hp : (player.chp !== undefined ? player.chp : 100);
+        const maxHp = player.hp_max !== undefined ? player.hp_max : (player.mhp !== undefined ? player.mhp : 100);
         const hpPct = Math.max(0, Math.min(100, (curHp / Math.max(1, maxHp)) * 100));
         this.hpFill.style.width = `${hpPct}%`;
         this.hpText.textContent = `${curHp} / ${maxHp}`;
 
         // SP Bar
-        const curSp = player.sp !== undefined ? player.sp : 0;
-        const maxSp = player.max_sp !== undefined ? player.max_sp : 0;
+        const curSp = player.sp !== undefined ? player.sp : (player.csp !== undefined ? player.csp : 0);
+        const maxSp = player.sp_max !== undefined ? player.sp_max : (player.msp !== undefined ? player.msp : 0);
         const spPct = maxSp > 0 ? Math.max(0, Math.min(100, (curSp / maxSp) * 100)) : 0;
         this.spFill.style.width = `${spPct}%`;
         this.spText.textContent = `${curSp} / ${maxSp}`;
 
         // Stats
         if (player.stats) {
-            this.statStr.textContent = player.stats.str || '10';
-            this.statInt.textContent = player.stats.int || '10';
-            this.statWis.textContent = player.stats.wis || '10';
-            this.statDex.textContent = player.stats.dex || '10';
-            this.statCon.textContent = player.stats.con || '10';
+            const getStat = s => (s && typeof s === 'object') ? (s.use || s.top || '10') : (s || '10');
+            this.statStr.textContent = getStat(player.stats.str);
+            this.statInt.textContent = getStat(player.stats.int);
+            this.statWis.textContent = getStat(player.stats.wis);
+            this.statDex.textContent = getStat(player.stats.dex);
+            this.statCon.textContent = getStat(player.stats.con);
         }
 
         // Depth, Gold, AC
@@ -99,6 +100,24 @@ class WebHUD {
         }
     }
 
+    getFeatAt(map, x, y) {
+        if (!map || !map.rows || y < 0 || y >= map.h || x < 0 || x >= map.w) return 0;
+        const row = map.rows[y];
+        if (!row || !row.f) return 0;
+        const idx = x * 2;
+        if (idx + 1 >= row.f.length) return 0;
+        const hi = parseInt(row.f[idx], 16) || 0;
+        const lo = parseInt(row.f[idx + 1], 16) || 0;
+        return (hi << 4) | lo;
+    }
+
+    getFlagAt(map, x, y) {
+        if (!map || !map.rows || y < 0 || y >= map.h || x < 0 || x >= map.w) return 0;
+        const row = map.rows[y];
+        if (!row || !row.l || x >= row.l.length) return 0;
+        return parseInt(row.l[x], 16) || 0;
+    }
+
     renderMinimap(map, player, monsters) {
         const ctx = this.minimapCtx;
         const w = this.minimapCanvas.width;
@@ -119,25 +138,27 @@ class WebHUD {
                 const my = py + dy;
                 if (mx < 0 || mx >= map.w || my < 0 || my >= map.h) continue;
 
-                const cell = map.cells[my * map.w + mx];
-                if (!cell || (!cell.k && !cell.v)) continue;
+                const feat = this.getFeatAt(map, mx, my);
+                const flag = this.getFlagAt(map, mx, my);
+                const known = (flag & 0x1) !== 0;
+                const inView = (flag & 0x2) !== 0;
+                if (!known && !inView) continue;
 
                 const sx = (dx + radius) * cellSize;
                 const sy = (dy + radius) * cellSize;
 
-                const feat = cell.f;
                 if (feat >= 17 && feat <= 22) {
-                    ctx.fillStyle = '#444c5c'; // Wall
-                } else if (feat === 1) {
-                    ctx.fillStyle = '#1e2533'; // Floor
-                } else if (feat === 2) {
+                    ctx.fillStyle = inView ? '#556075' : '#333a47'; // Wall
+                } else if (feat === 1 || (feat >= 7 && feat <= 14)) {
+                    ctx.fillStyle = inView ? '#262f40' : '#141a24'; // Floor / Store
+                } else if (feat === 2 || feat === 15) {
                     ctx.fillStyle = '#a06020'; // Closed door
                 } else if (feat === 3 || feat === 4) {
                     ctx.fillStyle = '#604010'; // Open door
                 } else if (feat === 5 || feat === 6) {
                     ctx.fillStyle = '#40a0ff'; // Stairs
                 } else if (feat === 23) {
-                    ctx.fillStyle = '#ff4400'; // Lava
+                    ctx.fillStyle = inView ? '#ff4400' : '#4a1505'; // Lava (bright if inView, dark if memory)
                 } else {
                     ctx.fillStyle = '#222';
                 }

@@ -1,7 +1,7 @@
 /**
- * Angband3D Web Terminal — Canvas 80x24 ANSI/Angband Terminal
- * Renders character creation, store inventories, help manuals, and prompt screens.
- * Supports mouse-click menu selection and crisp pixel-perfect scaling.
+ * Angband3D Web Terminal — High-DPI Vector Canvas Terminal
+ * Renders Angband's 80x24 character grid with 100% pixel-perfect crispness at any resolution.
+ * Supports exact 2-hex attribute color parsing and mouse-click selection.
  */
 
 class WebTerminal {
@@ -12,44 +12,66 @@ class WebTerminal {
 
         this.cols = 80;
         this.rows = 24;
-        this.charWidth = 10;
-        this.charHeight = 18;
 
-        this.canvas.width = this.cols * this.charWidth;
-        this.canvas.height = this.rows * this.charHeight;
-
-        // Angband 16-color palette
+        // Accurate Angband 16-color palette
         this.palette = [
-            '#000000', // 0: Black
+            '#1a1d24', // 0: Dark Black/Background
             '#ffffff', // 1: White
-            '#8a8a8a', // 2: Grey
-            '#ff8800', // 3: Orange
-            '#cc0000', // 4: Red
-            '#009944', // 5: Green
-            '#0055ff', // 6: Blue
-            '#995500', // 7: Umber / Brown
-            '#444444', // 8: Dark Grey
-            '#bbbbbb', // 9: Light Grey
-            '#cc00cc', // 10: Violet
-            '#ffff00', // 11: Yellow
-            '#ff4444', // 12: Light Red
-            '#00ff00', // 13: Light Green
-            '#00ccff', // 14: Light Blue
-            '#cc8844'  // 15: Light Umber
+            '#9ea3ad', // 2: Grey / Slate
+            '#ff9900', // 3: Orange (peaks / flames)
+            '#e63946', // 4: Red
+            '#2a9d8f', // 5: Green
+            '#457b9d', // 6: Blue
+            '#a3704c', // 7: Umber / Brown
+            '#555a64', // 8: Dark Grey
+            '#c8d1dc', // 9: Light Slate
+            '#b5179e', // 10: Violet
+            '#ffd166', // 11: Yellow
+            '#ff6b6b', // 12: Light Red
+            '#06d6a0', // 13: Light Green
+            '#4cc9f0', // 14: Light Blue
+            '#e0a96d'  // 15: Light Umber
         ];
 
         this.lastRows = [];
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
         this.setupMouseEvents();
+    }
+
+    resize() {
+        // Compute crisp font size based on available viewport width/height
+        const maxW = Math.min(window.innerWidth * 0.95, 1200);
+        const maxH = Math.min(window.innerHeight * 0.88, 750);
+
+        // Optimal cell dimensions maintaining 80x24 aspect ratio
+        const cellW = Math.floor(maxW / this.cols);
+        const cellH = Math.floor(maxH / this.rows);
+        this.cellSize = Math.max(12, Math.min(cellW, Math.floor(cellH * 0.58)));
+
+        this.charWidth = this.cellSize;
+        this.charHeight = Math.floor(this.cellSize * 1.75);
+        this.fontSize = Math.floor(this.charHeight * 0.82);
+
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        this.canvas.width = this.cols * this.charWidth * dpr;
+        this.canvas.height = this.rows * this.charHeight * dpr;
+
+        this.canvas.style.width = `${this.cols * this.charWidth}px`;
+        this.canvas.style.height = `${this.rows * this.charHeight}px`;
+
+        this.ctx.scale(dpr, dpr);
+
+        if (this.lastTermData) {
+            this.render(this.lastTermData);
+        }
     }
 
     setupMouseEvents() {
         this.canvas.addEventListener('click', (e) => {
             const rect = this.canvas.getBoundingClientRect();
-            const scaleX = this.canvas.width / rect.width;
-            const scaleY = this.canvas.height / rect.height;
-
-            const clickX = (e.clientX - rect.left) * scaleX;
-            const clickY = (e.clientY - rect.top) * scaleY;
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
 
             const col = Math.floor(clickX / this.charWidth);
             const row = Math.floor(clickY / this.charHeight);
@@ -59,63 +81,79 @@ class WebTerminal {
     }
 
     handleRowClick(row, col) {
-        if (!this.lastRows || !this.lastRows[row]) return;
-        const line = this.lastRows[row].g || '';
-        if (!line) return;
-
-        // Check if row has a letter menu item like "a) ..." or "1) ..."
-        const match = line.match(/^\s*([a-zA-Z0-9])[\)\.\:]/);
-        if (match) {
-            const key = match[1];
-            this.onSelectKey(key);
+        if (!this.lastRows || !this.lastRows[row]) {
+            // Clicking anywhere advances if on a prompt screen
+            this.onSelectKey('enter');
             return;
         }
 
-        // Check if there's a bracketed prompt e.g. [y/n]
-        if (line.includes('[y/n]')) {
+        const line = this.lastRows[row].g || '';
+
+        // If screen says "Press any key to continue" or "-more-", advance
+        if (line.toLowerCase().includes('press any key') || line.toLowerCase().includes('-more-')) {
+            this.onSelectKey('enter');
+            return;
+        }
+
+        // Check if row has a letter menu item e.g. "a) Human"
+        const match = line.match(/^\s*([a-zA-Z0-9])[\)\.\:]/);
+        if (match) {
+            this.onSelectKey(match[1]);
+            return;
+        }
+
+        if (line.includes('[y/n]') || line.toLowerCase().includes('are you sure')) {
             this.onSelectKey('y');
             return;
         }
 
-        // Otherwise default to Enter/confirm if clicked on prompt
-        if (line.includes('-more-') || line.includes('press any key')) {
-            this.onSelectKey('enter');
-        }
+        // Default click advances
+        this.onSelectKey('enter');
+    }
+
+    parseAttr(aStr, cellIdx) {
+        if (!aStr) return 1;
+        const idx = cellIdx * 2;
+        if (idx + 1 >= aStr.length) return 1;
+        const hi = parseInt(aStr[idx], 16) || 0;
+        const lo = parseInt(aStr[idx + 1], 16) || 0;
+        const val = (hi << 4) | lo;
+        return val & 0x0f; // Low 4 bits is palette index 0-15
     }
 
     render(termData) {
         if (!termData || !termData.rows) return;
+        this.lastTermData = termData;
         this.lastRows = termData.rows;
 
-        // Clear canvas
-        this.ctx.fillStyle = '#06070a';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        const w = this.cols * this.charWidth;
+        const h = this.rows * this.charHeight;
 
-        this.ctx.font = '15px "Fira Code", monospace';
+        // Clear canvas with deep dark background
+        this.ctx.fillStyle = '#080a0f';
+        this.ctx.fillRect(0, 0, w, h);
+
+        // Ornate border
+        this.ctx.strokeStyle = 'rgba(212, 175, 55, 0.4)';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(1, 1, w - 2, h - 2);
+
+        this.ctx.font = `${this.fontSize}px 'Fira Code', 'Courier New', monospace`;
         this.ctx.textBaseline = 'top';
 
-        for (let r = 0; r < termData.rows.length; r++) {
+        for (let r = 0; r < termData.rows.length && r < this.rows; r++) {
             const rowObj = termData.rows[r];
             const text = rowObj.g || '';
             const attrs = rowObj.a || '';
             const y = (rowObj.y !== undefined ? rowObj.y : r) * this.charHeight;
 
-            for (let c = 0; c < text.length; c++) {
+            for (let c = 0; c < text.length && c < this.cols; c++) {
                 const ch = text[c];
                 if (ch === ' ' || ch === '\0') continue;
 
-                let colorIdx = 1; // Default white
-                if (typeof attrs === 'string' && c < attrs.length) {
-                    const code = attrs.charCodeAt(c);
-                    // Standard Angband bridge: attribute byte is index or char
-                    colorIdx = code < 16 ? code : (code - 48);
-                    if (colorIdx < 0 || colorIdx >= 16) colorIdx = 1;
-                } else if (Array.isArray(attrs) && c < attrs.length) {
-                    colorIdx = attrs[c] % 16;
-                }
-
-                this.ctx.fillStyle = this.palette[colorIdx];
-                this.ctx.fillText(ch, c * this.charWidth, y + 2);
+                const colorIdx = this.parseAttr(attrs, c);
+                this.ctx.fillStyle = this.palette[colorIdx] || '#ffffff';
+                this.ctx.fillText(ch, c * this.charWidth + 1, y + 2);
             }
         }
     }

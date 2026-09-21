@@ -26,6 +26,34 @@ window.addEventListener('DOMContentLoaded', () => {
         updateViewMode();
     };
 
+    // Terminal Toolbar action buttons
+    const quickBirthBtn = document.getElementById('btn-quick-birth');
+    if (quickBirthBtn) {
+        quickBirthBtn.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            // Advance past splash screen if needed, trigger quick-roll '@' and confirm
+            network.sendKey('enter');
+            setTimeout(() => network.sendKey('@'), 120);
+            setTimeout(() => network.sendKey('enter'), 300);
+        });
+    }
+
+    const termAdvanceBtn = document.getElementById('btn-term-advance');
+    if (termAdvanceBtn) {
+        termAdvanceBtn.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            network.sendKey('enter');
+        });
+    }
+
+    const termEscapeBtn = document.getElementById('btn-term-escape');
+    if (termEscapeBtn) {
+        termEscapeBtn.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            network.sendKey('escape');
+        });
+    }
+
     const input = new InputController(network, dungeon, terminal, audio, toggleTerminalView);
 
     function updateViewMode() {

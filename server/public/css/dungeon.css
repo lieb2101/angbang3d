@@ -53,7 +53,7 @@ html, body {
     z-index: 1;
 }
 
-/* Terminal Canvas Layer (Character creation, stores, help, death disclosure) */
+/* Terminal Container Layer (Character creation, stores, help, death disclosure) */
 #terminal-container {
     position: absolute;
     top: 0;
@@ -61,11 +61,13 @@ html, body {
     width: 100%;
     height: 100%;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    background: rgba(5, 6, 8, 0.94);
+    background: rgba(4, 5, 8, 0.95);
     z-index: 10;
     transition: opacity 0.25s ease;
+    padding: 16px;
 }
 
 #terminal-container.hidden {
@@ -73,28 +75,82 @@ html, body {
     pointer-events: none;
 }
 
-#terminal-canvas {
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
-    box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), 0 0 15px rgba(212, 175, 55, 0.2);
-    border: 1px solid var(--glass-border);
-    border-radius: 4px;
-    max-width: 96vw;
-    max-height: 94vh;
+.terminal-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    background: #090b10;
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-radius: 8px;
+    padding: 14px 18px 18px;
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.95), 0 0 20px rgba(212, 175, 55, 0.15);
+    max-width: 98vw;
 }
 
-/* CRT Scanline Filter */
-.crt-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
+.terminal-toolbar {
     width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 20;
-    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
-    background-size: 100% 4px;
-    opacity: 0.35;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+    padding-bottom: 10px;
+}
+
+.terminal-title {
+    font-size: 13px;
+    letter-spacing: 2px;
+    font-weight: 700;
+    color: var(--gold-bright);
+}
+
+.terminal-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-gold {
+    background: linear-gradient(180deg, #d4af37, #997a15);
+    border: 1px solid #ffe270;
+    color: #0b0c0e;
+    font-family: var(--font-fantasy);
+    font-weight: bold;
+    font-size: 13px;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.4);
+    transition: all 0.15s ease;
+}
+
+.btn-gold:hover {
+    background: linear-gradient(180deg, #ffe270, #bfa020);
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+    transform: translateY(-1px);
+}
+
+.btn-gold-outline {
+    background: transparent;
+    border: 1px solid var(--gold-primary);
+    color: var(--gold-bright);
+    font-family: var(--font-fantasy);
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-gold-outline:hover {
+    background: rgba(212, 175, 55, 0.15);
+    color: #fff;
+}
+
+#terminal-canvas {
+    display: block;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    cursor: pointer;
 }
 
 /* Top Message Banner */

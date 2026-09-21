@@ -14,10 +14,19 @@
         <!-- 3D Dungeon WebGL Viewport -->
         <canvas id="viewport-canvas"></canvas>
 
-        <!-- 80x24 CRT Terminal Overlay -->
+        <!-- 80x24 Terminal View (Birth menus, stores, death disclosure) -->
         <div id="terminal-container">
-            <canvas id="terminal-canvas"></canvas>
-            <div class="crt-overlay"></div>
+            <div class="terminal-card">
+                <div class="terminal-toolbar">
+                    <div class="terminal-title">⚔ ANGBAND CLASSIC TERMINAL</div>
+                    <div class="terminal-actions">
+                        <button id="btn-quick-birth" class="btn-gold" title="Quickly create a random hero and jump straight into the 3D dungeon!">⚔ Quick Start Hero (@)</button>
+                        <button id="btn-term-advance" class="btn-gold-outline" title="Press Enter to confirm or advance">Advance (Enter)</button>
+                        <button id="btn-term-escape" class="btn-gold-outline" title="Press Escape to cancel or go back">Back (Esc)</button>
+                    </div>
+                </div>
+                <canvas id="terminal-canvas"></canvas>
+            </div>
         </div>
 
         <!-- Top Message Banner -->

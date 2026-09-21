@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/dungeon.css">
+    <link rel="stylesheet" href="/css/dungeon.css?v=2.2">
 </head>
 <body>
     <div id="app-container">
@@ -41,10 +41,11 @@
             <button id="btn-fullscreen" class="icon-btn">⛶ Fullscreen</button>
         </div>
 
-        <!-- 2D Minimap Radar -->
-        <div id="minimap-container">
-            <div class="minimap-header">
-                <span>RADAR</span>
+        <!-- 2D Minimap -->
+        <div id="minimap-container" class="compact">
+            <div class="minimap-header" id="minimap-header" title="Click or [ ] to resize • Mouse wheel or PgUp/Dn to zoom">
+                <span id="minimap-title-text">MINIMAP</span>
+                <span id="minimap-hint-text" class="minimap-hint">[ ] Size  +/- Zoom</span>
                 <span id="val-depth" style="color:#ffd700;">Town</span>
             </div>
             <canvas id="minimap-canvas"></canvas>
@@ -66,7 +67,7 @@
 
         <!-- Bottom HUD -->
         <div id="hud-overlay">
-            <!-- Character Status & Vitals -->
+            <!-- Character Status & Vitals (Gauges & Attributes) -->
             <div id="char-panel" class="hud-panel">
                 <div id="char-title" class="char-title">Hero of Angband</div>
                 <div class="gauge-container gauge-hp">
@@ -96,15 +97,52 @@
                 </div>
             </div>
 
-            <!-- Quick Action Bar -->
-            <div id="action-bar" class="hud-panel">
-                <button id="btn-attack" class="action-btn">⚔ Attack <kbd>Space</kbd></button>
-                <button id="btn-cast" class="action-btn">✨ Cast <kbd>m</kbd></button>
-                <button id="btn-rest" class="action-btn">⏳ Rest <kbd>R</kbd></button>
-                <button id="btn-pickup" class="action-btn">💎 Get <kbd>g</kbd></button>
-                <button id="btn-inventory" class="action-btn">🎒 Pack <kbd>i</kbd></button>
-                <button id="btn-equipment" class="action-btn">🛡 Gear <kbd>e</kbd></button>
-                <button id="btn-terminal" class="action-btn">📜 Classic <kbd>Tab</kbd></button>
+            <!-- Center Column: Quick Action Bar + Detailed 3-Row Telemetry Footer -->
+            <div id="hud-center-column">
+                <!-- Quick Action Bar -->
+                <div id="action-bar" class="hud-panel">
+                    <button id="btn-attack" class="action-btn">⚔ Attack <kbd>Space</kbd></button>
+                    <button id="btn-cast" class="action-btn">✨ Cast <kbd>m</kbd></button>
+                    <button id="btn-rest" class="action-btn">⏳ Rest <kbd>R</kbd></button>
+                    <button id="btn-pickup" class="action-btn">💎 Get <kbd>g</kbd></button>
+                    <button id="btn-inventory" class="action-btn">🎒 Pack <kbd>i</kbd></button>
+                    <button id="btn-equipment" class="action-btn">🛡 Gear <kbd>e</kbd></button>
+                    <button id="btn-terminal" class="action-btn">📜 Classic <kbd>Tab</kbd></button>
+                </div>
+
+                <!-- Detailed 3-Row Footer (Matches Godot Overlay.cs:1620-1740) -->
+                <div id="hud-footer" class="hud-panel">
+                    <!-- Row 1: Contextual Hint & Keybindings -->
+                    <div id="footer-row-1" class="footer-row">
+                        <span id="footer-diagonal-hint" class="footer-diagonal-hint" style="display: none; color: #ffd700; font-weight: 700; margin-right: 6px;"></span>
+                        <span id="footer-stairs-hint" class="footer-stairs-hint"></span>
+                        <span id="footer-key-hints" class="footer-key-hints">arrows: move/turn • 7/9/1/3: diagonal • PgUp/Dn: tilt head • [ ]: map size • +/-: zoom • i: pack • e: gear • m: cast • Tab: classic</span>
+                    </div>
+
+                    <!-- Row 2: Comprehensive dynamic character statistics -->
+                    <div id="footer-row-2" class="footer-row">
+                        <div class="footer-vitals">
+                            <span id="footer-char-identity" class="footer-gold">Hero</span>
+                            <span id="footer-level" class="footer-stat">Lvl 1</span>
+                            <span id="footer-hp" class="footer-hp">HP 100/100</span>
+                            <span id="footer-sp" class="footer-sp" style="display: none;">SP 0/0</span>
+                            <span id="footer-ac" class="footer-stat">AC 0</span>
+                            <span id="footer-gold" class="footer-gold">AU 0</span>
+                            <span id="footer-exp" class="footer-stat">EXP 0</span>
+                            <span id="footer-place" class="footer-stat">Town</span>
+                            <span id="footer-speed" class="footer-stat">Spd Normal (0)</span>
+                            <span id="footer-light" class="footer-muted">Light: None</span>
+                            <span id="footer-facing" class="footer-gold">Facing: N</span>
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Target tracking, status condition badges, and secondary attributes -->
+                    <div id="footer-row-3" class="footer-row">
+                        <div id="footer-target" class="footer-target" style="display: none;"></div>
+                        <div id="footer-badges" class="footer-badges"></div>
+                        <div id="footer-gear" class="footer-gear">Wielding: Bare Hands • Shield: None • Ranged: None</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Economy & Defense Panel -->
@@ -118,6 +156,58 @@
                     <span id="val-gold" class="stat-value" style="color: #ffd700;">0</span>
                 </div>
             </div>
+
+            <!-- Compass Widget (1:1 with Godot Overlay.cs:1750-1791) -->
+            <div id="compass-container" class="hud-panel" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px 8px; min-width: 44px;">
+                <canvas id="compass-canvas" width="36" height="36"></canvas>
+                <span id="compass-label" style="font-family: var(--font-terminal); font-size: 11px; font-weight: bold; color: #ffd700; margin-top: 1px;">N</span>
+            </div>
+        </div>
+
+        <!-- Atmospheric Death Screen Modal (Matches Godot Overlay.cs:840-935) -->
+        <div id="death-modal" class="hidden">
+            <div class="death-panel">
+                <div class="death-header">
+                    <h1 class="death-title">☠ &nbsp; Y O U &nbsp; H A V E &nbsp; P E R I S H E D &nbsp; ☠</h1>
+                    <div id="death-epitaph" class="death-epitaph">Hero the Human Warrior (Level 1)</div>
+                    <div id="death-cause" class="death-cause">Killed by mortal wounds in the Town.</div>
+                    <div id="death-score" class="death-score">Gold: 0 AU &nbsp;•&nbsp; Experience: 0 &nbsp;•&nbsp; Deepest Level: 0 (Town)</div>
+                </div>
+
+                <div class="death-tabs">
+                    <button class="death-tab active" data-tab="0">1. Tombstone & Menus</button>
+                    <button class="death-tab" data-tab="1">2. Equipment</button>
+                    <button class="death-tab" data-tab="2">3. Inventory</button>
+                    <button class="death-tab" data-tab="3">4. Quiver</button>
+                    <button class="death-tab" data-tab="4">5. Stats & Attributes</button>
+                </div>
+
+                <div class="death-body">
+                    <div id="death-content-0" class="death-tab-content active">
+                        <div id="death-terminal-container">
+                            <canvas id="death-terminal-canvas"></canvas>
+                        </div>
+                    </div>
+                    <div id="death-content-1" class="death-tab-content">
+                        <ul id="death-equipment-list" class="death-list"></ul>
+                    </div>
+                    <div id="death-content-2" class="death-tab-content">
+                        <ul id="death-inventory-list" class="death-list"></ul>
+                    </div>
+                    <div id="death-content-3" class="death-tab-content">
+                        <ul id="death-quiver-list" class="death-list"></ul>
+                    </div>
+                    <div id="death-content-4" class="death-tab-content">
+                        <div id="death-stats-container" class="death-stats-grid"></div>
+                    </div>
+                </div>
+
+                <div class="death-actions">
+                    <button id="btn-death-reload" class="death-btn btn-reload"><kbd>[R]</kbd> Load Last Saved Game</button>
+                    <button id="btn-death-reroll" class="death-btn btn-reroll"><kbd>[N]</kbd> Re-Roll / New Character</button>
+                    <button id="btn-death-menu" class="death-btn btn-menu"><kbd>[M / Esc]</kbd> Main Menu</button>
+                </div>
+            </div>
         </div>
 
         <!-- Initial Connection Spinner -->
@@ -128,17 +218,18 @@
         </div>
     </div>
 
-    <!-- Three.js r128 via reliable CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <!-- Three.js r128 & Loaders (Local Vendored) -->
+    <script src="/js/vendor/three.min.js"></script>
+    <script src="/js/vendor/OBJLoader.js"></script>
+    <script src="/js/vendor/GLTFLoader.js"></script>
 
     <!-- Client Subsystems -->
-    <script src="/js/audio.js"></script>
-    <script src="/js/terminal.js"></script>
-    <script src="/js/dungeon3d.js"></script>
-    <script src="/js/hud.js"></script>
-    <script src="/js/network.js"></script>
-    <script src="/js/input.js"></script>
-    <script src="/js/app.js"></script>
+    <script src="/js/audio.js?v=2.2"></script>
+    <script src="/js/terminal.js?v=2.2"></script>
+    <script src="/js/dungeon3d.js?v=2.2"></script>
+    <script src="/js/hud.js?v=2.2"></script>
+    <script src="/js/network.js?v=2.2"></script>
+    <script src="/js/input.js?v=2.2"></script>
+    <script src="/js/app.js?v=2.2"></script>
 </body>
 </html>

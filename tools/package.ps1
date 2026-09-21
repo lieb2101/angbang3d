@@ -101,11 +101,36 @@ if ($godotExe) {
     & $godotExe --headless --path (Join-Path $repo 'client') --export-release "Windows Desktop" $exportTarget
     if ($LASTEXITCODE -eq 0 -and (Test-Path $exportTarget)) {
         Write-Host "Standalone executable exported successfully: $exportTarget" -ForegroundColor Green
+
+        # Verify .NET assemblies directory (Godot 4 C# builds create data_<name>_<platform>)
+        $dataDirs = Get-ChildItem $stageDir -Directory | Where-Object { $_.Name -like 'data_*' }
+        if ($dataDirs) {
+            Write-Host "Discovered C# runtime assembly directory: $($dataDirs[0].Name)" -ForegroundColor Green
+        } else {
+            # Check if Godot placed data directory inside client/dist or client folder
+            $altData = Get-ChildItem (Join-Path $repo 'client') -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -like 'data_*' } | Select-Object -First 1
+            if ($altData) {
+                Write-Host "Staging C# runtime assembly directory from client: $($altData.Name)" -ForegroundColor Yellow
+                Copy-Item $altData.FullName $stageDir -Recurse
+            }
+        }
     } else {
         Write-Host "Warning: Standalone export exited with code $LASTEXITCODE; falling back to source distribution staging." -ForegroundColor Yellow
+        # Fallback: stage client source folder (excluding temporary build caches)
+        $destClient = Join-Path $stageDir 'client'
+        New-Item -ItemType Directory -Path $destClient -Force | Out-Null
+        Get-ChildItem (Join-Path $repo 'client') -Exclude '.godot', 'bin', 'obj', '.vs' | ForEach-Object {
+            Copy-Item $_.FullName $destClient -Recurse -Force
+        }
     }
 } else {
-    Write-Host "Godot executable not found; skipping standalone .exe export step." -ForegroundColor Yellow
+    Write-Host "Godot executable not found; staging client source for launcher execution." -ForegroundColor Yellow
+    $destClient = Join-Path $stageDir 'client'
+    New-Item -ItemType Directory -Path $destClient -Force | Out-Null
+    Get-ChildItem (Join-Path $repo 'client') -Exclude '.godot', 'bin', 'obj', '.vs' | ForEach-Object {
+        Copy-Item $_.FullName $destClient -Recurse -Force
+    }
 }
 
 # Copy root docs and licenses

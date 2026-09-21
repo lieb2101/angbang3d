@@ -227,7 +227,7 @@ public partial class Main : Node
         // A flag or test script means the caller already decided; otherwise show splash.
         if (_autoBirth || _manualRequested)
         {
-            StartGame();
+            StartGame(newCharacter: true);
         }
         else if (_script != null || _autoMenuChoice > 0)
         {
@@ -236,6 +236,19 @@ public partial class Main : Node
         else
         {
             OpenSplash();
+        }
+    }
+
+    public override void _Notification(int what)
+    {
+        if (what == NotificationWMCloseRequest)
+        {
+            if (_bridge != null && _bridge.Connected)
+            {
+                _bridge.Send("save");
+                System.Threading.Thread.Sleep(150);
+                _bridge.Stop();
+            }
         }
     }
 
@@ -407,18 +420,18 @@ public partial class Main : Node
 
         _menuItems.Add(("New Character (Custom - Race/Class/Stats)", () =>
         {
-            _saveName = null;
+            _saveName = "Adventurer_" + Guid.NewGuid().ToString("N")[..4];
             _characterName = null;
             _inMenu = false;
-            StartGame();
+            StartGame(newCharacter: true);
         }));
         _menuItems.Add(("New Character (Random - Review & Re-roll)", () =>
         {
-            _saveName = null;
+            _saveName = "Adventurer_" + Guid.NewGuid().ToString("N")[..4];
             _characterName = null;
             _randomRequested = true;
             _inMenu = false;
-            StartGame();
+            StartGame(newCharacter: true);
         }));
 
         var modeLabel = _cloudMode
@@ -945,10 +958,10 @@ public partial class Main : Node
             _bridge.Stop();
         }
 
-        _saveName = null;
+        _saveName = "Adventurer_" + Guid.NewGuid().ToString("N")[..4];
         _characterName = null;
         _randomRequested = true;
-        StartGame();
+        StartGame(newCharacter: true);
     }
 
     private void OnDeathIdentify()
@@ -979,16 +992,21 @@ public partial class Main : Node
         _overlay.QueueRedraw();
     }
 
-    private void StartGame()
+    private void StartGame(bool newCharacter = false)
     {
         _overlay.Mode = ViewMode.Terminal;
         _overlay.Status = _cloudMode ? "connecting to cloud realm..." : "starting...";
         _overlay.QueueRedraw();
 
+        if (newCharacter && string.IsNullOrEmpty(_saveName))
+        {
+            _saveName = "Adventurer_" + Guid.NewGuid().ToString("N")[..4];
+        }
+
         if (_cloudMode)
         {
             _bridge = _cloudBridge;
-            _cloudBridge.ConnectToServer(_cloudUrl, _saveName);
+            _cloudBridge.ConnectToServer(_cloudUrl, _saveName, newCharacter);
         }
         else
         {
@@ -1000,7 +1018,7 @@ public partial class Main : Node
                 return;
             }
             _bridge = _localBridge;
-            _localBridge.Start(exe, _saveName, newCharacter: false);
+            _localBridge.Start(exe, _saveName, newCharacter);
         }
     }
 

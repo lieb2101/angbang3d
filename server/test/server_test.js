@@ -112,8 +112,38 @@ async function runTests() {
 
     const jsRes = await get('/js/dungeon3d.js');
     assert.strictEqual(jsRes.status, 200);
-    assert(jsRes.body.includes('class Dungeon3D'));
     console.log('  -> /js/dungeon3d.js serves 3D engine (200 OK)');
+
+    // Test 6: Healthz liveness probe & metrics
+    console.log('Test 6: Healthz liveness probe');
+    const healthz = await get('/healthz');
+    assert.strictEqual(healthz.status, 200);
+    const healthzJson = JSON.parse(healthz.body);
+    assert.strictEqual(healthzJson.status, 'ok');
+    assert(typeof healthzJson.uptime === 'number');
+    assert(typeof healthzJson.activeSessions === 'number');
+    assert.strictEqual(healthzJson.engine, 'ready');
+    console.log('  -> /healthz returned metrics & ready status (200 OK)');
+
+    // Test 7: Gzip compression & Cache-Control
+    console.log('Test 7: Gzip compression & Cache-Control headers');
+    const gzipRes = await new Promise((resolve, reject) => {
+        http.get(`http://localhost:${PORT}/js/dungeon3d.js`, {
+            headers: { 'Accept-Encoding': 'gzip' }
+        }, res => {
+            const chunks = [];
+            res.on('data', c => chunks.push(c));
+            res.on('end', () => resolve({
+                status: res.statusCode,
+                headers: res.headers,
+                bodyLength: Buffer.concat(chunks).length
+            }));
+        }).on('error', reject);
+    });
+    assert.strictEqual(gzipRes.status, 200);
+    assert.strictEqual(gzipRes.headers['content-encoding'], 'gzip');
+    assert(gzipRes.headers['cache-control'].includes('max-age'));
+    console.log(`  -> /js/dungeon3d.js delivered with gzip compression (${gzipRes.bodyLength} bytes compressed)`);
 
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);

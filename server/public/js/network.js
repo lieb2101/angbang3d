@@ -18,10 +18,13 @@ class GameNetwork {
         this.onStatus = null;
     }
 
-    connect(charName = 'Adventurer') {
+    connect(charName = 'Adventurer', isNew = false) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
-        const wsUrl = `${protocol}//${host}/ws?user=${encodeURIComponent(charName)}`;
+        let wsUrl = `${protocol}//${host}/ws?user=${encodeURIComponent(charName)}`;
+        if (isNew) {
+            wsUrl += '&new=1';
+        }
 
         if (this.onStatus) this.onStatus('Connecting to Cloud Realm...');
 

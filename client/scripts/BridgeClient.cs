@@ -149,6 +149,28 @@ public partial class BridgeClient : Node, IGameEngineBridge
         if (newCharacter)
         {
             info.ArgumentList.Add("-n");
+            // Clean up any stale panic save files for this character so the engine never prompts
+            try
+            {
+                var engineBase = System.IO.Path.GetDirectoryName(exePath) ?? ".";
+                var panicPaths = new[]
+                {
+                    System.IO.Path.Combine(engineBase, "lib", "user", "panic"),
+                    System.IO.Path.Combine(engineBase, "lib", "save", "panic")
+                };
+                foreach (var pDir in panicPaths)
+                {
+                    if (System.IO.Directory.Exists(pDir))
+                    {
+                        if (!string.IsNullOrEmpty(saveName))
+                        {
+                            var target = System.IO.Path.Combine(pDir, saveName);
+                            if (System.IO.File.Exists(target)) System.IO.File.Delete(target);
+                        }
+                    }
+                }
+            }
+            catch { }
         }
 
         try

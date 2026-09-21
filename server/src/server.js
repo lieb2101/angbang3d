@@ -12,6 +12,10 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { WebSocketServer } = require('ws');
+const zlib = require('zlib');
+
+// Active session registry for telemetry, leak prevention, and graceful shutdown
+const activeSessions = new Map();
 
 // Configuration
 const PORT = parseInt(process.env.PORT || '8080', 10);
@@ -123,14 +127,19 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // Health check
-    if (pathname === '/health' && req.method === 'GET') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+    // Health & Liveness Probes (/health and /healthz for Cloud Run / Kubernetes)
+    if ((pathname === '/health' || pathname === '/healthz') && req.method === 'GET') {
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
+        });
         res.end(JSON.stringify({
             status: 'ok',
-            uptime: process.uptime(),
-            engine: fs.existsSync(ENGINE_EXE),
-            version: '1.0.0'
+            uptime: Math.floor(process.uptime()),
+            activeSessions: activeSessions.size,
+            engine: fs.existsSync(ENGINE_EXE) ? 'ready' : 'missing',
+            version: '1.0.0',
+            timestamp: Date.now()
         }));
         return;
     }
@@ -282,29 +291,63 @@ const server = http.createServer((req, res) => {
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
         const ext = path.extname(filePath).toLowerCase();
         const mimeTypes = {
-            '.html': 'text/html',
-            '.js': 'application/javascript',
+            '.html': 'text/html; charset=utf-8',
+            '.js': 'application/javascript; charset=utf-8',
             '.wasm': 'application/wasm',
             '.pck': 'application/octet-stream',
-            '.css': 'text/css',
+            '.css': 'text/css; charset=utf-8',
             '.png': 'image/png',
             '.jpg': 'image/jpeg',
             '.jpeg': 'image/jpeg',
             '.webp': 'image/webp',
             '.svg': 'image/svg+xml',
-            '.json': 'application/json',
-            '.obj': 'text/plain',
-            '.mtl': 'text/plain',
+            '.json': 'application/json; charset=utf-8',
+            '.obj': 'text/plain; charset=utf-8',
+            '.mtl': 'text/plain; charset=utf-8',
             '.gltf': 'model/gltf+json',
             '.bin': 'application/octet-stream',
+            '.wav': 'audio/wav',
+            '.ogg': 'audio/ogg',
+            '.mp3': 'audio/mpeg',
         };
         const contentType = mimeTypes[ext] || 'application/octet-stream';
-        res.writeHead(200, {
+
+        // HTTP Caching Strategy:
+        // - HTML: must-revalidate to ensure instant delivery of app updates
+        // - 3D Models, Textures, Audio: 24h caching (immutable static assets)
+        // - JS / CSS: must-revalidate with version query strings for cache-busting
+        let cacheControl = 'public, max-age=3600, must-revalidate';
+        if (ext === '.html') {
+            cacheControl = 'no-cache, no-store, must-revalidate';
+        } else if (['.png', '.jpg', '.jpeg', '.webp', '.obj', '.mtl', '.gltf', '.bin', '.wasm', '.pck', '.wav', '.ogg', '.mp3'].includes(ext)) {
+            cacheControl = 'public, max-age=86400, immutable';
+        }
+
+        const headers = {
             'Content-Type': contentType,
+            'Cache-Control': cacheControl,
             // Cross-Origin Isolation headers required for Godot 4 WebAssembly multithreading/SharedArrayBuffer
             'Cross-Origin-Opener-Policy': 'same-origin',
             'Cross-Origin-Embedder-Policy': 'require-corp',
-        });
+        };
+
+        // Gzip compression for text & code payloads (.html, .js, .css, .json, .obj, .mtl, .svg)
+        const compressible = ['.html', '.js', '.css', '.json', '.obj', '.mtl', '.svg'].includes(ext);
+        const acceptEncoding = req.headers['accept-encoding'] || '';
+
+        if (compressible && acceptEncoding.includes('gzip')) {
+            headers['Content-Encoding'] = 'gzip';
+            res.writeHead(200, headers);
+            fs.createReadStream(filePath).pipe(zlib.createGzip({ level: 6 })).pipe(res);
+            return;
+        } else if (compressible && acceptEncoding.includes('deflate')) {
+            headers['Content-Encoding'] = 'deflate';
+            res.writeHead(200, headers);
+            fs.createReadStream(filePath).pipe(zlib.createDeflate()).pipe(res);
+            return;
+        }
+
+        res.writeHead(200, headers);
         fs.createReadStream(filePath).pipe(res);
         return;
     }
@@ -379,14 +422,40 @@ wss.on('connection', (ws, request) => {
         return;
     }
 
+    const isNew = urlObj.searchParams.get('new') === '1' || urlObj.searchParams.get('reroll') === '1';
+
     const args = ['-mbridge'];
     if (save) {
         args.push(`-u${save}`);
     } else if (user) {
         args.push(`-u${user}`);
     }
+    if (isNew) {
+        args.push('-n');
+    }
 
     const engineDir = path.dirname(ENGINE_EXE);
+
+    // If starting a fresh character, purge any stale panic save files so the engine starts cleanly without prompts
+    if (isNew) {
+        const targetSlot = save || user || 'Adventurer';
+        const panicDirs = [
+            path.join(engineDir, 'lib/user/panic'),
+            path.join(engineDir, 'lib/save/panic')
+        ];
+        for (const pDir of panicDirs) {
+            try {
+                if (fs.existsSync(pDir)) {
+                    const files = fs.readdirSync(pDir);
+                    for (const f of files) {
+                        if (f === targetSlot || f.startsWith(targetSlot + '.')) {
+                            try { fs.unlinkSync(path.join(pDir, f)); } catch (_) {}
+                        }
+                    }
+                }
+            } catch (_) {}
+        }
+    }
     const child = spawn(ENGINE_EXE, args, {
         cwd: engineDir,
         env: {
@@ -400,6 +469,9 @@ wss.on('connection', (ws, request) => {
         },
         stdio: ['pipe', 'pipe', 'pipe']
     });
+
+    // Register session in active session tracking
+    activeSessions.set(sessionId, { child, ws, startTime: Date.now(), user });
 
     let lineBuffer = '';
 
@@ -421,6 +493,7 @@ wss.on('connection', (ws, request) => {
 
     child.on('error', err => {
         console.error(`[Engine Process Error] ${err.message}`);
+        activeSessions.delete(sessionId);
         if (ws.readyState === ws.OPEN) {
             ws.send(JSON.stringify({ t: 'bye', detail: err.message }));
             ws.close();
@@ -429,6 +502,7 @@ wss.on('connection', (ws, request) => {
 
     child.on('close', (code, signal) => {
         console.log(`[Engine Process Exit] Code: ${code}, Signal: ${signal}`);
+        activeSessions.delete(sessionId);
         if (ws.readyState === ws.OPEN) {
             ws.send(JSON.stringify({ t: 'bye', detail: `process exited with code ${code}` }));
             ws.close();
@@ -456,16 +530,29 @@ wss.on('connection', (ws, request) => {
     });
 
     ws.on('close', () => {
-        console.log('[WebSocket] Client disconnected. Terminating engine process...');
+        console.log('[WebSocket] Client disconnected. Saving authoritative state before stopping engine...');
+        activeSessions.delete(sessionId);
         try {
-            if (child && !child.killed) {
-                child.kill('SIGTERM');
+            if (child && !child.killed && child.stdin && child.stdin.writable) {
+                // Issue clean bridge 'save' command to write persistent state without triggering panic save
+                child.stdin.write('save\n');
+                setTimeout(() => {
+                    try {
+                        if (child && !child.killed) {
+                            child.stdin.end();
+                            child.kill();
+                        }
+                    } catch (_) {}
+                }, 200);
+            } else if (child && !child.killed) {
+                child.kill();
             }
         } catch (_) {}
     });
 
     ws.on('error', err => {
         console.error(`[WebSocket Error] ${err.message}`);
+        activeSessions.delete(sessionId);
         try {
             if (child && !child.killed) {
                 child.kill('SIGKILL');
@@ -473,6 +560,34 @@ wss.on('connection', (ws, request) => {
         } catch (_) {}
     });
 });
+
+// Graceful container shutdown: terminate child processes before container exit
+function gracefulShutdown(signal) {
+    console.log(`[Angband3D Cloud] Received ${signal}. Terminating all ${activeSessions.size} active engine sessions...`);
+    for (const [sessionId, session] of activeSessions.entries()) {
+        try {
+            if (session.ws && session.ws.readyState === 1) {
+                session.ws.send(JSON.stringify({ t: 'bye', detail: 'Server shutting down' }));
+                session.ws.close();
+            }
+            if (session.child && !session.child.killed) {
+                session.child.kill('SIGTERM');
+            }
+        } catch (_) {}
+    }
+    activeSessions.clear();
+    server.close(() => {
+        console.log('[Angband3D Cloud] HTTP server closed cleanly. Exiting.');
+        process.exit(0);
+    });
+    setTimeout(() => {
+        console.warn('[Angband3D Cloud] Forcing exit after shutdown timeout.');
+        process.exit(0);
+    }, 5000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 server.listen(PORT, () => {
     console.log(`[Angband3D Cloud Server] Listening on http://localhost:${PORT}`);

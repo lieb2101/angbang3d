@@ -75,18 +75,21 @@ public partial class WebSocketBridgeClient : Node, IGameEngineBridge
     /// </summary>
     /// <param name="wsUrl">Full WebSocket URL e.g. ws://localhost:8080/ws or wss://game.example.com/ws</param>
     /// <param name="saveName">Character/save slot name to load or initialize.</param>
-    public void ConnectToServer(string wsUrl, string saveName = null)
+    /// <param name="newCharacter">Whether this connection starts a fresh character slot (passes new=1).</param>
+    public void ConnectToServer(string wsUrl, string saveName = null, bool newCharacter = false)
     {
         Stop();
 
         ServerUrl = wsUrl;
         var uriBuilder = new UriBuilder(wsUrl);
-        if (!string.IsNullOrEmpty(saveName))
+        var parts = new List<string>();
+        var existingQuery = uriBuilder.Query.TrimStart('?');
+        if (!string.IsNullOrEmpty(existingQuery)) parts.Add(existingQuery);
+        if (!string.IsNullOrEmpty(saveName)) parts.Add($"save={Uri.EscapeDataString(saveName)}");
+        if (newCharacter) parts.Add("new=1");
+        if (parts.Count > 0)
         {
-            var query = uriBuilder.Query;
-            if (query.Length > 1) query += "&";
-            query += $"save={Uri.EscapeDataString(saveName)}";
-            uriBuilder.Query = query.TrimStart('?');
+            uriBuilder.Query = string.Join("&", parts);
         }
 
         _cts = new CancellationTokenSource();

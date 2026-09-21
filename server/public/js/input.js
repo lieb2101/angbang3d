@@ -33,9 +33,114 @@ class InputController {
                 return;
             }
 
-            // Tab toggles 3D Dungeon vs CRT Terminal view
+
+            // In Death Screen Modal: support tabs 1-5, [R] reload, [N] reroll, [M / Esc] menu, [u] identify, and full interactive terminal on Tab 0
+            const deathModal = document.getElementById('death-modal');
+            if (deathModal && !deathModal.classList.contains('hidden')) {
+                const activeTab = (window.__app && window.__app.hud) ? (window.__app.hud.activeDeathTab || 0) : 0;
+
+                // 1-5 direct tab jump
+                if (['1', '2', '3', '4', '5'].includes(e.key)) {
+                    e.preventDefault();
+                    if (window.__app && window.__app.hud) {
+                        window.__app.hud.switchDeathTab(parseInt(e.key, 10) - 1);
+                    }
+                    return;
+                }
+
+                // Tab or ArrowRight to cycle forward; ArrowLeft to cycle backward (matches Godot Main.cs:1696-1709)
+                if (e.key === 'Tab' || e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    if (window.__app && window.__app.hud) {
+                        window.__app.hud.switchDeathTab((activeTab + 1) % 5);
+                    }
+                    return;
+                }
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    if (window.__app && window.__app.hud) {
+                        window.__app.hud.switchDeathTab((activeTab + 4) % 5);
+                    }
+                    return;
+                }
+
+                // Identify items in death screen (matches Godot Main.cs:1680)
+                if (e.key === 'u' || e.key === 'U') {
+                    e.preventDefault();
+                    this.network.sendKey('u');
+                    return;
+                }
+
+                // [R] Reload save / restart game (matches Godot Main.cs:1684)
+                if (e.key === 'r' || e.key === 'R') {
+                    e.preventDefault();
+                    this.network.sendKey('R');
+                    return;
+                }
+
+                // [N] Reroll new character (matches Godot Main.cs:1688)
+                if (e.key === 'n' || e.key === 'N') {
+                    e.preventDefault();
+                    if (window.__app && window.__app.hud && window.__app.hud.rerollCharacter) {
+                        window.__app.hud.rerollCharacter();
+                    } else {
+                        const randomId = Math.random().toString(36).substring(2, 6).toUpperCase();
+                        window.location.href = `/?char=Hero_${randomId}`;
+                    }
+                    return;
+                }
+
+                // [M] or [Escape] Main menu (matches Godot Main.cs:1692)
+                if (e.key === 'm' || e.key === 'M' || e.key === 'Escape') {
+                    e.preventDefault();
+                    if (window.__app && window.__app.hud) {
+                        window.__app.hud.hideDeathModal();
+                    }
+                    window.location.href = '/';
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (window.__app && window.__app.hud) {
+                        window.__app.hud.hideDeathModal();
+                    }
+                    window.location.href = '/';
+                    return;
+                }
+
+                // On Tab 0 (Tombstone & Menus), forward all navigation, arrow keys, and prompt answers (y, n, Enter, Space) to terminal
+                if (activeTab === 0) {
+                    this.handleTerminalKey(e);
+                    return;
+                }
+
+                // On Tabs 1-4 (Equipment, Inventory, Quiver, Stats), handle scrolling (matches Godot Main.cs:1731, 1743, 1755, 1767)
+                if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(e.key)) {
+                    e.preventDefault();
+                    const activeContent = document.querySelector('.death-tab-content.active');
+                    if (activeContent) {
+                        const delta = (e.key === 'ArrowUp' ? -40 : e.key === 'ArrowDown' ? 40 : e.key === 'PageUp' ? -200 : 200);
+                        activeContent.scrollTop += delta;
+                    }
+                    return;
+                }
+
+                // In other tabs, consume unhandled keys so they don't leak into world
+                return;
+            }
+
+            // Tab toggles 3D Dungeon vs CRT Terminal view (when not in death screen)
             if (e.key === 'Tab') {
                 e.preventDefault();
+                if (this.toggleTerminalView) this.toggleTerminalView();
+                return;
+            }
+
+            // In Tab Classic Mode, Escape returns to 3D view just as hitting Tab again would
+            if (e.key === 'Escape' && window.__app && window.__app.isForceTerminal && window.__app.isForceTerminal()) {
+                e.preventDefault();
+                if (this.audio) this.audio.playMenuNav();
+                this.network.sendKey('escape');
                 if (this.toggleTerminalView) this.toggleTerminalView();
                 return;
             }
@@ -72,18 +177,75 @@ class InputController {
     }
 
     handleWorldKey(e) {
+        // Minimap controls: Screen size ([ / ]) and Grid scale zoom (PgUp / PgDn / + / -)
+        // Checked BEFORE movement keys so PgUp/PgDn are never captured as numpad moves
+        if (e.key === '[') {
+            e.preventDefault();
+            if (window.__app && window.__app.hud) {
+                window.__app.hud.cycleMinimapSize(-1);
+            }
+            return;
+        }
+
+        if (e.key === ']') {
+            e.preventDefault();
+            if (window.__app && window.__app.hud) {
+                window.__app.hud.cycleMinimapSize(1);
+            }
+            return;
+        }
+
+        // Head Tilt Up (PageUp) & Tilt Down (PageDown) & Recenter (Home)
+        if (e.key === 'PageUp') {
+            e.preventDefault();
+            if (this.dungeon) {
+                this.dungeon.userPitchOffset = Math.min(0.48, (this.dungeon.userPitchOffset || 0) + 0.08);
+            }
+            return;
+        }
+
+        if (e.key === 'PageDown') {
+            e.preventDefault();
+            if (this.dungeon) {
+                this.dungeon.userPitchOffset = Math.max(-0.48, (this.dungeon.userPitchOffset || 0) - 0.08);
+            }
+            return;
+        }
+
+        if (e.key === 'Home') {
+            e.preventDefault();
+            if (this.dungeon) {
+                this.dungeon.userPitchOffset = 0.0;
+            }
+            return;
+        }
+
+        if (e.key === '+' || e.key === '=') {
+            e.preventDefault();
+            if (window.__app && window.__app.hud) {
+                window.__app.hud.adjustMinimapZoom(0.15);
+            }
+            return;
+        }
+
+        if (e.key === '-' || e.key === '_') {
+            e.preventDefault();
+            if (window.__app && window.__app.hud) {
+                window.__app.hud.adjustMinimapZoom(-0.15);
+            }
+            return;
+        }
+
         // Turning is instant camera yaw (0 engine turns)
         if (e.key === 'ArrowLeft') {
             e.preventDefault();
             this.dungeon.turn(-1);
-            if (this.audio) this.audio.playFootstep();
             return;
         }
 
         if (e.key === 'ArrowRight') {
             e.preventDefault();
             this.dungeon.turn(1);
-            if (this.audio) this.audio.playFootstep();
             return;
         }
 
@@ -92,7 +254,6 @@ class InputController {
             e.preventDefault();
             const moveKey = this.getRelativeDirectionKey(8);
             if (moveKey) this.network.sendKey(moveKey);
-            if (this.audio) this.audio.playFootstep();
             return;
         }
 
@@ -100,7 +261,6 @@ class InputController {
             e.preventDefault();
             const moveKey = this.getRelativeDirectionKey(2);
             if (moveKey) this.network.sendKey(moveKey);
-            if (this.audio) this.audio.playFootstep();
             return;
         }
 
@@ -124,7 +284,6 @@ class InputController {
             const moveKey = this.getRelativeDirectionKey(dir);
             if (moveKey) {
                 this.network.sendKey(moveKey);
-                if (this.audio) this.audio.playFootstep();
             }
             return;
         }
@@ -139,7 +298,7 @@ class InputController {
         if (e.key === ' ' || e.key === 'Enter') {
             e.preventDefault();
             this.dungeon.triggerAttackAnimation();
-            if (this.audio) this.audio.playHit();
+            if (this.audio) this.audio.playWhoosh();
             this.network.sendKey('enter');
             return;
         }
@@ -151,11 +310,26 @@ class InputController {
             return;
         }
 
-        // General keys (e.g. 'i' for inventory, 'm' for cast spell, 'd' for drop, 'g' for pickup)
+        // General keys (e.g. 'i' for inventory, 'm' for cast spell, 'd' for drop, 'g' for pickup, 'q' for quaff, 'r' for read)
         if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
             e.preventDefault();
-            if (e.key === 'm' && this.audio) {
-                this.audio.playSpell();
+            if (this.audio) {
+                const k = e.key;
+                const kl = k.toLowerCase();
+                if (kl === 'm' || kl === 'b' || kl === 'p') this.audio.playSpell();
+                else if (kl === 'q') this.audio.playQuaff();
+                else if (kl === 'r') this.audio.playScroll();
+                else if (kl === 'g' || kl === ',') this.audio.playItemPickup();
+                else if (kl === 'd') this.audio.playItemDrop();
+                else if (k === 'E') this.audio.playEat();
+                else if (k === 'w') this.audio.playEquipWeapon();
+                else if (k === 'W') this.audio.playEquipArmor();
+                else if (k === 't') this.audio.playItemDrop();
+                else if (kl === 'o') this.audio.playDoor(true);
+                else if (kl === 'c') this.audio.playDoor(false);
+                else if (kl === 'f' || kl === 'v') this.audio.playBowShoot();
+                else if (k === 'D') this.audio.playTrapDisarm();
+                else if (kl === 'i' || kl === 'e') this.audio.playMenuOpen();
             }
             this.network.sendKey(e.key);
         }
@@ -183,23 +357,31 @@ class InputController {
         if (localIndex === undefined) return null;
         // Angband world direction keys: 8=N, 9=NE, 6=E, 3=SE, 2=S, 1=SW, 4=W, 7=NW
         const dirKeys = ['8', '9', '6', '3', '2', '1', '4', '7'];
-        const worldIndex = (localIndex + this.dungeon.facing * 2) % 8;
-        return dirKeys[worldIndex];
+        let yaw = this.dungeon ? this.dungeon.yaw : 0;
+        let normYaw = (yaw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        const cameraFacingSector = Math.round(normYaw / (Math.PI / 4)) % 8;
+        const targetWorldSector = (cameraFacingSector + localIndex) % 8;
+        return dirKeys[targetWorldSector];
     }
 
     setupActionButtons() {
         const bind = (id, key) => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.addEventListener('click', () => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', () => {
                     if (this.audio) this.audio.unlock();
                     if (key === 'attack') {
                         this.dungeon.triggerAttackAnimation();
-                        if (this.audio) this.audio.playHit();
+                        if (this.audio) this.audio.playWhoosh();
                         this.network.sendKey('enter');
                     } else if (key === 'tab') {
                         if (this.toggleTerminalView) this.toggleTerminalView();
                     } else {
+                        if (this.audio) {
+                            if (key === 'm') this.audio.playSpell();
+                            else if (key === 'i' || key === 'e') this.audio.playMenuOpen();
+                            else if (key === 'g') this.audio.playItemPickup();
+                        }
                         this.network.sendKey(key);
                     }
                 });
@@ -244,28 +426,24 @@ class InputController {
         bindTouch('dpad-up', () => {
             const key = this.getRelativeDirectionKey(8);
             if (key) this.network.sendKey(key);
-            if (this.audio) this.audio.playFootstep();
         });
 
         bindTouch('dpad-down', () => {
             const key = this.getRelativeDirectionKey(2);
             if (key) this.network.sendKey(key);
-            if (this.audio) this.audio.playFootstep();
         });
 
         bindTouch('dpad-left', () => {
             this.dungeon.turn(-1);
-            if (this.audio) this.audio.playFootstep();
         });
 
         bindTouch('dpad-right', () => {
             this.dungeon.turn(1);
-            if (this.audio) this.audio.playFootstep();
         });
 
         bindTouch('dpad-center', () => {
             this.dungeon.triggerAttackAnimation();
-            if (this.audio) this.audio.playHit();
+            if (this.audio) this.audio.playWhoosh();
             this.network.sendKey('enter');
         });
     }

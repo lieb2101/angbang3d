@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..d7630666f
+index 000000000..14be05d2a
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,1173 @@
+@@ -0,0 +1,1207 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -276,6 +276,7 @@ index 000000000..d7630666f
 +#include "ui-output.h"
 +#include "ui-term.h"
 +#include "bridge-json.h"
++#include "savefile.h"
 +#include "z-color.h"
 +
 +#ifdef USE_BRIDGE
@@ -836,6 +837,12 @@ index 000000000..d7630666f
 +			flags |= ((unsigned)g.lighting & 0x3) << 2;
 +
 +			feat = (unsigned)g.f_idx & 0xff;
++			if (feat == FEAT_NONE && cave && (cave->depth == 0 || g.in_view)) {
++				uint32_t real_feat = square(cave, grid)->feat;
++				if (f_info[real_feat].mimic)
++					real_feat = (uint32_t)(f_info[real_feat].mimic - f_info);
++				feat = (unsigned)real_feat & 0xff;
++			}
 +
 +			row_glyph[x] = c;
 +			row_attr[x * 2]     = hex_digits[((unsigned)a >> 4) & 0xf];
@@ -1275,6 +1282,16 @@ index 000000000..d7630666f
 +		return 0;
 +	}
 +
++	if (streq(cmd, "save")) {
++		if (bridge_in_play() && savefile[0]) {
++			bool ok = savefile_save(savefile);
++			emit_event("ok", ok ? "saved" : "save_failed");
++		} else {
++			emit_event("error", "not in play");
++		}
++		return 0;
++	}
++
 +	if (cmd[0] == '#') return 0;
 +
 +	emit_event("error", "unknown command");
@@ -1383,6 +1400,23 @@ index 000000000..d7630666f
 +	 * fork rebasable.
 +	 */
 +	create_needed_dirs();
++
++	/*
++	 * If starting a new game (-n), remove any stale panic save for this savefile
++	 * so start_game() in ui-game.c does not get stuck prompting "A panic save exists. Use it?".
++	 */
++	if (savefile[0]) {
++		for (i = 1; i < argc; i++) {
++			if (streq(argv[i], "-n")) {
++				char pbuf[1024];
++				savefile_get_panic_name(pbuf, sizeof(pbuf), savefile);
++				if (pbuf[0] && file_exists(pbuf)) {
++					file_delete(pbuf);
++				}
++				break;
++			}
++		}
++	}
 +
 +	term_data_link(0);
 +

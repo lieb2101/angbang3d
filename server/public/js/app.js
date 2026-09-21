@@ -31,10 +31,11 @@ window.addEventListener('DOMContentLoaded', () => {
     if (quickBirthBtn) {
         quickBirthBtn.addEventListener('click', () => {
             if (audio) audio.unlock();
-            // Advance past splash screen if needed, trigger quick-roll '@' and confirm
+            // 4-step birth pipeline: Splash (Enter) -> Trait choice (@) -> Random hero (@) -> Enter Town (space)
             network.sendKey('enter');
-            setTimeout(() => network.sendKey('@'), 120);
-            setTimeout(() => network.sendKey('enter'), 300);
+            setTimeout(() => network.sendKey('@'), 500);
+            setTimeout(() => network.sendKey('@'), 1200);
+            setTimeout(() => network.sendKey('space'), 2000);
         });
     }
 
@@ -42,7 +43,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (termAdvanceBtn) {
         termAdvanceBtn.addEventListener('click', () => {
             if (audio) audio.unlock();
-            network.sendKey('enter');
+            network.sendKey('space');
+            setTimeout(() => network.sendKey('enter'), 100);
         });
     }
 
@@ -50,18 +52,39 @@ window.addEventListener('DOMContentLoaded', () => {
     if (termEscapeBtn) {
         termEscapeBtn.addEventListener('click', () => {
             if (audio) audio.unlock();
-            network.sendKey('escape');
+            if (forceTerminal) {
+                toggleTerminalView();
+            } else {
+                network.sendKey('escape');
+            }
         });
     }
 
+    dungeon.audio = audio;
+    hud.audio = audio;
+
     const input = new InputController(network, dungeon, terminal, audio, toggleTerminalView);
+    window.__app = {
+        network,
+        dungeon,
+        hud,
+        terminal,
+        input,
+        audio,
+        isForceTerminal: () => forceTerminal,
+        setForceTerminal: (val) => { forceTerminal = val; updateViewMode(); },
+        toggleTerminalView
+    };
 
     let lastFrame = null;
 
     function needsTerminal(frame) {
         if (!frame) return true;
-        if (forceTerminal) return true;
+        // Non-play phases (setup, menus, panic save prompts, birth) MUST route to the terminal!
         if ((frame.phase || currentPhase) !== 'play') return true;
+        // During active play, if the player is dead, the atmospheric death modal handles death presentation
+        if (frame.player && frame.player.dead) return false;
+        if (forceTerminal) return true;
         const ui = frame.ui;
         if (!ui) return false;
         if ((ui.overlay || 0) > 0) return true;
@@ -93,11 +116,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
     network.onFrame = (frame) => {
         lastFrame = frame;
+        if (window.__app) window.__app.lastFrame = frame;
         currentPhase = frame.phase || 'play';
 
         // Check if player died
         if (frame.player && frame.player.dead) {
             if (audio) audio.playDeathBell();
+        } else if (frame.player && frame.player.hp !== undefined && frame.player.hp_max) {
+            if (frame.player.hp / frame.player.hp_max <= 0.25) {
+                if (audio) audio.playLowHpWarning();
+            }
         }
 
         const showTerm = needsTerminal(frame);
@@ -109,7 +137,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
         // Render 3D Dungeon World whenever in play phase with valid map
         if (currentPhase === 'play' && frame.map && frame.player) {
-            dungeon.updateDungeon(frame);
+            try {
+                dungeon.updateDungeon(frame);
+            } catch (err) {
+                console.error('[Dungeon3D Error]', err);
+            }
         }
 
         // Update HUD
@@ -132,6 +164,9 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // 3. Connect to cloud engine
-    network.connect('Hero');
+    // 3. Connect to cloud engine (support ?char= query param and ?new=1 for clean birth)
+    const urlParams = new URLSearchParams(window.location.search);
+    const charName = urlParams.get('char') || 'Adventurer';
+    const isNew = urlParams.get('new') === '1' || urlParams.get('reroll') === '1';
+    network.connect(charName, isNew);
 });

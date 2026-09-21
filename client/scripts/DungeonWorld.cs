@@ -135,6 +135,12 @@ public partial class DungeonWorld : Node3D
     private int _lastPlayerHp = -1;
     private int _lastPlayerMaxHp = -1;
     private bool _stepPlayedThisMove;
+    private int _lastPoisoned = 0;
+    private int _lastConfused = 0;
+    private int _lastBlind = 0;
+    private int _lastParalyzed = 0;
+    private int _lastAfraid = 0;
+    private int _lastFood = 9999;
 
     private class CombatFloater
     {
@@ -1974,6 +1980,44 @@ void fragment() {
             _lastPlayerMaxHp = curMaxHp;
         }
 
+        // Status condition audio warnings
+        if (player.TryGetProperty("poisoned", out var psnProp))
+        {
+            var psn = psnProp.GetInt32();
+            if (psn > 0 && _lastPoisoned <= 0) AudioManager.Play(SoundEffect.Poison);
+            _lastPoisoned = psn;
+        }
+        if (player.TryGetProperty("confused", out var cnfProp))
+        {
+            var cnf = cnfProp.GetInt32();
+            if (cnf > 0 && _lastConfused <= 0) AudioManager.Play(SoundEffect.Confused);
+            _lastConfused = cnf;
+        }
+        if (player.TryGetProperty("blind", out var blnProp))
+        {
+            var bln = blnProp.GetInt32();
+            if (bln > 0 && _lastBlind <= 0) AudioManager.Play(SoundEffect.Blind);
+            _lastBlind = bln;
+        }
+        if (player.TryGetProperty("paralyzed", out var przProp))
+        {
+            var prz = przProp.GetInt32();
+            if (prz > 0 && _lastParalyzed <= 0) AudioManager.Play(SoundEffect.Paralyzed);
+            _lastParalyzed = prz;
+        }
+        if (player.TryGetProperty("afraid", out var afrProp))
+        {
+            var afr = afrProp.GetInt32();
+            if (afr > 0 && _lastAfraid <= 0) AudioManager.Play(SoundEffect.Afraid);
+            _lastAfraid = afr;
+        }
+        if (player.TryGetProperty("food", out var fdProp))
+        {
+            var fd = fdProp.GetInt32();
+            if (fd < 200 && _lastFood >= 200) AudioManager.Play(SoundEffect.Hunger);
+            _lastFood = fd;
+        }
+
         RebuildEntities(frame);
         _viewModel?.UpdateEquipment(player, depth, CurrentHeightRatio);
         ProcessCombatEvents(frame);
@@ -3225,6 +3269,7 @@ void fragment() {
             {
                 // Attacking creature faces player immediately and triggers attack animation/lunge
                 MonsterModelResolver.TriggerAttackAction(attacker, _targetPos);
+                PlayMonsterVocal(attacker.Glyph);
             }
             else
             {
@@ -3238,6 +3283,7 @@ void fragment() {
                         if (toP.LengthSquared() <= (Cell * 1.6f) * (Cell * 1.6f) && toP.LengthSquared() > 0.001f)
                         {
                             MonsterModelResolver.TriggerAttackAction(m, _targetPos);
+                            PlayMonsterVocal(m.Glyph);
                         }
                     }
                 }
@@ -3252,7 +3298,11 @@ void fragment() {
         {
             AddTrauma(0.40f);
             _viewModel?.TriggerHurt();
-            AudioManager.Play(SoundEffect.PlayerHurt);
+            if (lower.Contains("burns") || lower.Contains("fire")) AudioManager.Play(SoundEffect.SpellFire);
+            else if (lower.Contains("frost") || lower.Contains("cold")) AudioManager.Play(SoundEffect.SpellCold);
+            else if (lower.Contains("lightning") || lower.Contains("elec")) AudioManager.Play(SoundEffect.SpellLightning);
+            else if (lower.Contains("poison") || lower.Contains("acid")) AudioManager.Play(SoundEffect.SpellPoison);
+            else AudioManager.Play(SoundEffect.PlayerHurt);
             var hitPos = _targetPos + forward * 0.8f + (GD.Randf() > 0.5f ? right * 0.3f : -right * 0.3f);
             SpawnFloatingText("OUCH!", hitPos, new Color(1.0f, 0.30f, 0.30f), 1.1f);
             SpawnHitSparks(hitPos, -forward, new Color(0.9f, 0.2f, 0.2f), 14);
@@ -3285,7 +3335,11 @@ void fragment() {
         else if (lower.Contains("you cast") || lower.Contains("you zap") || lower.Contains("you aim") || lower.Contains("you recite"))
         {
             _viewModel?.TriggerCast();
-            AudioManager.Play(SoundEffect.SpellCast);
+            if (lower.Contains("fire") || lower.Contains("flame")) AudioManager.Play(SoundEffect.SpellFire);
+            else if (lower.Contains("frost") || lower.Contains("cold") || lower.Contains("ice")) AudioManager.Play(SoundEffect.SpellCold);
+            else if (lower.Contains("lightning") || lower.Contains("elec") || lower.Contains("spark")) AudioManager.Play(SoundEffect.SpellLightning);
+            else if (lower.Contains("poison") || lower.Contains("acid") || lower.Contains("stinking")) AudioManager.Play(SoundEffect.SpellPoison);
+            else AudioManager.Play(SoundEffect.SpellCast);
 
             Color spellCol;
             if (lower.Contains("fire") || lower.Contains("flame")) spellCol = new Color(1.0f, 0.45f, 0.10f);
@@ -3341,6 +3395,69 @@ void fragment() {
             AudioManager.Play(SoundEffect.MeleeSwing);
             SpawnFloatingText("MISS", spawnInFront, new Color(0.70f, 0.72f, 0.78f), 0.9f);
         }
+        // Defense / Block / Deflect
+        else if (lower.Contains("you block") || lower.Contains("blocks your") || lower.Contains("parr"))
+        {
+            AudioManager.Play(SoundEffect.ShieldBlock);
+            SpawnFloatingText("BLOCKED", spawnInFront, new Color(0.85f, 0.85f, 0.90f), 1.0f);
+        }
+        else if (lower.Contains("deflect") || lower.Contains("glances off"))
+        {
+            AudioManager.Play(SoundEffect.ArmorDeflect);
+            SpawnFloatingText("DEFLECTED", spawnInFront, new Color(0.80f, 0.82f, 0.88f), 0.9f);
+        }
+        // Wall bump / Obstacle
+        else if (lower.Contains("there is a wall") || lower.Contains("door is closed") || lower.Contains("cannot move into"))
+        {
+            AudioManager.Play(SoundEffect.WallBump);
+            AddTrauma(0.08f);
+        }
+        // Consumables: Potion, Scroll, Food
+        else if (lower.Contains("you drink") || lower.Contains("you quaff"))
+        {
+            AudioManager.Play(SoundEffect.Quaff);
+            SpawnFloatingText("QUAFF", spawnInFront, new Color(0.40f, 0.85f, 1.0f), 1.0f);
+        }
+        else if (lower.Contains("you read a scroll") || lower.Contains("you recite"))
+        {
+            AudioManager.Play(SoundEffect.Scroll);
+            SpawnFloatingText("READ", spawnInFront, new Color(1.0f, 0.90f, 0.50f), 1.0f);
+        }
+        else if (lower.Contains("you eat") || lower.Contains("delicious") || lower.Contains("ration of food") || lower.Contains("feed on"))
+        {
+            AudioManager.Play(SoundEffect.Eat);
+            SpawnFloatingText("EAT", spawnInFront, new Color(0.95f, 0.70f, 0.30f), 1.0f);
+        }
+        // Environment: Chest, Traps, Teleport
+        else if (lower.Contains("chest") && (lower.Contains("open") || lower.Contains("unlock")))
+        {
+            AudioManager.Play(SoundEffect.ChestOpen);
+        }
+        else if (lower.Contains("disarm") && lower.Contains("trap"))
+        {
+            AudioManager.Play(SoundEffect.TrapDisarm);
+            SpawnFloatingText("DISARMED", spawnInFront, new Color(0.40f, 1.0f, 0.60f), 1.0f);
+        }
+        else if (lower.Contains("triggers a trap") || lower.Contains("springs a trap") || lower.Contains("you are caught in a trap"))
+        {
+            AudioManager.Play(SoundEffect.TrapTrigger);
+            AddTrauma(0.25f);
+            SpawnFloatingText("TRAP!", spawnInFront, new Color(1.0f, 0.30f, 0.30f), 1.2f);
+        }
+        else if (lower.Contains("teleport") || lower.Contains("blink") || lower.Contains("phase door"))
+        {
+            AudioManager.Play(SoundEffect.Teleport);
+            SpawnFloatingText("TELEPORT", spawnInFront, new Color(0.75f, 0.40f, 1.0f), 1.2f);
+        }
+        // Pickups: Gold vs Items
+        else if (lower.Contains("gold") || lower.Contains("coins") || lower.Contains("pieces of"))
+        {
+            AudioManager.Play(SoundEffect.GoldPickup);
+        }
+        else if (lower.Contains("you see") || lower.Contains("you have found") || lower.Contains("you pick up"))
+        {
+            AudioManager.Play(SoundEffect.ItemPickup);
+        }
         // Monster slain / destroyed
         else if (lower.Contains("you have slain") || lower.Contains("is destroyed") || lower.Contains("dies."))
         {
@@ -3361,6 +3478,34 @@ void fragment() {
         {
             AudioManager.Play(SoundEffect.DoorBreak);
             AddTrauma(0.20f);
+        }
+    }
+
+    private static void PlayMonsterVocal(char glyph)
+    {
+        switch (glyph)
+        {
+            case 'o': case 'T': case 'k': case 'C': case 'Z':
+                AudioManager.Play(SoundEffect.MonsterGrowl);
+                break;
+            case 's': case 'R': case 'H': case 'J': case 'n':
+                AudioManager.Play(SoundEffect.MonsterHiss);
+                break;
+            case 'G': case 'W': case 'V': case 'L': case 'v': case 'M':
+                AudioManager.Play(SoundEffect.GhostWail);
+                break;
+            case 'd': case 'D': case 'U': case 'B':
+                AudioManager.Play(SoundEffect.DragonRoar);
+                break;
+            case 'r': case 'b':
+                AudioManager.Play(SoundEffect.RodentSqueak);
+                break;
+            case 'S': case 'I': case 'a':
+                AudioManager.Play(SoundEffect.InsectChitin);
+                break;
+            default:
+                AudioManager.Play(SoundEffect.MonsterGrunt);
+                break;
         }
     }
 

@@ -56,10 +56,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const input = new InputController(network, dungeon, terminal, audio, toggleTerminalView);
 
-    function updateViewMode() {
-        // View routing matching Godot NeedsTerminal(frame):
-        // If phase !== "play" OR ui.overlay > 0 OR forceTerminal -> show Terminal
-        const needsTerm = forceTerminal || (currentPhase !== 'play');
+    let lastFrame = null;
+
+    function needsTerminal(frame) {
+        if (!frame) return true;
+        if (forceTerminal) return true;
+        if ((frame.phase || currentPhase) !== 'play') return true;
+        const ui = frame.ui;
+        if (!ui) return false;
+        if ((ui.overlay || 0) > 0) return true;
+        return !ui.awaiting_command && !ui.more;
+    }
+
+    function updateViewMode(frame) {
+        const needsTerm = needsTerminal(frame || lastFrame);
         if (needsTerm) {
             terminalContainer.classList.remove('hidden');
             input.setTerminalMode(true);
@@ -82,6 +92,7 @@ window.addEventListener('DOMContentLoaded', () => {
     };
 
     network.onFrame = (frame) => {
+        lastFrame = frame;
         currentPhase = frame.phase || 'play';
 
         // Check if player died
@@ -89,13 +100,15 @@ window.addEventListener('DOMContentLoaded', () => {
             if (audio) audio.playDeathBell();
         }
 
+        const showTerm = needsTerminal(frame);
+
         // Render Terminal if active or in setup phase
-        if (frame.term && (currentPhase !== 'play' || forceTerminal || (frame.ui && frame.ui.overlay > 0))) {
+        if (frame.term && (showTerm || currentPhase !== 'play')) {
             terminal.render(frame.term);
         }
 
-        // Render 3D Dungeon World if in play
-        if (currentPhase === 'play' && frame.map) {
+        // Render 3D Dungeon World whenever in play phase with valid map
+        if (currentPhase === 'play' && frame.map && frame.player) {
             dungeon.updateDungeon(frame);
         }
 
@@ -103,7 +116,7 @@ window.addEventListener('DOMContentLoaded', () => {
         hud.update(frame);
 
         // Update View Mode Visibility
-        updateViewMode();
+        updateViewMode(frame);
     };
 
     network.onBye = (detail) => {

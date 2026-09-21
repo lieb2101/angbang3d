@@ -2363,44 +2363,11 @@ void fragment() {
                 var feat = (AngbandColors.HexVal(feats[x * 2]) << 4) | AngbandColors.HexVal(feats[x * 2 + 1]);
                 var kind = KindOf(feat);
 
-                // Handle unmapped/unexplored dark space (FEAT_NONE or not known and not in view).
-                // If this tile borders known/inView walkable or portal space, seal the perimeter
-                // by rendering it as a dark solid boundary wall to prevent see-through voids into the unmapped world.
+                // Unexplored dark space (not known and not in view) or skip tiles must NOT be rendered.
+                // True fog-of-war: open unexplored areas remain pure darkness fading into fog.
                 if (kind == Kind.Skip || (!known && !inView))
                 {
-                    bool bordersExplored = false;
-                    for (int dy = -1; dy <= 1 && !bordersExplored; dy++)
-                    {
-                        for (int dx = -1; dx <= 1 && !bordersExplored; dx++)
-                        {
-                            if (dx == 0 && dy == 0) continue;
-                            var nx = x + dx;
-                            var ny = y + dy;
-                            if (nx >= 0 && nx < w && ny >= 0 && ny < h)
-                            {
-                                var nflag = FlagAt(map, nx, ny);
-                                if ((nflag & 0x3) != 0)
-                                {
-                                    var nkind = KindOf(FeatAt(map, nx, ny));
-                                    if (IsWalkableOrPortal(nkind))
-                                    {
-                                        bordersExplored = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (!bordersExplored)
-                    {
-                        continue;
-                    }
-
-                    // Render as dark solid boundary wall to occlude void and background features
-                    kind = Kind.Wall;
-                    known = true;
-                    inView = false;
-                    lighting = 3;
+                    continue;
                 }
 
                 if (!_outdoors)

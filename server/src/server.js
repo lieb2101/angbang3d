@@ -353,6 +353,9 @@ wss.on('connection', (ws, request) => {
 
     console.log(`[WebSocket] Client connected. User: ${user || 'default'}, Save: ${save || 'none'}`);
 
+    const sessionId = Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+    ws.send(JSON.stringify({ t: 'hello', sessionId, version: '1.0.0' }));
+
     if (!fs.existsSync(ENGINE_EXE)) {
         ws.send(JSON.stringify({
             t: 'bye',
@@ -375,6 +378,11 @@ wss.on('connection', (ws, request) => {
         env: {
             ...process.env,
             ANGBAND_PATH: path.join(engineDir, 'lib'),
+            LANG: process.env.LANG || 'C.UTF-8',
+            LC_ALL: process.env.LC_ALL || 'C.UTF-8',
+            LC_CTYPE: 'C.UTF-8',
+            TERM: 'xterm-256color',
+            HOME: process.env.HOME || '/app',
         },
         stdio: ['pipe', 'pipe', 'pipe']
     });
@@ -415,6 +423,18 @@ wss.on('connection', (ws, request) => {
 
     ws.on('message', message => {
         const str = message.toString();
+        // Respond immediately to latency heartbeat pings
+        if (str.startsWith('{')) {
+            try {
+                const parsed = JSON.parse(str);
+                if (parsed.t === 'ping') {
+                    if (ws.readyState === ws.OPEN) {
+                        ws.send(JSON.stringify({ t: 'pong', time: parsed.time }));
+                    }
+                    return;
+                }
+            } catch (_) {}
+        }
         // Client sends command line e.g. "key left" or "frame"
         if (child.stdin && child.stdin.writable) {
             child.stdin.write(str.trim() + '\n');

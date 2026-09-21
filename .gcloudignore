@@ -9,5 +9,5 @@ node_modules/
 server/node_modules/
 *.zip
 *.exe
-*.png
 *.log
+!server/public/**

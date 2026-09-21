@@ -1,19 +1,419 @@
 /**
  * Angband3D WebGL Renderer — High-Fidelity Three.js 3D Dungeon Crawler
  * Features:
- * - 1:1 Parity with Godot C# client's wire protocol (decodes 2-hex map.rows[y].f and hex map.rows[y].l)
- * - Authentic 2K PBR stone, uneven brick, rock trim, and wood trim textures with normal & roughness maps
+ * - 1:1 Parity with Godot C# client's wire protocol and procedural textures (DungeonWorld.cs)
+ * - Built-in zero-latency procedural PBR texture generation matching Godot client:
+ *   - Stone wall textures with chiseled bevel lighting, dark mortar joints, block hue variation & normal maps
+ *   - Flagstone floor textures with worn centers, mortar seams & normal maps
+ *   - Subterranean rock ceiling textures & normal maps
+ *   - Forged iron reinforced wooden door textures & normal maps
+ *   - Half-timbered shop facades & 8 distinct Heraldic Shop Entrance doors with gilded rims & gold digits (1-8)
+ *   - Magma fissures with pulsating incandescent veins & quartz crystal seams
+ * - High-res 2K PBR texture streaming overlay from server assets
  * - Dynamic Town vs Subterranean Lighting:
- *   - Town (depth 0): Open daylight sky, Directional Sunlight (intensity 1.35), broad horizon, NO ceiling!
- *   - Dungeon (depth > 0): Pitch-black void, atmospheric depth fog, ceilings over tunnels, warm torchlight!
+ *   - Town (depth 0): Open daylight sky, Directional Sunlight (1.35), broad horizon, NO ceiling over streets!
+ *   - Dungeon (depth > 0): True subterranean darkness, atmospheric depth fog, ceilings over tunnels, warm torchlight!
  * - Equipment Rule Parity with Godot ViewModel.cs:
- *   - Carrying a torch in the light slot illuminates the player without cluttering their hands!
+ *   - Carrying a torch in the light slot illuminates the player without occupying their hands!
  *   - Left hand ONLY shows an equipped shield or wielded torch weapon. Empty by default!
  *   - Right hand ONLY shows an equipped melee weapon or bow, tucked cleanly in lower corner. Empty if unarmed!
  * - High-DPI 512x512 Runic Monster Medallions with health bars, glyphs, and nameplates
- * - Distinct 3D pickups (Gold stacks, Potions, Scrolls, Weapons, Rings) with hovering bobbing kinematics
+ * - 3D Item Pickups (Gold stacks, Potions, Scrolls, Weapons, Rings, Chests) with hovering bobbing kinematics
  * - 1:1 Camera Facing and Turning (0=North, 1=East, 2=South, 3=West) with smooth spring yaw rotation
  */
+
+// ==============================================================================
+// 1. Procedural Texture Engine (Exact Mathematical Parity with Godot C# DungeonWorld.cs)
+// ==============================================================================
+
+function procHash(x, y, seed = 0) {
+    let n = (x + y * 57 + seed * 131) | 0;
+    n = ((n << 13) ^ n) | 0;
+    const inner = (Math.imul(Math.imul(n, n), 15731) + 789221) | 0;
+    const val = (Math.imul(n, inner) + 1376312589) & 0x7fffffff;
+    return (1.0 - val / 1073741824.0) * 0.5 + 0.5;
+}
+
+function procSmoothNoise(x, y, seed = 0) {
+    const x0 = Math.floor(x) | 0;
+    const y0 = Math.floor(y) | 0;
+    const x1 = (x0 + 1) | 0;
+    const y1 = (y0 + 1) | 0;
+    const fx = x - x0;
+    const fy = y - y0;
+    const sx = fx * fx * (3.0 - 2.0 * fx);
+    const sy = fy * fy * (3.0 - 2.0 * fy);
+    const n00 = procHash(x0, y0, seed);
+    const n10 = procHash(x1, y0, seed);
+    const n01 = procHash(x0, y1, seed);
+    const n11 = procHash(x1, y1, seed);
+    const nx0 = n00 + (n10 - n00) * sx;
+    const nx1 = n01 + (n11 - n01) * sx;
+    return nx0 + (nx1 - nx0) * sy;
+}
+
+function procFractalNoise(x, y, octaves = 3, seed = 0) {
+    let value = 0;
+    let amplitude = 0.5;
+    let frequency = 1.0;
+    let maxVal = 0;
+    for (let i = 0; i < octaves; i++) {
+        value += procSmoothNoise(x * frequency, y * frequency, seed + i * 37) * amplitude;
+        maxVal += amplitude;
+        frequency *= 2.0;
+        amplitude *= 0.5;
+    }
+    return value / maxVal;
+}
+
+function procCreateTexture(size, pixelFunc) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(size, size);
+    const data = imgData.data;
+    let idx = 0;
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const col = pixelFunc(x, y);
+            data[idx++] = Math.min(255, Math.max(0, (col[0] * 255 + 0.5) | 0));
+            data[idx++] = Math.min(255, Math.max(0, (col[1] * 255 + 0.5) | 0));
+            data[idx++] = Math.min(255, Math.max(0, (col[2] * 255 + 0.5) | 0));
+            data[idx++] = Math.min(255, Math.max(0, (col[3] !== undefined ? col[3] * 255 + 0.5 : 255) | 0));
+        }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+}
+
+const DIGIT_PATTERNS = [
+    // 1
+    [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
+    // 2
+    [0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111],
+    // 3
+    [0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110],
+    // 4
+    [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010],
+    // 5
+    [0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110],
+    // 6
+    [0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110],
+    // 7
+    [0b11111, 0b00001, 0b00010, 0b00100, 0b00100, 0b01000, 0b01000],
+    // 8
+    [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110]
+];
+
+function procStoreColor(shopNum) {
+    switch (shopNum) {
+        case 1: return [1.0, 0.88, 0.35]; // General Store: Warm Gold
+        case 2: return [0.70, 0.90, 1.0];  // Armoury: Steel Cyan
+        case 3: return [1.0, 0.60, 0.35];  // Weaponsmith: Fiery Orange
+        case 4: return [0.55, 0.95, 0.65]; // Bookseller: Jade Green
+        case 5: return [0.40, 1.0, 0.85];  // Alchemy: Mystic Emerald
+        case 6: return [0.85, 0.65, 1.0];  // Magic: Arcane Violet
+        case 7: return [1.0, 0.45, 0.65];  // Black Market: Crimson Rose
+        case 8: return [1.0, 0.95, 0.70];  // Home: Cozy Amber
+        default: return [1.0, 0.90, 0.50];
+    }
+}
+
+function procCreateStoneWallTexture() {
+    const size = 512;
+    const rowHeight = 256;
+    const halfRow = 128;
+    return procCreateTexture(size, (x, y) => {
+        const row = Math.floor(y / rowHeight);
+        const yInRow = y % rowHeight;
+        const distY = Math.min(yInRow, rowHeight - 1 - yInRow);
+        const xOff = (row % 2 === 1) ? halfRow : 0;
+        const xInRow = (x + size - xOff) % rowHeight;
+        const distX = Math.min(xInRow, rowHeight - 1 - xInRow);
+        const mortarDist = Math.min(distX, distY);
+
+        if (mortarDist <= 8) {
+            const mn = procSmoothNoise(x * 0.125, y * 0.125, 101) * 0.04 - 0.02;
+            return [0.12 + mn, 0.12 + mn, 0.14 + mn];
+        }
+
+        const blockId = row * 2 + Math.floor((x + size - xOff) / rowHeight);
+        const blockHue = procHash(blockId, 0, 77);
+        const rBase = 0.44 + (blockHue - 0.5) * 0.05;
+        const gBase = 0.44 + (blockHue - 0.5) * 0.04;
+        const bBase = 0.46 + (0.5 - blockHue) * 0.04;
+
+        const bevelX = (xInRow < halfRow) ? (xInRow - 8) / 32.0 : (rowHeight - 9 - xInRow) / 32.0;
+        const bevelY = (yInRow < halfRow) ? (yInRow - 8) / 32.0 : (rowHeight - 9 - yInRow) / 32.0;
+        const bevel = Math.max(0, Math.min(1.0, Math.min(bevelX, bevelY)));
+        const lightGradient = ((halfRow - xInRow) + (halfRow - yInRow)) * 0.0004;
+
+        const grain = (procSmoothNoise(x * 0.06, y * 0.06, 1) - 0.5) * 0.08;
+        const microGrain = (procSmoothNoise(x * 0.18, y * 0.18, 2) - 0.5) * 0.04;
+        const chisel = (procSmoothNoise(x * 0.18, y * 0.04, 14) - 0.5) * 0.03;
+
+        const r = Math.max(0, Math.min(1, rBase * (0.80 + bevel * 0.20) + lightGradient + grain + microGrain + chisel));
+        const g = Math.max(0, Math.min(1, gBase * (0.80 + bevel * 0.20) + lightGradient + grain + microGrain + chisel));
+        const b = Math.max(0, Math.min(1, bBase * (0.80 + bevel * 0.20) + lightGradient + grain + microGrain + chisel));
+        return [r, g, b];
+    });
+}
+
+function procCreateStoneWallNormal() {
+    const size = 512;
+    const rowHeight = 256;
+    const halfRow = 128;
+    return procCreateTexture(size, (x, y) => {
+        const row = Math.floor(y / rowHeight);
+        const yInRow = y % rowHeight;
+        const distY = Math.min(yInRow, rowHeight - 1 - yInRow);
+        const xOff = (row % 2 === 1) ? halfRow : 0;
+        const xInRow = (x + size - xOff) % rowHeight;
+        const distX = Math.min(xInRow, rowHeight - 1 - xInRow);
+        const mortarDist = Math.min(distX, distY);
+
+        if (mortarDist <= 8) return [0.5, 0.5, 1.0];
+
+        let dx = (xInRow < halfRow) ? (1.0 - xInRow / 32.0) : -(1.0 - (rowHeight - 1 - xInRow) / 32.0);
+        let dy = (yInRow < halfRow) ? (1.0 - yInRow / 32.0) : -(1.0 - (rowHeight - 1 - yInRow) / 32.0);
+        dx = Math.max(-1, Math.min(1, dx));
+        dy = Math.max(-1, Math.min(1, dy));
+
+        const microBump = (procSmoothNoise(x * 0.08, y * 0.08, 50) - 0.5) * 0.15;
+        const fineBump = (procSmoothNoise(x * 0.22, y * 0.22, 51) - 0.5) * 0.08;
+        const nx = (dx + microBump + fineBump) * 0.55;
+        const ny = -(dy + microBump + fineBump) * 0.55;
+        const nz = 1.0;
+        const len = Math.hypot(nx, ny, nz);
+        return [nx / len * 0.5 + 0.5, ny / len * 0.5 + 0.5, nz / len * 0.5 + 0.5];
+    });
+}
+
+function procCreateFloorTexture() {
+    const size = 512;
+    const tileSize = 256;
+    return procCreateTexture(size, (x, y) => {
+        const tileX = Math.floor(x / tileSize);
+        const tileY = Math.floor(y / tileSize);
+        const inTileX = x % tileSize;
+        const inTileY = y % tileSize;
+        const distX = Math.min(inTileX, tileSize - 1 - inTileX);
+        const distY = Math.min(inTileY, tileSize - 1 - inTileY);
+        const mortarDist = Math.min(distX, distY);
+
+        if (mortarDist <= 8) {
+            const mn = procSmoothNoise(x * 0.125, y * 0.125, 202) * 0.03 - 0.015;
+            return [0.10 + mn, 0.10 + mn, 0.11 + mn];
+        }
+
+        const tileId = tileY * 2 + tileX;
+        const tileHue = procHash(tileId, 0, 99);
+        const rBase = 0.38 + (tileHue - 0.5) * 0.04;
+        const gBase = 0.39 + (tileHue - 0.5) * 0.03;
+        const bBase = 0.41 + (0.5 - tileHue) * 0.03;
+
+        const bevel = Math.max(0.75, Math.min(1.0, (mortarDist - 8) / 32.0));
+        const grain = (procSmoothNoise(x * 0.06, y * 0.06, 3) - 0.5) * 0.06;
+        const microGrain = (procSmoothNoise(x * 0.18, y * 0.18, 4) - 0.5) * 0.03;
+
+        const r = Math.max(0, Math.min(1, rBase * bevel + grain + microGrain));
+        const g = Math.max(0, Math.min(1, gBase * bevel + grain + microGrain));
+        const b = Math.max(0, Math.min(1, bBase * bevel + grain + microGrain));
+        return [r, g, b];
+    });
+}
+
+function procCreateFloorNormal() {
+    const size = 512;
+    const tileSize = 256;
+    return procCreateTexture(size, (x, y) => {
+        const inTileX = x % tileSize;
+        const inTileY = y % tileSize;
+        const distX = Math.min(inTileX, tileSize - 1 - inTileX);
+        const distY = Math.min(inTileY, tileSize - 1 - inTileY);
+        const mortarDist = Math.min(distX, distY);
+
+        if (mortarDist <= 8) return [0.5, 0.5, 1.0];
+
+        let dx = (inTileX < tileSize / 2) ? (1.0 - inTileX / 36.0) : -(1.0 - (tileSize - 1 - inTileX) / 36.0);
+        let dy = (inTileY < tileSize / 2) ? (1.0 - inTileY / 36.0) : -(1.0 - (tileSize - 1 - inTileY) / 36.0);
+        dx = Math.max(-1, Math.min(1, dx));
+        dy = Math.max(-1, Math.min(1, dy));
+
+        const microBump = (procSmoothNoise(x * 0.08, y * 0.08, 52) - 0.5) * 0.12;
+        const nx = (dx + microBump) * 0.45;
+        const ny = -(dy + microBump) * 0.45;
+        const nz = 1.0;
+        const len = Math.hypot(nx, ny, nz);
+        return [nx / len * 0.5 + 0.5, ny / len * 0.5 + 0.5, nz / len * 0.5 + 0.5];
+    });
+}
+
+function procCreateShopDoorTexture(shopNum, heraldicColor) {
+    const size = 512;
+    const plankWidth = 128;
+    const pattern = (shopNum >= 1 && shopNum <= 8) ? DIGIT_PATTERNS[shopNum - 1] : null;
+
+    return procCreateTexture(size, (x, y) => {
+        const plankIdx = Math.floor(x / plankWidth);
+        const inPlankX = x % plankWidth;
+        const seamDist = Math.min(inPlankX, plankWidth - 1 - inPlankX);
+
+        // Horizontal forged-iron reinforcement straps
+        const isIronStrap = (y >= 88 && y <= 124) || (y >= 388 && y <= 424);
+        if (isIronStrap) {
+            const rivetX = inPlankX - plankWidth / 2;
+            const rivetY = (y < 200) ? (y - 106) : (y - 406);
+            const isRivet = rivetX * rivetX + rivetY * rivetY <= 64;
+            if (isRivet) return [0.48, 0.48, 0.52];
+            const ironGrain = (procSmoothNoise(x * 0.1, y * 0.1, 31) - 0.5) * 0.04;
+            return [0.20 + ironGrain, 0.20 + ironGrain, 0.22 + ironGrain];
+        }
+
+        // Central Emblazoned Heraldic Shield at (256, 256)
+        const dx = x - 256;
+        const dy = y - 256;
+        const absDx = Math.abs(dx);
+
+        const inShield = (dy >= -92 && dy <= 0 && absDx <= 88) ||
+                         (dy > 0 && dy <= 100 && absDx <= 88 - (dy * dy) / 116.0);
+
+        if (inShield) {
+            const isShieldRim = (dy <= -84 || absDx >= 80 || (dy > 0 && absDx >= 80 - (dy * dy) / 116.0));
+            if (isShieldRim) {
+                const bevel = (dx < 0 || dy < -76) ? 0.14 : -0.10;
+                return [0.88 + bevel, 0.74 + bevel, 0.28 + bevel];
+            }
+
+            if (pattern) {
+                const gx = Math.floor((x - 226) / 12);
+                const gy = Math.floor((y - 214) / 12);
+                if (gx >= 0 && gx < 5 && gy >= 0 && gy < 7) {
+                    const isBit = (pattern[gy] & (1 << (4 - gx))) !== 0;
+                    if (isBit) return [1.0, 0.90, 0.35]; // Gold digit
+                }
+            }
+
+            const bgR = Math.max(0, Math.min(1, heraldicColor[0] * 0.48 + 0.10));
+            const bgG = Math.max(0, Math.min(1, heraldicColor[1] * 0.48 + 0.08));
+            const bgB = Math.max(0, Math.min(1, heraldicColor[2] * 0.48 + 0.06));
+            return [bgR, bgG, bgB];
+        }
+
+        if (seamDist <= 4) return [0.10, 0.07, 0.04];
+
+        const woodGrain = (procSmoothNoise(x * 0.08, y * 0.04, 55) - 0.5) * 0.04;
+        const plankHue = procHash(plankIdx, 0, 88 + shopNum);
+        const r = Math.max(0, Math.min(1, 0.32 + (plankHue - 0.5) * 0.03 + woodGrain));
+        const g = Math.max(0, Math.min(1, 0.22 + (plankHue - 0.5) * 0.02 + woodGrain * 0.8));
+        const b = Math.max(0, Math.min(1, 0.14 + (plankHue - 0.5) * 0.02 + woodGrain * 0.5));
+        return [r, g, b];
+    });
+}
+
+function procCreateWoodDoorTexture() {
+    const size = 512;
+    const plankWidth = 128;
+    return procCreateTexture(size, (x, y) => {
+        const plankIdx = Math.floor(x / plankWidth);
+        const inPlankX = x % plankWidth;
+        const seamDist = Math.min(inPlankX, plankWidth - 1 - inPlankX);
+
+        const isIronStrap = (y >= 100 && y <= 136) || (y >= 376 && y <= 412);
+        if (isIronStrap) {
+            const rivetX = inPlankX - plankWidth / 2;
+            const rivetY = (y < 200) ? (y - 118) : (y - 394);
+            const isRivet = rivetX * rivetX + rivetY * rivetY <= 64;
+            if (isRivet) return [0.44, 0.44, 0.48];
+            const ironGrain = (procSmoothNoise(x * 0.1, y * 0.1, 31) - 0.5) * 0.04;
+            return [0.20 + ironGrain, 0.20 + ironGrain, 0.22 + ironGrain];
+        }
+
+        if (seamDist <= 4) return [0.10, 0.07, 0.04];
+
+        const woodGrain = (procSmoothNoise(x * 0.08, y * 0.04, 55) - 0.5) * 0.04;
+        const plankHue = procHash(plankIdx, 0, 88);
+        const r = Math.max(0, Math.min(1, 0.34 + (plankHue - 0.5) * 0.03 + woodGrain));
+        const g = Math.max(0, Math.min(1, 0.24 + (plankHue - 0.5) * 0.02 + woodGrain * 0.8));
+        const b = Math.max(0, Math.min(1, 0.15 + (plankHue - 0.5) * 0.02 + woodGrain * 0.5));
+        return [r, g, b];
+    });
+}
+
+function procCreateStoreTexture() {
+    const size = 512;
+    return procCreateTexture(size, (x, y) => {
+        const isBorderBeam = x < 36 || x > 475 || y < 36 || y > 475;
+        const isCrossBeam = Math.abs(x - 256) < 20 || Math.abs(y - 256) < 20;
+        const isDiagonal = Math.abs((x - y) % 256) < 16 || Math.abs((x + y) % 256) < 16;
+
+        if (isBorderBeam || isCrossBeam || isDiagonal) {
+            const woodGrain = (procSmoothNoise(x * 0.08, y * 0.08, 12) - 0.5) * 0.04;
+            return [0.24 + woodGrain, 0.16 + woodGrain * 0.7, 0.11 + woodGrain * 0.5];
+        }
+
+        const plasterGrain = (procSmoothNoise(x * 0.08, y * 0.08, 22) - 0.5) * 0.04;
+        return [0.65 + plasterGrain, 0.62 + plasterGrain, 0.56 + plasterGrain];
+    });
+}
+
+function procCreateCeilingTexture() {
+    const size = 512;
+    return procCreateTexture(size, (x, y) => {
+        const grain = (procSmoothNoise(x * 0.06, y * 0.06, 5) - 0.5) * 0.06;
+        const microGrain = (procSmoothNoise(x * 0.18, y * 0.18, 6) - 0.5) * 0.03;
+        const r = Math.max(0, Math.min(1, 0.22 + grain + microGrain));
+        const g = Math.max(0, Math.min(1, 0.23 + grain + microGrain));
+        const b = Math.max(0, Math.min(1, 0.25 + grain + microGrain));
+        return [r, g, b];
+    });
+}
+
+function procCreateMagmaTexture() {
+    const size = 512;
+    return procCreateTexture(size, (x, y) => {
+        const vein = (procFractalNoise(x * 0.02, y * 0.02, 4, 77) - 0.5) * 2.0;
+        if (Math.abs(vein) < 0.24) {
+            const heat = 1.0 - Math.min(1, Math.abs(vein) / 0.24);
+            return [0.94 + heat * 0.06, 0.32 + heat * 0.44, 0.04 + heat * 0.12];
+        }
+        const rockGrain = (procSmoothNoise(x * 0.08, y * 0.08, 88) - 0.5) * 0.05;
+        return [0.24 + rockGrain, 0.22 + rockGrain, 0.24 + rockGrain];
+    });
+}
+
+function procCreateMagmaEmission() {
+    const size = 512;
+    return procCreateTexture(size, (x, y) => {
+        const vein = (procFractalNoise(x * 0.02, y * 0.02, 4, 77) - 0.5) * 2.0;
+        if (Math.abs(vein) < 0.24) {
+            const heat = 1.0 - Math.min(1, Math.abs(vein) / 0.24);
+            return [0.96, 0.34 + heat * 0.40, 0.04 + heat * 0.12];
+        }
+        return [0, 0, 0];
+    });
+}
+
+function procCreateQuartzTexture() {
+    const size = 512;
+    return procCreateTexture(size, (x, y) => {
+        const crystalVein = (procFractalNoise((x * 1.2 - y * 0.8) * 0.025, (x * 0.5 + y) * 0.025, 4, 44) - 0.5) * 2.0;
+        if (Math.abs(crystalVein) < 0.22) {
+            const glint = procSmoothNoise(x * 0.2, y * 0.2, 12) * 0.12;
+            return [0.74 + glint, 0.80 + glint, 0.86 + glint];
+        }
+        const grain = (procSmoothNoise(x * 0.08, y * 0.08, 9) - 0.5) * 0.06;
+        return [0.40 + grain, 0.41 + grain, 0.43 + grain];
+    });
+}
+
+// ==============================================================================
+// 2. Main 3D Dungeon Crawler Engine
+// ==============================================================================
 
 class Dungeon3D {
     constructor(canvasId) {
@@ -92,46 +492,25 @@ class Dungeon3D {
     }
 
     initTextures() {
-        const loader = new THREE.TextureLoader();
         const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
 
-        const loadPbr = (url, isSRGB, repX = 1, repY = 1) => {
-            const tex = loader.load(url);
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(repX, repY);
-            if (isSRGB) {
-                tex.encoding = THREE.sRGBEncoding;
-            }
-            tex.anisotropy = maxAniso;
-            return tex;
-        };
-
-        // Authentic 2K PBR Textures from Godot Client Town/Dungeon Assets
-        this.wallTex = loadPbr('/assets/textures/T_Brick_BaseColor.png', true, 1, 1.5);
-        this.wallNormal = loadPbr('/assets/textures/T_Brick_Normal.png', false, 1, 1.5);
-        this.wallRoughness = loadPbr('/assets/textures/T_Brick_Roughness.png', false, 1, 1.5);
-
-        this.floorTex = loadPbr('/assets/textures/T_UnevenBrick_BaseColor.png', true, 1, 1);
-        this.floorNormal = loadPbr('/assets/textures/T_UnevenBrick_Normal.png', false, 1, 1);
-        this.floorRoughness = loadPbr('/assets/textures/T_UnevenBrick_Roughness.png', false, 1, 1);
-
-        this.ceilingTex = loadPbr('/assets/textures/T_RockTrim_BaseColor.png', true, 1, 1);
-        this.ceilingNormal = loadPbr('/assets/textures/T_RockTrim_Normal.png', false, 1, 1);
-
-        this.doorTex = loadPbr('/assets/textures/T_WoodTrim_BaseColor.png', true, 1, 1.5);
-        this.doorNormal = loadPbr('/assets/textures/T_WoodTrim_Normal.png', false, 1, 1.5);
-        this.doorRoughness = loadPbr('/assets/textures/T_WoodTrim_Roughness.png', false, 1, 1.5);
-
-        this.storeTex = loadPbr('/assets/textures/T_Plaster_BaseColor.png', true, 1, 1);
-        this.storeNormal = loadPbr('/assets/textures/T_Plaster_Normal.png', false, 1, 1);
+        // 1. Instant Procedural Textures (Exact Godot DungeonWorld Parity)
+        this.wallTex = procCreateStoneWallTexture();
+        this.wallNormal = procCreateStoneWallNormal();
+        this.floorTex = procCreateFloorTexture();
+        this.floorNormal = procCreateFloorNormal();
+        this.ceilingTex = procCreateCeilingTexture();
+        this.doorTex = procCreateWoodDoorTexture();
+        this.storeTex = procCreateStoreTexture();
+        this.magmaTex = procCreateMagmaTexture();
+        this.magmaEmission = procCreateMagmaEmission();
+        this.quartzTex = procCreateQuartzTexture();
 
         // Materials with Authentic PBR Settings matching Godot StandardMaterial3D
         this.wallMaterial = new THREE.MeshStandardMaterial({
             map: this.wallTex,
             normalMap: this.wallNormal,
             normalScale: new THREE.Vector2(0.85, 0.85),
-            roughnessMap: this.wallRoughness,
             roughness: 0.80,
             metalness: 0.02
         });
@@ -140,36 +519,59 @@ class Dungeon3D {
             map: this.floorTex,
             normalMap: this.floorNormal,
             normalScale: new THREE.Vector2(0.80, 0.80),
-            roughnessMap: this.floorRoughness,
             roughness: 0.74,
             metalness: 0.04
         });
 
         this.ceilingMaterial = new THREE.MeshStandardMaterial({
             map: this.ceilingTex,
-            normalMap: this.ceilingNormal,
-            normalScale: new THREE.Vector2(0.55, 0.55),
             roughness: 0.95,
             metalness: 0.0
         });
 
         this.doorMaterial = new THREE.MeshStandardMaterial({
             map: this.doorTex,
-            normalMap: this.doorNormal,
             normalScale: new THREE.Vector2(0.80, 0.80),
-            roughnessMap: this.doorRoughness,
             roughness: 0.75,
             metalness: 0.10
         });
 
         this.storeMaterial = new THREE.MeshStandardMaterial({
             map: this.storeTex,
-            normalMap: this.storeNormal,
             roughness: 0.85,
             metalness: 0.02
         });
 
-        // In-View Molten Lava (Glows, pulsates)
+        // 8 Shop Entrance Doors with Heraldic Shield & Gold Number Plaque
+        this.shopDoorMaterials = [];
+        for (let i = 0; i < 8; i++) {
+            const shopNum = i + 1;
+            const shopTex = procCreateShopDoorTexture(shopNum, procStoreColor(shopNum));
+            this.shopDoorMaterials.push(new THREE.MeshStandardMaterial({
+                map: shopTex,
+                roughness: 0.70,
+                metalness: 0.15
+            }));
+        }
+
+        // Magma Fissures (Incandescent emission)
+        this.magmaMaterial = new THREE.MeshStandardMaterial({
+            map: this.magmaTex,
+            emissiveMap: this.magmaEmission,
+            emissive: new THREE.Color(0xff4400),
+            emissiveIntensity: 2.2,
+            roughness: 0.70,
+            metalness: 0.04
+        });
+
+        // Quartz Veins (Glinting crystal)
+        this.quartzMaterial = new THREE.MeshStandardMaterial({
+            map: this.quartzTex,
+            roughness: 0.50,
+            metalness: 0.10
+        });
+
+        // In-View Molten Lava
         this.lavaMaterial = new THREE.MeshStandardMaterial({
             color: 0xff3300,
             emissive: 0xff4400,
@@ -178,7 +580,7 @@ class Dungeon3D {
             metalness: 0.10
         });
 
-        // Cooled Basalt (Memory/Fog-of-War Lava: Dark, ZERO emission)
+        // Cooled Basalt (Memory/Fog-of-War Lava)
         this.lavaCooledMaterial = new THREE.MeshStandardMaterial({
             color: 0x141210,
             roughness: 0.95,
@@ -191,6 +593,30 @@ class Dungeon3D {
             roughness: 0.82,
             metalness: 0.04
         });
+
+        // 2. Asynchronous 2K PBR Texture Streaming from Cloud Assets
+        const loader = new THREE.TextureLoader();
+        const upgradeTexture = (url, targetMat, prop, isSRGB, repX = 1, repY = 1) => {
+            loader.load(url, (tex) => {
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                tex.repeat.set(repX, repY);
+                if (isSRGB) tex.encoding = THREE.sRGBEncoding;
+                tex.anisotropy = maxAniso;
+                targetMat[prop] = tex;
+                targetMat.needsUpdate = true;
+            }, undefined, () => {
+                // Procedural texture remains active seamlessly!
+            });
+        };
+
+        upgradeTexture('/assets/textures/T_Brick_BaseColor.png', this.wallMaterial, 'map', true, 1, 1.5);
+        upgradeTexture('/assets/textures/T_Brick_Normal.png', this.wallMaterial, 'normalMap', false, 1, 1.5);
+        upgradeTexture('/assets/textures/T_UnevenBrick_BaseColor.png', this.floorMaterial, 'map', true, 1, 1);
+        upgradeTexture('/assets/textures/T_UnevenBrick_Normal.png', this.floorMaterial, 'normalMap', false, 1, 1);
+        upgradeTexture('/assets/textures/T_RockTrim_BaseColor.png', this.ceilingMaterial, 'map', true, 1, 1);
+        upgradeTexture('/assets/textures/T_WoodTrim_BaseColor.png', this.doorMaterial, 'map', true, 1, 1.5);
+        upgradeTexture('/assets/textures/T_Plaster_BaseColor.png', this.storeMaterial, 'map', true, 1, 1);
     }
 
     initMeshes() {
@@ -201,6 +627,9 @@ class Dungeon3D {
 
         const ceilingGeo = new THREE.PlaneGeometry(this.cellSize, this.cellSize);
         ceilingGeo.rotateX(Math.PI / 2);
+
+        // Door Panel Geometry matching Godot Door (1.6m wide, 2.7m tall, 0.16m deep)
+        const doorGeo = new THREE.BoxGeometry(1.6, 2.7, 0.16);
 
         this.wallMesh = new THREE.InstancedMesh(boxGeo, this.wallMaterial, this.maxInstances);
         this.wallMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -214,9 +643,26 @@ class Dungeon3D {
         this.ceilingMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.scene.add(this.ceilingMesh);
 
-        this.doorMesh = new THREE.InstancedMesh(boxGeo, this.doorMaterial, 512);
+        this.doorMesh = new THREE.InstancedMesh(doorGeo, this.doorMaterial, 512);
         this.doorMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.scene.add(this.doorMesh);
+
+        // 8 Shop Entrance Meshes
+        this.shopMeshes = [];
+        for (let i = 0; i < 8; i++) {
+            const mesh = new THREE.InstancedMesh(doorGeo, this.shopDoorMaterials[i], 64);
+            mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            this.scene.add(mesh);
+            this.shopMeshes.push(mesh);
+        }
+
+        this.magmaMesh = new THREE.InstancedMesh(boxGeo, this.magmaMaterial, 256);
+        this.magmaMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.scene.add(this.magmaMesh);
+
+        this.quartzMesh = new THREE.InstancedMesh(boxGeo, this.quartzMaterial, 256);
+        this.quartzMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.scene.add(this.quartzMesh);
 
         this.lavaMesh = new THREE.InstancedMesh(floorGeo, this.lavaMaterial, 512);
         this.lavaMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -237,6 +683,7 @@ class Dungeon3D {
         this.ceilingMesh.setColorAt(0, white);
         this.doorMesh.setColorAt(0, white);
         this.stairsMesh.setColorAt(0, white);
+        for (let i = 0; i < 8; i++) this.shopMeshes[i].setColorAt(0, white);
 
         this.dummy = new THREE.Object3D();
     }
@@ -372,20 +819,11 @@ class Dungeon3D {
         this.attackAnimationTime = 0.22; // 220ms swing
     }
 
-    /**
-     * Turn camera orientation in place.
-     * 1:1 mathematical parity with Godot DungeonWorld.Turn(delta):
-     * delta: +1 = turn right 90°, -1 = turn left 90°.
-     * Costs 0 game turns (Angband has no facing).
-     */
     turn(delta) {
         this.facing = ((this.facing + delta) % 4 + 4) % 4;
         this.targetYaw = -this.facing * (Math.PI / 2);
     }
 
-    /**
-     * Canonical 2-hex feature index decoder matching Angband JSON bridge protocol
-     */
     getFeatAt(map, x, y) {
         if (!map || !map.rows || y < 0 || y >= map.h || x < 0 || x >= map.w) return 0;
         const row = map.rows[y];
@@ -397,14 +835,76 @@ class Dungeon3D {
         return (hi << 4) | lo;
     }
 
-    /**
-     * Canonical 1-hex flag decoder matching Angband JSON bridge protocol
-     */
     getFlagAt(map, x, y) {
         if (!map || !map.rows || y < 0 || y >= map.h || x < 0 || x >= map.w) return 0;
         const row = map.rows[y];
         if (!row || !row.l || x >= row.l.length) return 0;
         return parseInt(row.l[x], 16) || 0;
+    }
+
+    isSolidWall(feat) {
+        return feat === 15 || (feat >= 17 && feat <= 22);
+    }
+
+    isStoreKind(feat) {
+        return feat >= 7 && feat <= 14;
+    }
+
+    isWalkableOrPortal(feat) {
+        return feat === 1 || feat === 2 || feat === 3 || feat === 4 || feat === 5 || feat === 6 || feat === 23 || feat === 24 || this.isStoreKind(feat);
+    }
+
+    determineDoorOrientation(map, x, y, w, h) {
+        const featN = this.getFeatAt(map, x, y - 1);
+        const featS = this.getFeatAt(map, x, y + 1);
+        const featW = this.getFeatAt(map, x - 1, y);
+        const featE = this.getFeatAt(map, x + 1, y);
+
+        const wallN = this.isSolidWall(featN) || y <= 0;
+        const wallS = this.isSolidWall(featS) || y >= h - 1;
+        const wallW = this.isSolidWall(featW) || x <= 0;
+        const wallE = this.isSolidWall(featE) || x >= w - 1;
+
+        const walkN = this.isWalkableOrPortal(featN);
+        const walkS = this.isWalkableOrPortal(featS);
+        const walkW = this.isWalkableOrPortal(featW);
+        const walkE = this.isWalkableOrPortal(featE);
+
+        const scoreX = (wallW ? 3 : 0) + (wallE ? 3 : 0) + (walkN ? 1 : 0) + (walkS ? 1 : 0);
+        const scoreZ = (wallN ? 3 : 0) + (wallS ? 3 : 0) + (walkW ? 1 : 0) + (walkE ? 1 : 0);
+
+        if (scoreZ > scoreX) return Math.PI / 2;
+        return 0;
+    }
+
+    determineShopDoorOrientation(map, x, y, w, h) {
+        const featN = this.getFeatAt(map, x, y - 1);
+        const featS = this.getFeatAt(map, x, y + 1);
+        const featW = this.getFeatAt(map, x - 1, y);
+        const featE = this.getFeatAt(map, x + 1, y);
+
+        const bldgN = this.isSolidWall(featN) || this.isStoreKind(featN) || y <= 0;
+        const bldgS = this.isSolidWall(featS) || this.isStoreKind(featS) || y >= h - 1;
+        const bldgW = this.isSolidWall(featW) || this.isStoreKind(featW) || x <= 0;
+        const bldgE = this.isSolidWall(featE) || this.isStoreKind(featE) || x >= w - 1;
+
+        const streetN = !bldgN;
+        const streetS = !bldgS;
+        const streetW = !bldgW;
+        const streetE = !bldgE;
+
+        // Facing exterior street
+        if (bldgN && streetS && bldgW && bldgE) return 0; // South (+Z)
+        if (bldgS && streetN && bldgW && bldgE) return Math.PI; // North (-Z)
+        if (bldgW && streetE && bldgN && bldgS) return Math.PI / 2; // East (+X)
+        if (bldgE && streetW && bldgN && bldgS) return -Math.PI / 2; // West (-X)
+
+        if (streetS) return 0;
+        if (streetN) return Math.PI;
+        if (streetE) return Math.PI / 2;
+        if (streetW) return -Math.PI / 2;
+
+        return 0;
     }
 
     update(frame) {
@@ -428,23 +928,23 @@ class Dungeon3D {
 
         // Apply Town vs Dungeon Lighting & Atmosphere
         if (outdoors) {
-            this.sunLight.visible = true;
-            this.sunLight.intensity = 1.35;
-            this.ambientLight.intensity = 0.85;
-            this.ambientLight.color.setHex(0xb0c4de);
             this.scene.background.setHex(0x2d3a50);
             this.scene.fog.color.setHex(0x2d3a50);
-            this.scene.fog.density = 0.008; // Clear vistas in town
-            this.torchLight.intensity = 0.5; // Subtle in daylight
-            this.torchFillLight.intensity = 0.0;
+            this.scene.fog.density = 0.008;
+            this.sunLight.visible = true;
+            this.sunLight.intensity = 1.35;
+            this.ambientLight.color.setHex(0xb0c4de);
+            this.ambientLight.intensity = 0.65;
+            this.torchLight.intensity = 0.8;
+            this.torchFillLight.intensity = 0.3;
         } else {
+            this.scene.background.setHex(0x020305);
+            this.scene.fog.color.setHex(0x020305);
+            this.scene.fog.density = 0.038;
             this.sunLight.visible = false;
-            this.sunLight.intensity = 0.0;
-            this.ambientLight.intensity = 0.45;
-            this.ambientLight.color.setHex(0x182030);
-            this.scene.background.setHex(0x06070a);
-            this.scene.fog.color.setHex(0x06070a);
-            this.scene.fog.density = 0.038; // Atmospheric dungeon fog
+            this.sunLight.intensity = 0;
+            this.ambientLight.color.setHex(0x1a202c);
+            this.ambientLight.intensity = 0.12;
             this.torchLight.intensity = 2.8;
             this.torchFillLight.intensity = 0.8;
         }
@@ -453,7 +953,6 @@ class Dungeon3D {
 
         const dist = this.currentCamPos.distanceTo(this.targetCamPos);
         if (dist > this.cellSize * 1.5) {
-            // Level transition / teleport: snap camera instantly
             this.currentCamPos.copy(this.targetCamPos);
             this.isStepping = false;
         } else if (dist > 0.01) {
@@ -468,8 +967,10 @@ class Dungeon3D {
         let lavaCount = 0;
         let lavaCooledCount = 0;
         let stairsCount = 0;
+        let magmaCount = 0;
+        let quartzCount = 0;
+        const shopCounts = [0, 0, 0, 0, 0, 0, 0, 0];
 
-        // Sight bounding box: Town has full sightline, dungeon uses radial horizon culling
         const sightRange = outdoors ? 45 : 28;
         const minX = Math.max(0, px - sightRange);
         const maxX = Math.min(w - 1, px + sightRange);
@@ -484,11 +985,10 @@ class Dungeon3D {
                 const feat = this.getFeatAt(map, x, y);
                 const flag = this.getFlagAt(map, x, y);
 
-                // In Town, all grids are explored & visible
                 const known = outdoors || (flag & 0x1) !== 0;
                 const inView = outdoors || (flag & 0x2) !== 0;
 
-                // Strict Fog-of-War Invariant: Unexplored tiles are skipped completely and remain pure dark void!
+                // Strict Fog-of-War Invariant: Unexplored tiles remain dark void
                 if (!known && !inView) continue;
 
                 if (!outdoors) {
@@ -501,7 +1001,29 @@ class Dungeon3D {
                 const wz = y * this.cellSize;
                 const tileCol = inView ? colInView : colMemory;
 
-                // Solid stone / Granite / Perm / Secret wall
+                // Magma fissures (feat 19, 20)
+                if (feat === 19 || feat === 20) {
+                    this.dummy.position.set(wx, this.wallHeight / 2, wz);
+                    this.dummy.rotation.set(0, 0, 0);
+                    this.dummy.updateMatrix();
+                    this.magmaMesh.setMatrixAt(magmaCount, this.dummy.matrix);
+                    this.magmaMesh.setColorAt(magmaCount, tileCol);
+                    magmaCount++;
+                    continue;
+                }
+
+                // Quartz crystal veins (feat 21, 22)
+                if (feat === 21 || feat === 22) {
+                    this.dummy.position.set(wx, this.wallHeight / 2, wz);
+                    this.dummy.rotation.set(0, 0, 0);
+                    this.dummy.updateMatrix();
+                    this.quartzMesh.setMatrixAt(quartzCount, this.dummy.matrix);
+                    this.quartzMesh.setColorAt(quartzCount, tileCol);
+                    quartzCount++;
+                    continue;
+                }
+
+                // Solid Stone / Granite / Perm wall
                 const isWall = feat === 15 || (feat >= 17 && feat <= 22);
                 if (isWall) {
                     let hasExposedFace = false;
@@ -512,8 +1034,7 @@ class Dungeon3D {
                             const ny = y + dy;
                             if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
                                 const nFeat = this.getFeatAt(map, nx, ny);
-                                // Open space: floor (1, 24), doors (2, 3, 4), stairs (5, 6), stores (7-14), lava (23)
-                                if (nFeat === 1 || nFeat === 2 || nFeat === 3 || nFeat === 4 || nFeat === 5 || nFeat === 6 || (nFeat >= 7 && nFeat <= 14) || nFeat === 23 || nFeat === 24) {
+                                if (this.isWalkableOrPortal(nFeat)) {
                                     hasExposedFace = true;
                                     break;
                                 }
@@ -521,9 +1042,10 @@ class Dungeon3D {
                         }
                         if (hasExposedFace) break;
                     }
-                    if (!hasExposedFace) continue; // Skip interior bedrock
+                    if (!hasExposedFace) continue; // Interior bedrock culling
 
                     this.dummy.position.set(wx, this.wallHeight / 2, wz);
+                    this.dummy.rotation.set(0, 0, 0);
                     this.dummy.updateMatrix();
                     this.wallMesh.setMatrixAt(wallCount, this.dummy.matrix);
                     this.wallMesh.setColorAt(wallCount, tileCol);
@@ -531,18 +1053,29 @@ class Dungeon3D {
                     continue;
                 }
 
-                // Floor / Walkable corridor / Store entrance
-                if (feat === 1 || feat === 3 || feat === 4 || feat === 24 || (feat >= 7 && feat <= 14)) {
-                    this.dummy.position.set(wx, 0, wz);
+                // Store Entrances (feat 7 to 14) -> General Store, Armoury, Weaponsmith, Bookseller, Alchemy, Magic, Black Market, Home!
+                if (feat >= 7 && feat <= 14) {
+                    const shopIdx = feat - 7;
+                    // Floor underneath shop entrance
+                    this.dummy.position.set(wx, -0.05, wz);
+                    this.dummy.rotation.set(0, 0, 0);
                     this.dummy.updateMatrix();
                     this.floorMesh.setMatrixAt(floorCount, this.dummy.matrix);
                     this.floorMesh.setColorAt(floorCount, tileCol);
                     floorCount++;
 
-                    // CEILING RULE: Ceilings only exist in subterranean dungeons (!outdoors)!
-                    // Town streets are outdoors under the open sky!
+                    // Align heraldic entrance door to face outward into street
+                    const doorYaw = this.determineShopDoorOrientation(map, x, y, w, h);
+                    this.dummy.position.set(wx, this.wallHeight / 2, wz);
+                    this.dummy.rotation.set(0, doorYaw, 0);
+                    this.dummy.updateMatrix();
+                    this.shopMeshes[shopIdx].setMatrixAt(shopCounts[shopIdx], this.dummy.matrix);
+                    this.shopMeshes[shopIdx].setColorAt(shopCounts[shopIdx], tileCol);
+                    shopCounts[shopIdx]++;
+
                     if (!outdoors) {
                         this.dummy.position.set(wx, this.wallHeight, wz);
+                        this.dummy.rotation.set(0, 0, 0);
                         this.dummy.updateMatrix();
                         this.ceilingMesh.setMatrixAt(ceilingCount, this.dummy.matrix);
                         this.ceilingMesh.setColorAt(ceilingCount, tileCol);
@@ -551,19 +1084,58 @@ class Dungeon3D {
                     continue;
                 }
 
-                // Closed Door
+                // Closed Dungeon Door (feat 2)
                 if (feat === 2) {
+                    this.dummy.position.set(wx, -0.05, wz);
+                    this.dummy.rotation.set(0, 0, 0);
+                    this.dummy.updateMatrix();
+                    this.floorMesh.setMatrixAt(floorCount, this.dummy.matrix);
+                    this.floorMesh.setColorAt(floorCount, tileCol);
+                    floorCount++;
+
+                    const doorYaw = this.determineDoorOrientation(map, x, y, w, h);
                     this.dummy.position.set(wx, this.wallHeight / 2, wz);
+                    this.dummy.rotation.set(0, doorYaw, 0);
                     this.dummy.updateMatrix();
                     this.doorMesh.setMatrixAt(doorCount, this.dummy.matrix);
                     this.doorMesh.setColorAt(doorCount, tileCol);
                     doorCount++;
+
+                    if (!outdoors) {
+                        this.dummy.position.set(wx, this.wallHeight, wz);
+                        this.dummy.rotation.set(0, 0, 0);
+                        this.dummy.updateMatrix();
+                        this.ceilingMesh.setMatrixAt(ceilingCount, this.dummy.matrix);
+                        this.ceilingMesh.setColorAt(ceilingCount, tileCol);
+                        ceilingCount++;
+                    }
                     continue;
                 }
 
-                // Molten Lava
+                // Floor / Walkable corridor (feat 1, 3, 4, 24)
+                if (feat === 1 || feat === 3 || feat === 4 || feat === 24) {
+                    this.dummy.position.set(wx, -0.05, wz);
+                    this.dummy.rotation.set(0, 0, 0);
+                    this.dummy.updateMatrix();
+                    this.floorMesh.setMatrixAt(floorCount, this.dummy.matrix);
+                    this.floorMesh.setColorAt(floorCount, tileCol);
+                    floorCount++;
+
+                    if (!outdoors) {
+                        this.dummy.position.set(wx, this.wallHeight, wz);
+                        this.dummy.rotation.set(0, 0, 0);
+                        this.dummy.updateMatrix();
+                        this.ceilingMesh.setMatrixAt(ceilingCount, this.dummy.matrix);
+                        this.ceilingMesh.setColorAt(ceilingCount, tileCol);
+                        ceilingCount++;
+                    }
+                    continue;
+                }
+
+                // Molten Lava (feat 23)
                 if (feat === 23) {
                     this.dummy.position.set(wx, -0.05, wz);
+                    this.dummy.rotation.set(0, 0, 0);
                     this.dummy.updateMatrix();
                     if (inView) {
                         this.lavaMesh.setMatrixAt(lavaCount++, this.dummy.matrix);
@@ -573,8 +1145,15 @@ class Dungeon3D {
                     continue;
                 }
 
-                // Stairs Up/Down
+                // Stairs Up/Down (feat 5, 6)
                 if (feat === 5 || feat === 6) {
+                    this.dummy.position.set(wx, -0.05, wz);
+                    this.dummy.rotation.set(0, 0, 0);
+                    this.dummy.updateMatrix();
+                    this.floorMesh.setMatrixAt(floorCount, this.dummy.matrix);
+                    this.floorMesh.setColorAt(floorCount, tileCol);
+                    floorCount++;
+
                     this.dummy.position.set(wx, 0.4, wz);
                     this.dummy.updateMatrix();
                     this.stairsMesh.setMatrixAt(stairsCount, this.dummy.matrix);
@@ -600,6 +1179,20 @@ class Dungeon3D {
         this.doorMesh.count = doorCount;
         this.doorMesh.instanceMatrix.needsUpdate = true;
         if (this.doorMesh.instanceColor) this.doorMesh.instanceColor.needsUpdate = true;
+
+        for (let i = 0; i < 8; i++) {
+            this.shopMeshes[i].count = shopCounts[i];
+            this.shopMeshes[i].instanceMatrix.needsUpdate = true;
+            if (this.shopMeshes[i].instanceColor) this.shopMeshes[i].instanceColor.needsUpdate = true;
+        }
+
+        this.magmaMesh.count = magmaCount;
+        this.magmaMesh.instanceMatrix.needsUpdate = true;
+        if (this.magmaMesh.instanceColor) this.magmaMesh.instanceColor.needsUpdate = true;
+
+        this.quartzMesh.count = quartzCount;
+        this.quartzMesh.instanceMatrix.needsUpdate = true;
+        if (this.quartzMesh.instanceColor) this.quartzMesh.instanceColor.needsUpdate = true;
 
         this.lavaMesh.count = lavaCount;
         this.lavaMesh.instanceMatrix.needsUpdate = true;
@@ -634,7 +1227,7 @@ class Dungeon3D {
         ctx.arc(cx, cy, r * 1.3, 0, Math.PI * 2);
         ctx.fill();
 
-        // Metallic Rim (Antique gold for uniques/bosses, heavy steel for regular creatures)
+        // Metallic Rim
         const isUnique = (m.name || '').includes('the ') || (m.glyph && m.glyph === m.glyph.toUpperCase());
         const rimGrad = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
         if (isUnique) {
@@ -772,52 +1365,50 @@ class Dungeon3D {
         const group = new THREE.Group();
 
         if (g === '$') {
-            // Gold pile: stack of gleaming coins
-            const coinMat = new THREE.MeshStandardMaterial({
+            // Gold Ingot Stacks
+            const goldMat = new THREE.MeshStandardMaterial({
                 color: 0xffd700,
                 emissive: 0x553300,
                 metalness: 0.95,
                 roughness: 0.18
             });
             for (let i = 0; i < 3; i++) {
-                const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.04, 12), coinMat);
-                coin.position.set((i - 1) * 0.05, i * 0.045, (i % 2) * 0.03);
-                group.add(coin);
+                const bar = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.12), goldMat);
+                bar.position.set((i - 1) * 0.04, i * 0.08, 0);
+                group.add(bar);
             }
         } else if (g === '!') {
-            // Potion: glass flask with glowing liquid
+            // Potion flask with glowing elixir
             const glassMat = new THREE.MeshStandardMaterial({
                 color: 0xff3355,
-                emissive: 0xaa1122,
-                roughness: 0.15,
+                emissive: 0xbb1133,
+                emissiveIntensity: 1.2,
+                roughness: 0.12,
                 metalness: 0.20
             });
-            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 0.22, 10), glassMat);
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.24, 12), glassMat);
             const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.08, 8), glassMat);
-            neck.position.y = 0.14;
+            neck.position.y = 0.15;
             group.add(body);
             group.add(neck);
         } else if (g === '?') {
-            // Scroll: rolled parchment with wax seal
-            const scrollMat = new THREE.MeshStandardMaterial({
-                color: 0xdfd4a8,
-                roughness: 0.85
-            });
-            const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.32, 10), scrollMat);
+            // Scroll with seal
+            const scrollMat = new THREE.MeshStandardMaterial({ color: 0xeee0b0, roughness: 0.82 });
+            const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.32, 10), scrollMat);
             roll.rotation.z = Math.PI / 4;
             group.add(roll);
         } else if (g === '=' || g === '"') {
-            // Ring or Amulet: gleaming torus
+            // Gold Ring / Amulet
             const ringMat = new THREE.MeshStandardMaterial({
-                color: 0xffcc33,
+                color: 0xffc400,
                 emissive: 0x664400,
                 metalness: 0.95,
-                roughness: 0.20
+                roughness: 0.15
             });
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.036, 8, 16), ringMat);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.035, 8, 16), ringMat);
             group.add(ring);
         } else {
-            // Weapon, Armor, or Generic Loot
+            // Weapons, Armor, Relics
             const gemMat = new THREE.MeshStandardMaterial({
                 color: 0x44bbff,
                 emissive: 0x114488,
@@ -859,30 +1450,34 @@ class Dungeon3D {
     animate() {
         requestAnimationFrame(this.animate);
 
-        const delta = 0.016;
+        const delta = 0.016; // ~60fps step
+        const tNow = performance.now();
 
-        // Camera movement tween
+        // Smooth camera position tweening
         if (this.isStepping) {
             this.stepTime += delta;
-            const t = Math.min(1.0, this.stepTime / this.stepDuration);
-            this.currentCamPos.lerp(this.targetCamPos, t);
-            this.cameraBobPhase += 0.35;
+            const progress = Math.min(1.0, this.stepTime / this.stepDuration);
+            const t = progress * (2 - progress); // Ease out quad
 
-            if (t >= 1.0) {
-                this.isStepping = false;
+            this.camera.position.lerpVectors(this.currentCamPos, this.targetCamPos, t);
+
+            // Reactive Walking Head-bob (subtle vertical sinusoidal breathing)
+            this.cameraBobPhase += delta * 18;
+            this.camera.position.y = this.eyeHeight + Math.sin(this.cameraBobPhase) * 0.045;
+
+            if (progress >= 1.0) {
                 this.currentCamPos.copy(this.targetCamPos);
+                this.camera.position.copy(this.targetCamPos);
+                this.isStepping = false;
             }
+        } else {
+            this.camera.position.copy(this.targetCamPos);
+            // Idle breathing bob
+            this.camera.position.y = this.eyeHeight + Math.sin(tNow * 0.002) * 0.012;
         }
 
-        // Camera head-bob
-        const bob = Math.sin(this.cameraBobPhase) * 0.035;
-        this.camera.position.set(this.currentCamPos.x, this.currentCamPos.y + bob, this.currentCamPos.z);
-        this.torchLight.position.set(this.currentCamPos.x, this.currentCamPos.y + 0.3, this.currentCamPos.z);
-        this.torchFillLight.position.set(this.currentCamPos.x, this.currentCamPos.y - 0.2, this.currentCamPos.z);
-
-        // Torch flame intensity multi-wave organic flicker
-        const tNow = Date.now();
-        const flicker = 2.6 +
+        // Multi-frequency organic torchlight flicker
+        const flicker = 2.8 +
             Math.sin(tNow * 0.011) * 0.22 +
             Math.cos(tNow * 0.024) * 0.15 +
             Math.sin(tNow * 0.037) * 0.08;
@@ -895,20 +1490,14 @@ class Dungeon3D {
                 1.0 + Math.sin(tNow * 0.015) * 0.14
             );
         }
-        if (this.innerFlameMesh) {
-            this.innerFlameMesh.scale.set(
-                1.0 + Math.cos(tNow * 0.018) * 0.12,
-                1.0 + Math.sin(tNow * 0.025) * 0.18,
-                1.0 + Math.cos(tNow * 0.018) * 0.12
-            );
-        }
 
-        // Facing yaw rotation:
-        // facing: 0=N (0), 1=E (-PI/2), 2=S (-PI), 3=W (-3PI/2 or +PI/2)
-        const targetYaw = -this.facing * (Math.PI / 2);
-        const yawDiff = targetYaw - this.camera.rotation.y;
-        const wrappedDiff = Math.atan2(Math.sin(yawDiff), Math.cos(yawDiff));
-        if (Math.abs(wrappedDiff) > 0.001) {
+        // Smooth spring camera turning (1:1 with Godot client)
+        const targetYaw = this.targetYaw;
+        const currentYaw = this.camera.rotation.y;
+        const diff = targetYaw - currentYaw;
+        const wrappedDiff = Math.atan2(Math.sin(diff), Math.cos(diff));
+
+        if (Math.abs(wrappedDiff) > 0.002) {
             this.camera.rotation.y += wrappedDiff * Math.min(1.0, delta * 22);
         } else {
             this.camera.rotation.y = targetYaw;
@@ -928,15 +1517,15 @@ class Dungeon3D {
         const monTime = tNow * 0.003;
         for (const sprite of this.monsters.values()) {
             if (sprite.targetPos) {
-                sprite.position.lerp(sprite.targetPos, 0.22);
+                sprite.position.lerp(sprite.targetPos, 0.18);
             }
-            sprite.position.y = (sprite.targetPos ? sprite.targetPos.y : 0.9) + Math.sin(monTime + sprite.position.x) * 0.04;
+            sprite.position.y = 0.9 + Math.sin(monTime + sprite.position.x) * 0.06;
         }
 
-        // Items gentle hover bob & rotation
+        // 3D Items hover & continuous rotation
         for (const mesh of this.items.values()) {
-            mesh.rotation.y += 0.028;
-            mesh.position.y = 0.35 + Math.sin(tNow * 0.004 + mesh.position.x) * 0.05;
+            mesh.rotation.y += delta * 1.5;
+            mesh.position.y = 0.35 + Math.sin(tNow * 0.003 + mesh.position.x) * 0.06;
         }
 
         this.renderer.render(this.scene, this.camera);

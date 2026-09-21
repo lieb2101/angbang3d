@@ -288,8 +288,15 @@ const server = http.createServer((req, res) => {
             '.pck': 'application/octet-stream',
             '.css': 'text/css',
             '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.webp': 'image/webp',
             '.svg': 'image/svg+xml',
             '.json': 'application/json',
+            '.obj': 'text/plain',
+            '.mtl': 'text/plain',
+            '.gltf': 'model/gltf+json',
+            '.bin': 'application/octet-stream',
         };
         const contentType = mimeTypes[ext] || 'application/octet-stream';
         res.writeHead(200, {
@@ -299,6 +306,13 @@ const server = http.createServer((req, res) => {
             'Cross-Origin-Embedder-Policy': 'require-corp',
         });
         fs.createReadStream(filePath).pipe(res);
+        return;
+    }
+
+    // Return 404 for missing assets or files with extensions instead of returning HTML landing page
+    if (pathname.startsWith('/assets/') || path.extname(pathname)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `Asset not found: ${pathname}` }));
         return;
     }
 

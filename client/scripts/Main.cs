@@ -227,7 +227,7 @@ public partial class Main : Node
         // A flag or test script means the caller already decided; otherwise show splash.
         if (_autoBirth || _manualRequested)
         {
-            StartGame(newCharacter: true);
+            StartGame();
         }
         else if (_script != null || _autoMenuChoice > 0)
         {
@@ -236,19 +236,6 @@ public partial class Main : Node
         else
         {
             OpenSplash();
-        }
-    }
-
-    public override void _Notification(int what)
-    {
-        if (what == NotificationWMCloseRequest)
-        {
-            if (_bridge != null && _bridge.Connected)
-            {
-                _bridge.Send("save");
-                System.Threading.Thread.Sleep(150);
-                _bridge.Stop();
-            }
         }
     }
 
@@ -359,7 +346,16 @@ public partial class Main : Node
             return Array.Empty<System.IO.FileInfo>();
         }
         var di = new System.IO.DirectoryInfo(dir);
-        var files = di.GetFiles();
+        var list = new System.Collections.Generic.List<System.IO.FileInfo>();
+        foreach (var f in di.GetFiles())
+        {
+            if (!f.Name.StartsWith("smoke", StringComparison.OrdinalIgnoreCase) &&
+                !f.Name.StartsWith("test", StringComparison.OrdinalIgnoreCase))
+            {
+                list.Add(f);
+            }
+        }
+        var files = list.ToArray();
         Array.Sort(files, (a, b) => b.LastWriteTime.CompareTo(a.LastWriteTime));
         return files;
     }
@@ -420,18 +416,18 @@ public partial class Main : Node
 
         _menuItems.Add(("New Character (Custom - Race/Class/Stats)", () =>
         {
-            _saveName = "Adventurer_" + Guid.NewGuid().ToString("N")[..4];
+            _saveName = null;
             _characterName = null;
             _inMenu = false;
-            StartGame(newCharacter: true);
+            StartGame();
         }));
         _menuItems.Add(("New Character (Random - Review & Re-roll)", () =>
         {
-            _saveName = "Adventurer_" + Guid.NewGuid().ToString("N")[..4];
+            _saveName = null;
             _characterName = null;
             _randomRequested = true;
             _inMenu = false;
-            StartGame(newCharacter: true);
+            StartGame();
         }));
 
         var modeLabel = _cloudMode
@@ -958,10 +954,10 @@ public partial class Main : Node
             _bridge.Stop();
         }
 
-        _saveName = "Adventurer_" + Guid.NewGuid().ToString("N")[..4];
+        _saveName = null;
         _characterName = null;
         _randomRequested = true;
-        StartGame(newCharacter: true);
+        StartGame();
     }
 
     private void OnDeathIdentify()
@@ -998,13 +994,12 @@ public partial class Main : Node
         _overlay.Status = _cloudMode ? "connecting to cloud realm..." : "starting...";
         _overlay.QueueRedraw();
 
-        if (newCharacter && string.IsNullOrEmpty(_saveName))
-        {
-            _saveName = "Adventurer_" + Guid.NewGuid().ToString("N")[..4];
-        }
-
         if (_cloudMode)
         {
+            if (newCharacter && string.IsNullOrEmpty(_saveName))
+            {
+                _saveName = "Adventurer_" + Guid.NewGuid().ToString("N")[..4];
+            }
             _bridge = _cloudBridge;
             _cloudBridge.ConnectToServer(_cloudUrl, _saveName, newCharacter);
         }
@@ -1018,7 +1013,7 @@ public partial class Main : Node
                 return;
             }
             _bridge = _localBridge;
-            _localBridge.Start(exe, _saveName, newCharacter);
+            _localBridge.Start(exe, _saveName, newCharacter: false);
         }
     }
 
@@ -2038,6 +2033,8 @@ public partial class Main : Node
             case Key.Delete: return "delete";
             case Key.Home: return "home";
             case Key.End: return "end";
+            case Key.Pageup: return "pageup";
+            case Key.Pagedown: return "pagedown";
         }
 
         if (key.Keycode is >= Key.Kp0 and <= Key.Kp9)

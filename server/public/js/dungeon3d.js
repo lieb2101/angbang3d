@@ -1612,6 +1612,10 @@ class Dungeon3D {
         this.targetYaw = -this.facing * (Math.PI / 2);
     }
 
+    get yaw() {
+        return this.camera ? this.camera.rotation.y : (-this.facing * (Math.PI / 2));
+    }
+
     calculateStereoPan(worldX, worldZ) {
         if (!this.camera) return 0.0;
         const dx = worldX - this.currentCamPos.x;

@@ -163,6 +163,11 @@ class InputController {
         else if (e.key === 'ArrowDown') keySpec = 'down';
         else if (e.key === 'ArrowLeft') keySpec = 'left';
         else if (e.key === 'ArrowRight') keySpec = 'right';
+        else if (e.key === 'PageUp') keySpec = 'pageup';
+        else if (e.key === 'PageDown') keySpec = 'pagedown';
+        else if (e.key === 'Home') keySpec = 'home';
+        else if (e.key === 'End') keySpec = 'end';
+        else if (e.key === 'Delete') keySpec = 'delete';
         else if (e.key === 'Enter') keySpec = 'enter';
         else if (e.key === 'Escape') keySpec = 'escape';
         else if (e.key === 'Backspace') keySpec = 'backspace';
@@ -355,12 +360,10 @@ class InputController {
         };
         const localIndex = localIndexMap[numpadDir];
         if (localIndex === undefined) return null;
-        // Angband world direction keys: 8=N, 9=NE, 6=E, 3=SE, 2=S, 1=SW, 4=W, 7=NW
-        const dirKeys = ['8', '9', '6', '3', '2', '1', '4', '7'];
-        let yaw = this.dungeon ? this.dungeon.yaw : 0;
-        let normYaw = (yaw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-        const cameraFacingSector = Math.round(normYaw / (Math.PI / 4)) % 8;
-        const targetWorldSector = (cameraFacingSector + localIndex) % 8;
+        // Cardinal and diagonal Angband movement keys (1:1 with Godot DungeonWorld.cs)
+        const dirKeys = ['up', 'pageup', 'right', 'pagedown', 'down', 'end', 'left', 'home'];
+        const facing = (this.dungeon && typeof this.dungeon.facing === 'number') ? this.dungeon.facing : 0;
+        const targetWorldSector = (localIndex + facing * 2) % 8;
         return dirKeys[targetWorldSector];
     }
 

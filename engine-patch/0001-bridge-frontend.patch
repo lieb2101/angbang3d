@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..14be05d2a
+index 000000000..812030de6
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,1207 @@
+@@ -0,0 +1,1209 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -1221,6 +1221,8 @@ index 000000000..14be05d2a
 +	if (streq(spec, "delete")) return KC_DELETE;
 +	if (streq(spec, "home")) return KC_HOME;
 +	if (streq(spec, "end")) return KC_END;
++	if (streq(spec, "pageup")) return KC_PGUP;
++	if (streq(spec, "pagedown")) return KC_PGDOWN;
 +
 +	if (spec[0] == 'C' && spec[1] == '-' && spec[2]) return KTRL(spec[2]);
 +

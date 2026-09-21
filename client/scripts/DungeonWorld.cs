@@ -2970,7 +2970,7 @@ void fragment() {
         {
             return null;
         }
-        string[] dirKeys = { "8", "9", "6", "3", "2", "1", "4", "7" };
+        string[] dirKeys = { "up", "pageup", "right", "pagedown", "down", "end", "left", "home" };
         var worldIndex = (localIndex + _facing * 2) % 8;
         return dirKeys[worldIndex];
     }

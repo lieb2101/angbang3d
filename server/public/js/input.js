@@ -72,8 +72,6 @@ class InputController {
     }
 
     handleWorldKey(e) {
-        const facing = this.dungeon.facing; // 0=S, 1=W, 2=N, 3=E
-
         // Turning is instant camera yaw (0 engine turns)
         if (e.key === 'ArrowLeft') {
             e.preventDefault();
@@ -92,49 +90,48 @@ class InputController {
         // Forward / Backward in current camera facing direction
         if (e.key === 'ArrowUp') {
             e.preventDefault();
-            const moveKey = this.getMoveKeyForFacing(facing, true);
-            this.network.sendKey(moveKey);
+            const moveKey = this.getRelativeDirectionKey(8);
+            if (moveKey) this.network.sendKey(moveKey);
             if (this.audio) this.audio.playFootstep();
             return;
         }
 
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            const moveKey = this.getMoveKeyForFacing(facing, false);
-            this.network.sendKey(moveKey);
+            const moveKey = this.getRelativeDirectionKey(2);
+            if (moveKey) this.network.sendKey(moveKey);
             if (this.audio) this.audio.playFootstep();
             return;
         }
 
-        // Numpad Directional Movements & Strafing
-        // 8=fwd, 2=back, 4=strafe left, 6=strafe right, 5=rest
-        if (e.code === 'Numpad8' || e.code === 'Digit8') {
+        // Relative directional movement via number pad (or top-row numbers).
+        // 8 = forward, 2 = back, 4 = strafe left, 6 = strafe right, diagonals 7,9,1,3, 5 = stay.
+        const numpadDirMap = {
+            'Numpad8': 8, 'Digit8': 8,
+            'Numpad2': 2, 'Digit2': 2,
+            'Numpad4': 4, 'Digit4': 4,
+            'Numpad6': 6, 'Digit6': 6,
+            'Numpad7': 7, 'Digit7': 7,
+            'Numpad9': 9, 'Digit9': 9,
+            'Numpad1': 1, 'Digit1': 1,
+            'Numpad3': 3, 'Digit3': 3,
+            'Numpad5': 5, 'Digit5': 5
+        };
+
+        if (numpadDirMap[e.code]) {
             e.preventDefault();
-            this.network.sendKey(this.getMoveKeyForFacing(facing, true));
-            if (this.audio) this.audio.playFootstep();
+            const dir = numpadDirMap[e.code];
+            const moveKey = this.getRelativeDirectionKey(dir);
+            if (moveKey) {
+                this.network.sendKey(moveKey);
+                if (this.audio) this.audio.playFootstep();
+            }
             return;
         }
-        if (e.code === 'Numpad2' || e.code === 'Digit2') {
+
+        if (e.key === '.') {
             e.preventDefault();
-            this.network.sendKey(this.getMoveKeyForFacing(facing, false));
-            if (this.audio) this.audio.playFootstep();
-            return;
-        }
-        if (e.code === 'Numpad4' || e.code === 'Digit4') {
-            e.preventDefault();
-            this.network.sendKey(this.getStrafeKeyForFacing(facing, true));
-            if (this.audio) this.audio.playFootstep();
-            return;
-        }
-        if (e.code === 'Numpad6' || e.code === 'Digit6') {
-            e.preventDefault();
-            this.network.sendKey(this.getStrafeKeyForFacing(facing, false));
-            if (this.audio) this.audio.playFootstep();
-            return;
-        }
-        if (e.code === 'Numpad5' || e.code === 'Digit5' || e.key === '.') {
-            e.preventDefault();
-            this.network.sendKey('.'); // Rest 1 turn
+            this.network.sendKey('5'); // Rest 1 turn
             return;
         }
 
@@ -164,29 +161,30 @@ class InputController {
         }
     }
 
-    getMoveKeyForFacing(facing, forward) {
-        // 0=S (down), 1=W (left), 2=N (up), 3=E (right)
-        if (forward) {
-            const map = ['down', 'left', 'up', 'right'];
-            return map[facing];
-        } else {
-            const map = ['up', 'right', 'down', 'left'];
-            return map[facing];
-        }
-    }
-
-    getStrafeKeyForFacing(facing, strafeLeft) {
-        // 0=S: left is East (right), right is West (left)
-        // 1=W: left is South (down), right is North (up)
-        // 2=N: left is West (left), right is East (right)
-        // 3=E: left is North (up), right is South (down)
-        if (strafeLeft) {
-            const map = ['right', 'down', 'left', 'up'];
-            return map[facing];
-        } else {
-            const map = ['left', 'up', 'right', 'down'];
-            return map[facing];
-        }
+    /**
+     * Angband movement key for a local direction (numpad 1-9) relative to current camera facing.
+     * 1:1 mathematical parity with Godot client DungeonWorld.RelativeMoveKey.
+     * 8 = Forward, 2 = Backward, 4 = Strafe Left, 6 = Strafe Right,
+     * 7 = Forward-Left, 9 = Forward-Right, 1 = Backward-Left, 3 = Backward-Right, 5 = Stay.
+     */
+    getRelativeDirectionKey(numpadDir) {
+        if (numpadDir === 5) return '5';
+        const localIndexMap = {
+            8: 0,
+            9: 1,
+            6: 2,
+            3: 3,
+            2: 4,
+            1: 5,
+            4: 6,
+            7: 7
+        };
+        const localIndex = localIndexMap[numpadDir];
+        if (localIndex === undefined) return null;
+        // Angband world direction keys: 8=N, 9=NE, 6=E, 3=SE, 2=S, 1=SW, 4=W, 7=NW
+        const dirKeys = ['8', '9', '6', '3', '2', '1', '4', '7'];
+        const worldIndex = (localIndex + this.dungeon.facing * 2) % 8;
+        return dirKeys[worldIndex];
     }
 
     setupActionButtons() {
@@ -244,14 +242,14 @@ class InputController {
         };
 
         bindTouch('dpad-up', () => {
-            const key = this.getMoveKeyForFacing(this.dungeon.facing, true);
-            this.network.sendKey(key);
+            const key = this.getRelativeDirectionKey(8);
+            if (key) this.network.sendKey(key);
             if (this.audio) this.audio.playFootstep();
         });
 
         bindTouch('dpad-down', () => {
-            const key = this.getMoveKeyForFacing(this.dungeon.facing, false);
-            this.network.sendKey(key);
+            const key = this.getRelativeDirectionKey(2);
+            if (key) this.network.sendKey(key);
             if (this.audio) this.audio.playFootstep();
         });
 

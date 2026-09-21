@@ -37,6 +37,14 @@
       - Headless Linux multi-stage Docker container (`server/Dockerfile`, `server/docker-compose.yml`) hosting Angband 4.2.6 C engine with Bridge protocol.
       - High-performance WebSocket daemon (`server/src/server.js`) with isolated child process management per session, REST API for save file management (`/api/saves`), and static file delivery.
       - Dual-engine client architecture: unified `IGameEngineBridge` supporting runtime toggling between `Local Engine` (process stdio) and `Cloud Realm` (WebSockets) with roundtrip ping telemetry on the HUD.
+      - **Web 3D Graphics & Controls Overhaul (`dungeon3d.js`, `input.js`)**:
+         - 1:1 mathematical parity with desktop Godot client for movement and camera turning: fixed inverted Arrow Keys and Numpad mappings.
+         - Authentic 2K PBR texture maps (`T_Brick`, `T_UnevenBrick`, `T_RockTrim`, `T_WoodTrim`, `T_Plaster`) with normal maps, roughness maps, anisotropic filtering, and sRGB encoding.
+         - ACESFilmic tone mapping, warm multi-wave torchlight flicker, secondary bounce fill, and atmospheric distance fog.
+         - 3D viewmodel weapon (`Sword.obj` via `OBJLoader`) and illuminated torch with inner/outer flame cones.
+         - High-DPI 512x512 Runic Monster Tokens with dynamic overhead health bars, glowing glyphs, and engraved name banners.
+         - Distinct 3D items (Gold stacks, Potions, Scrolls, Weapons, Rings) with floating bob and rotation.
+         - Deployed and serving on Google Cloud Run (`https://angband3d-cloud-564958309282.us-central1.run.app`).
    - **Universal Save Game Portability & Permadeath Snapshots (`Main.cs`, `Overlay.cs`)**:
       - In-game `Save Game Manager` menu: archive saves to timestamped backups (`lib/save/backups/`), export `.sav` files directly to user Downloads, and restore backups with `SaveVNLA` binary validation.
       - Bi-directional Cloud Sync: Upload local characters to cloud server and synchronize cloud characters down to local disk.

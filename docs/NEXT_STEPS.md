@@ -152,6 +152,16 @@ The project has achieved the **Tier 4 Visual & Environmental Overhaul**: deliver
     - Cache-busting (`?v=2.2`) and `must-revalidate` headers prevent browser disk caching of old audio/engine scripts.
 - **Verification**: 11/11 bridge smoke tests passed, 55/55 synthesis method tests passed, 31/31 Chrome Web Audio in-browser headless tests passed with master compressor active, and automated persistence/reroll integration test passed without panic prompts.
 
+### Priority 7: Menu Parity, Splash Key Requirement, Load Game Modal, Pause Menu, & Store Contextual Toolbar (COMPLETED)
+- **Scope**: `server/public/index.html`, `server/public/css/dungeon.css`, `server/public/js/app.js`, `server/public/js/input.js`, `client/scripts/Main.cs`
+- **Accomplishments**:
+  - **Splash Screen Keypress Requirement**: Any keypress (Space, Enter, letters, numbers, arrow keys) or mouse click is required to advance from the splash screen to the main menu. Added shortcuts for Guide (`[2]`/`[G]`), Credits (`[3]`/`[C]`), and Wiki (`[W]`). Guaranteed that the splash screen never auto-advances.
+  - **Main Menu 1:1 Parity**: Main menu provides all options: `[1] Continue Last Played`, `[2] Load Saved Game...`, `[3] Start from Scratch (Random Hero)`, `[4] Start from Scratch (Custom Hero)`, `[5] Game Guide & Primer`, `[6] Summary & Credits`, `[7] Angband Online Wiki & Manual`.
+  - **Dedicated Load Saved Game Modal (`#load-modal`)**: Built ornate modal with dynamic queries to `/api/saves`. Displays all saved adventurers with name, class/race/level/depth summary, date, file size, and interactive `Load [Enter]` and `Delete [Del/D]` actions with confirmation safeguards.
+  - **In-Game Pause Menu (`#pause-modal`)**: Pressing <kbd>Esc</kbd> in free-roaming 3D world (or clicking ⚙ Menu) opens the in-game Game Menu (matching Godot `Main.cs:1822`), offering Resume Game, Save Game Now (Ctrl-S), Load Other Character..., Start Over (Random/Custom), Guide, Fullscreen (F11), and Save & Quit to Main Menu.
+  - **Contextual Store & Terminal Toolbar**: When entering stores (e.g. Armoury, General Store, Weaponsmith), the terminal card dynamically updates its title (e.g. `⚔ ARMOURY`) and buttons (`Exit Store (Esc)`), strictly hiding the `⚔ Quick Start Hero (@)` birth button during active play so players never confuse a shop screen with character creation.
+- **Verification**: 11/11 engine bridge tests, 7/7 server tests, 0 warnings dotnet build, end-to-end WebSocket connection and live save lifecycle tests verified on Google Cloud Run revision `angband3d-cloud-00036-t4p`.
+
 ---
 
 ## Next Backlog & Future Milestones

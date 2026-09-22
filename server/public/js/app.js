@@ -882,6 +882,10 @@ window.addEventListener('DOMContentLoaded', () => {
         quickBirthStep = 0;
         forceTerminal = false;
 
+        if (hud && typeof hud.resetMessages === 'function') {
+            hud.resetMessages();
+        }
+
         network.connect(options.charName || 'Adventurer', !!options.isNew, options.saveFile || null);
     }
 
@@ -895,6 +899,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
         if (hud && typeof hud.hideDeathModal === 'function') {
             hud.hideDeathModal();
+        }
+        if (hud && typeof hud.resetMessages === 'function') {
+            hud.resetMessages();
         }
         if (terminalContainer) terminalContainer.classList.add('hidden');
         if (loadingOverlay) loadingOverlay.classList.add('hidden');
@@ -1088,12 +1095,21 @@ window.addEventListener('DOMContentLoaded', () => {
             const py = frame.player.y;
             const px = frame.player.x;
             if (frame.map.rows[py] && frame.map.rows[py].f) {
-                playerFeat = frame.map.rows[py].f[px] || 0;
+                playerFeat = parseInt(frame.map.rows[py].f.substring(px * 2, px * 2 + 2), 16) || 0;
             }
         }
 
         const isStoreFeat = playerFeat >= 7 && playerFeat <= 14;
-        const hasStoreText = screenText.includes('store inventory') || screenText.includes('gold remaining');
+        const hasStoreText = screenText.includes('store inventory') ||
+                             screenText.includes('gold remaining') ||
+                             screenText.includes('your home') ||
+                             screenText.includes('general store') ||
+                             screenText.includes('armory') ||
+                             screenText.includes('weaponsmith') ||
+                             screenText.includes('temple') ||
+                             screenText.includes('alchemist') ||
+                             screenText.includes('magic shop') ||
+                             screenText.includes('black market');
         const inOverlay = Boolean(frame.ui && (frame.ui.overlay || 0) > 0);
 
         if (inOverlay && (isStoreFeat || hasStoreText)) {
@@ -1107,21 +1123,25 @@ window.addEventListener('DOMContentLoaded', () => {
                         storeName = m[1].trim();
                         break;
                     }
+                    if (line.toLowerCase().includes('your home')) {
+                        storeName = 'YOUR HOME';
+                        break;
+                    }
                 }
             }
             terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
-            if (termAdvanceBtn) {
-                termAdvanceBtn.style.display = 'inline-flex';
-                termAdvanceBtn.textContent = 'Advance (Enter)';
-            }
-            termEscapeBtn.textContent = 'Exit Store (Esc)';
+            // IN STORE: Show ONLY shop options! No character creation or redundant advance buttons!
             if (storeActionsBar) storeActionsBar.style.display = 'flex';
+            if (termAdvanceBtn) termAdvanceBtn.style.display = 'none';
+            if (termEscapeBtn) termEscapeBtn.style.display = 'none'; // btn-store-exit handles exit cleanly
         } else {
             // Normal in-game menu, inventory, equipment, or help screen
             if (screenText.includes('inventory') && !hasStoreText) {
                 terminalTitle.textContent = '⚔ INVENTORY';
             } else if (screenText.includes('equipment')) {
                 terminalTitle.textContent = '⚔ EQUIPMENT';
+            } else if (screenText.includes('character sheet')) {
+                terminalTitle.textContent = '⚔ CHARACTER SHEET';
             } else {
                 terminalTitle.textContent = '⚔ ANGBAND CLASSIC TERMINAL';
             }
@@ -1129,6 +1149,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 termAdvanceBtn.style.display = 'inline-flex';
                 termAdvanceBtn.textContent = 'Advance (Enter)';
             }
+            termEscapeBtn.style.display = 'inline-flex';
             termEscapeBtn.textContent = 'Close (Esc)';
             if (storeActionsBar) storeActionsBar.style.display = 'none';
         }
@@ -1193,8 +1214,10 @@ window.addEventListener('DOMContentLoaded', () => {
             if (!hasOverlay && (birthReviewActive || (forceTerminal && !window.__manualTerminalOpen))) {
                 confirmHeroBirth();
             }
-        } else if (frame.ui && frame.ui.more) {
-            // Auto-flush -more- prompts seamlessly during play and store entrance
+        }
+
+        // Auto-flush -more- prompts seamlessly during play and store entrance
+        if (frame.ui && frame.ui.more) {
             const screenText = (frame.term && frame.term.rows)
                 ? frame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
                 : '';

@@ -185,10 +185,17 @@ async function runTests() {
     console.log('Test 11: Character Screen Toolbar & Store Isolation Guard');
     const appJs = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
     const inputJs = fs.readFileSync(path.join(__dirname, '../public/js/input.js'), 'utf8');
+    const hudJs = fs.readFileSync(path.join(__dirname, '../public/js/hud.js'), 'utf8');
     assert(appJs.includes("const inPlay = Boolean(frame && frame.phase === 'play' && frame.map);"), 'app.js must strictly define inPlay by phase and map');
     assert(appJs.includes("if (!inPlay) {\n            // NEVER show store actions bar during character creation or review\n            if (storeActionsBar) storeActionsBar.style.display = 'none';"), 'app.js must strictly hide storeActionsBar when not inPlay');
+    assert(appJs.includes("parseInt(frame.map.rows[py].f.substring(px * 2, px * 2 + 2), 16)"), 'app.js must correctly parse 2-hex store feature index');
+    assert(appJs.includes("if (termAdvanceBtn) termAdvanceBtn.style.display = 'none';"), 'app.js must hide advance button in stores');
+    assert(hudJs.includes("resetMessages(welcomeText = null)"), 'hud.js must implement resetMessages');
+    assert(hudJs.includes("accept character history"), 'hud.js must filter character history setup prompt');
     assert(inputJs.includes("const inPlay = Boolean(lastFrame && lastFrame.phase === 'play' && lastFrame.map);"), 'input.js must strictly define inPlay by phase and map');
     console.log('  -> Store actions bar strictly quarantined to inPlay states with verified map context');
+    console.log('  -> Store menus strictly isolate shop options and hide creation/advance buttons');
+    console.log('  -> Message log starts clean with town greeting and filters creation history');
 
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);

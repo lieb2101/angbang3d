@@ -233,6 +233,20 @@ class WebHUD {
                 }
             });
         }
+    resetMessages(welcomeText = null) {
+        if (!this.messageFeedList) {
+            this.messageFeedList = document.getElementById('message-feed-list');
+            this.messageFeedScroll = document.getElementById('message-feed-scroll');
+        }
+        if (this.messageFeedList) {
+            this.messageFeedList.innerHTML = '';
+        }
+        this.messageHistory = [];
+        this.prevMessages = [];
+        this.lastTermRow0 = null;
+        if (welcomeText) {
+            this.addMessage(welcomeText, '#ffd700');
+        }
     }
 
     addMessage(text, color = '#ffd700') {
@@ -245,6 +259,24 @@ class WebHUD {
         trimmed = trimmed.replace(/\s*\[more\]\s*$/i, '');
         trimmed = trimmed.trim();
         if (!trimmed) return;
+
+        // Strictly reject any character creation, history prompt, or setup fragments
+        const lower = trimmed.toLowerCase();
+        if (lower.includes('accept character history') ||
+            lower.includes('to start over') ||
+            lower.includes('r to reroll') ||
+            lower.includes('point-based') ||
+            lower.includes('standard roller') ||
+            lower.includes('quick roller') ||
+            lower.includes('character sheet') ||
+            lower.includes('choose race') ||
+            lower.includes('choose class') ||
+            lower.includes('select an option') ||
+            lower.includes('press any key') ||
+            trimmed === "' . ." ||
+            trimmed === "'.'") {
+            return;
+        }
 
         if (!this.messageFeedList) {
             this.messageFeedList = document.getElementById('message-feed-list');
@@ -979,52 +1011,62 @@ class WebHUD {
             moreBadge.style.display = 'none'; // Auto-advanced, no pulsing chip required
         }
 
-        // Atmospheric initial greeting when entering play phase (Town or Dungeon)
-        if (inPlay && (!this.messageHistory || this.messageHistory.length === 0)) {
+        // Clean message log start upon entering active play (Town or Dungeon)
+        if (inPlay && !this.wasInPlay) {
             const depth = player.depth !== undefined ? player.depth : 0;
-            if (depth === 0) {
-                this.addMessage("Welcome to the Town of Angband! Visit the General Store and Armory to equip your journey.", "#ffd700");
-            } else {
-                this.addMessage(`You descend into Dungeon Level ${depth} (${depth * 50}ft).`, "#ffd700");
+            const welcomeMsg = depth === 0
+                ? "Welcome to the Town of Angband! Visit the General Store and Armory to equip your journey."
+                : `You descend into Dungeon Level ${depth} (${depth * 50}ft).`;
+            this.resetMessages(welcomeMsg);
+            // Baseline-seed engine message buffer and term row 0 so pre-existing setup text is not added as new
+            this.prevMessages = (frame.messages && Array.isArray(frame.messages))
+                ? frame.messages.filter(m => m && m.text && m.text.trim().length > 0)
+                : [];
+            if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
+                this.lastTermRow0 = frame.term.rows[0].g.trim();
             }
         }
 
-        // Multi-Line Message Log Queue (Streams all incoming Angband messages)
-        if (frame.messages && Array.isArray(frame.messages)) {
-            const currentMsgs = frame.messages.filter(m => m && m.text && m.text.trim().length > 0);
-            const newMsgs = this.extractNewMessages(this.prevMessages, currentMsgs);
-            this.prevMessages = currentMsgs;
+        // Multi-Line Message Log Queue: ONLY capture in-game messages during active play
+        if (inPlay) {
+            if (frame.messages && Array.isArray(frame.messages)) {
+                const currentMsgs = frame.messages.filter(m => m && m.text && m.text.trim().length > 0);
+                const newMsgs = this.extractNewMessages(this.prevMessages, currentMsgs);
+                this.prevMessages = currentMsgs;
 
-            for (const msg of newMsgs) {
-                let text = msg.text.trim();
-                if (msg.count && msg.count > 1) {
-                    text += ` (x${msg.count})`;
-                }
-                const col = (window.getAngbandColorString && msg.attr !== undefined)
-                    ? window.getAngbandColorString(msg.attr)
-                    : '#ffd700';
-                this.addMessage(text, col);
-            }
-        }
-
-        // Also capture dynamic action lines on term row 0
-        if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
-            let line0 = frame.term.rows[0].g.trim();
-            line0 = line0.replace(/\s*[-–—]more[-–—]\s*$/i, '');
-            line0 = line0.replace(/\s*\[more\]\s*$/i, '');
-            line0 = line0.replace(/\s*\[?\s*press\s+space\s*\]?\s*$/i, '');
-            line0 = line0.trim();
-            if (line0 && line0.length > 0 && line0 !== this.lastTermRow0 &&
-                !line0.startsWith('---') && !line0.startsWith('===') &&
-                !line0.includes('Select an option') &&
-                !line0.includes('Press any key') &&
-                !line0.toLowerCase().includes('press space')) {
-                this.lastTermRow0 = line0;
-                if (!this.messageHistory || !this.messageHistory.some(m => m.text === line0 || m.text.includes(line0) || line0.includes(m.text))) {
-                    this.addMessage(line0, '#ffd700');
+                for (const msg of newMsgs) {
+                    let text = msg.text.trim();
+                    if (msg.count && msg.count > 1) {
+                        text += ` (x${msg.count})`;
+                    }
+                    const col = (window.getAngbandColorString && msg.attr !== undefined)
+                        ? window.getAngbandColorString(msg.attr)
+                        : '#ffd700';
+                    this.addMessage(text, col);
                 }
             }
+
+            // Also capture dynamic action lines on term row 0 during play
+            if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
+                let line0 = frame.term.rows[0].g.trim();
+                line0 = line0.replace(/\s*[-–—]more[-–—]\s*$/i, '');
+                line0 = line0.replace(/\s*\[more\]\s*$/i, '');
+                line0 = line0.replace(/\s*\[?\s*press\s+space\s*\]?\s*$/i, '');
+                line0 = line0.trim();
+                if (line0 && line0.length > 0 && line0 !== this.lastTermRow0 &&
+                    !line0.startsWith('---') && !line0.startsWith('===') &&
+                    !line0.includes('Select an option') &&
+                    !line0.includes('Press any key') &&
+                    !line0.toLowerCase().includes('press space')) {
+                    this.lastTermRow0 = line0;
+                    if (!this.messageHistory || !this.messageHistory.some(m => m.text === line0 || m.text.includes(line0) || line0.includes(m.text))) {
+                        this.addMessage(line0, '#ffd700');
+                    }
+                }
+            }
         }
+
+        this.wasInPlay = inPlay;
 
         // Process message queue turn/time expiration tick
         this.tickMessageQueue();

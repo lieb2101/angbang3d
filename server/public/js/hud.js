@@ -1029,14 +1029,16 @@ class WebHUD {
                 if (btnStair) {
                     btnStair.style.display = 'inline-flex';
                     btnStair.innerHTML = depth === 0 ? '⬇ Enter Dungeon <kbd>&gt;</kbd>' : '⬇ Descend <kbd>&gt;</kbd>';
-                    btnStair.dataset.key = '>';
+                    if (btnStair.dataset) btnStair.dataset.key = '>';
+                    btnStair.setAttribute('data-key', '>');
                 }
             } else if (currentFeat === 5) { // Upstairs
                 stairsText = depth === 1 ? `[<] Up to Town` : `[<] Up to ${(depth - 1) * 50}ft`;
                 if (btnStair) {
                     btnStair.style.display = 'inline-flex';
                     btnStair.innerHTML = depth === 1 ? '⬆ Return to Town <kbd>&lt;</kbd>' : '⬆ Ascend <kbd>&lt;</kbd>';
-                    btnStair.dataset.key = '<';
+                    if (btnStair.dataset) btnStair.dataset.key = '<';
+                    btnStair.setAttribute('data-key', '<');
                 }
             } else {
                 if (btnStair) {

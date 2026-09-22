@@ -872,6 +872,11 @@ public partial class Main : Node
         }));
 
         _menuItems.Add(("Game Guide & Primer", OpenGuide));
+        _menuItems.Add(($"Toggle Sound / Mute [Ctrl-M] ({(AudioManager.IsMuted ? "MUTED" : "ENABLED")})", () =>
+        {
+            AudioManager.ToggleMute();
+            OpenPauseMenu();
+        }));
         _menuItems.Add(("Toggle Fullscreen / Windowed (F11)", () =>
         {
             ToggleFullscreen();
@@ -1483,6 +1488,15 @@ public partial class Main : Node
         if (key.Keycode == Key.F11 || (key.Keycode == Key.Enter && key.AltPressed))
         {
             ToggleFullscreen();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
+        // Global sound toggle: Ctrl+M / Cmd+M toggles Audio Mute at any game state or menu
+        if (key.Keycode == Key.M && (key.CtrlPressed || key.MetaPressed))
+        {
+            var isMuted = AudioManager.ToggleMute();
+            GD.Print($"client: sound {(isMuted ? "muted" : "unmuted")}");
             GetViewport().SetInputAsHandled();
             return;
         }

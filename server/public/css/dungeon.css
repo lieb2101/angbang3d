@@ -156,24 +156,27 @@ html, body {
 /* Top Landscape Message Feed Window (Full message history with scrollback) */
 #message-feed-window {
     position: absolute;
-    top: 12px;
-    left: 18px;
+    top: 14px;
+    left: 320px;
     transform: none;
     z-index: 6;
-    width: min(640px, calc(100vw - 520px));
-    min-width: 260px;
-    max-width: 640px;
+    width: min(580px, calc(100vw - 640px));
+    min-width: 280px;
+    max-width: 90vw;
+    height: 180px;
+    min-height: 100px;
+    max-height: 80vh;
     background: rgba(8, 11, 18, 0.92);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(212, 175, 55, 0.40);
     border-radius: 6px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.85);
-    display: none; /* Controlled by hud.js based on phase === 'play' */
+    display: none; /* Controlled by hud.js based on player existence */
     flex-direction: column;
     overflow: hidden;
     pointer-events: auto;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 @media (max-width: 960px) {
@@ -194,7 +197,13 @@ html, body {
     align-items: center;
     background: rgba(16, 20, 31, 0.95);
     border-bottom: 1px solid rgba(212, 175, 55, 0.25);
-    padding: 3px 8px;
+    padding: 4px 8px;
+    cursor: grab;
+    user-select: none;
+}
+
+.message-feed-header:active {
+    cursor: grabbing;
 }
 
 .message-feed-title-wrap {
@@ -339,7 +348,7 @@ html, body {
     display: flex;
     gap: 10px;
     align-items: center;
-    z-index: 6;
+    z-index: 1000; /* Always above all modal/terminal screens so sound & settings are accessible everywhere */
 }
 
 .badge {
@@ -723,6 +732,60 @@ html, body {
     flex-direction: column;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 100px);
+}
+
+.minimap-header {
+    cursor: grab;
+    user-select: none;
+}
+
+.minimap-header:active {
+    cursor: grabbing;
+}
+
+/* Floating Window Resize Grip */
+.window-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, rgba(212, 175, 55, 0.45) 50%, rgba(212, 175, 55, 0.85) 100%);
+    border-bottom-right-radius: 6px;
+    z-index: 10;
+}
+
+.window-resize-handle:hover {
+    background: linear-gradient(135deg, transparent 50%, rgba(255, 215, 0, 0.7) 50%, rgba(255, 215, 0, 1.0) 100%);
+}
+
+/* Store Actions Toolbar */
+.store-actions-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.btn-store-action {
+    background: rgba(26, 32, 44, 0.90);
+    border: 1px solid rgba(212, 175, 55, 0.45);
+    color: var(--gold-bright);
+    font-family: var(--font-fantasy);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    transition: all 0.15s ease;
+}
+
+.btn-store-action:hover {
+    background: rgba(212, 175, 55, 0.25);
+    border-color: var(--gold-bright);
+    color: #fff;
+    transform: translateY(-1px);
 }
 
 #minimap-container.compact {

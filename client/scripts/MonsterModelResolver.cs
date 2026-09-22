@@ -536,9 +536,9 @@ public static class MonsterModelResolver
                 var instance = scene.Instantiate<Node3D>();
                 var ap = FindAnimationPlayer(instance);
 
-                // If a character rig lacks an AnimationPlayer, do NOT render it in a static T-pose;
-                // fallback to procedural 3D anatomical creature token unless it is a static prop (chest/tree/coins).
-                if (ap == null && !modelPath.Contains("props") && !modelPath.Contains("items") && !modelPath.Contains("tree"))
+                // If a humanoid character rig lacks an AnimationPlayer, do NOT render it in a static T-pose;
+                // fallback to procedural 3D anatomical creature token unless it is a monster, enemy, prop, item, or tree mesh.
+                if (ap == null && !modelPath.Contains("props") && !modelPath.Contains("items") && !modelPath.Contains("tree") && !modelPath.Contains("enemies") && !modelPath.Contains("monsters"))
                 {
                     instance.QueueFree();
                     BuildCreatureToken(entity, glyph, lowerName, color);
@@ -830,6 +830,13 @@ public static class MonsterModelResolver
 
         // 22. Frogs & Amphibians (R) - Rigged 3D Frog Model for Frogs/Toads
         AddModelRule('R', new MonsterModelRule("res://assets/models/monsters/enemies/Frog.fbx", 0.25f, speed: 1.10f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("frog") || n.Contains("toad")));
+
+        // 23. Kobolds (k) - Rigged 3D Puglin / Kobold Model
+        AddModelRule('k', new MonsterModelRule("res://assets/models/monsters/bestiary/Puglin.glb", 0.35f, speed: 1.15f, equipment: EquipmentRole.Rogue));
+
+        // 24. Minor & Major Demons, Imps (u / U) - Rigged 3D Imp Model
+        AddModelRule('u', new MonsterModelRule("res://assets/models/monsters/bestiary/Imp.glb", 0.32f, speed: 1.10f, equipment: EquipmentRole.Unarmed));
+        AddModelRule('U', new MonsterModelRule("res://assets/models/monsters/bestiary/Imp.glb", 0.55f, speed: 1.00f, equipment: EquipmentRole.Unarmed, matcher: n => n.Contains("imp") || n.Contains("minor") || n.Contains("demon") || n.Contains("devil")));
     }
 
     private static (string ModelPath, float Scale, bool IsEthereal, bool IsFloating, float Speed, EquipmentRole Equipment) ResolveModelConfig(

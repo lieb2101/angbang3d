@@ -229,8 +229,23 @@ public static class ItemModelResolver
                 if (lower.Contains("evil") || lower.Contains("dark")) return ("res://assets/models/weapons/Bow_Evil.fbx", 0.22f);
                 return ("res://assets/models/weapons/Bow_Wooden.fbx", 0.22f);
             }
-            // Arrows & Missiles
-            if (lower.Contains("arrow") || lower.Contains("bolt") || lower.Contains("shot") || lower.Contains("pebble"))
+            // Stones, Pebbles & Rocks (Ammo for Slings)
+            if (lower.Contains("pebble") || lower.Contains("stone") || lower.Contains("rock"))
+            {
+                return ("res://assets/models/items/Mineral.fbx", 0.16f);
+            }
+            // Darts
+            if (lower.Contains("dart"))
+            {
+                return ("res://assets/models/items/Dart.fbx", 0.18f);
+            }
+            // Shots & Bullets (Iron shot, sling bullet)
+            if (lower.Contains("shot") || lower.Contains("bullet"))
+            {
+                return ("res://assets/models/items/Mineral.fbx", 0.14f);
+            }
+            // Arrows & Bolts
+            if (lower.Contains("arrow") || lower.Contains("bolt"))
             {
                 return ("res://assets/models/weapons/Arrow.fbx", 0.18f);
             }

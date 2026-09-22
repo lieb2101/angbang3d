@@ -145,6 +145,44 @@ async function runTests() {
     assert(gzipRes.headers['cache-control'].includes('max-age'));
     console.log(`  -> /js/dungeon3d.js delivered with gzip compression (${gzipRes.bodyLength} bytes compressed)`);
 
+    // Test 8: GLB Binary Model Delivery & MIME type
+    console.log('Test 8: GLB Binary Model Delivery & MIME type');
+    const glbRes = await get('/assets/models/monsters/Imp.glb');
+    assert.strictEqual(glbRes.status, 200);
+    assert.strictEqual(glbRes.headers['content-type'], 'model/gltf-binary');
+    assert(glbRes.headers['cache-control'].includes('immutable'));
+    console.log('  -> /assets/models/monsters/Imp.glb served with model/gltf-binary (200 OK)');
+
+    const puglinRes = await get('/assets/models/monsters/Puglin.glb');
+    assert.strictEqual(puglinRes.status, 200);
+    assert.strictEqual(puglinRes.headers['content-type'], 'model/gltf-binary');
+    console.log('  -> /assets/models/monsters/Puglin.glb served with model/gltf-binary (200 OK)');
+
+    // Test 9: 3D Item and Monster Model Asset Integrity
+    console.log('Test 9: 3D Item and Monster Model Asset Integrity');
+    const mineralRes = await get('/assets/models/items/Mineral.obj');
+    assert.strictEqual(mineralRes.status, 200);
+    console.log('  -> /assets/models/items/Mineral.obj (Pebble/Stone) served (200 OK)');
+
+    const dartRes = await get('/assets/models/items/Dart.obj');
+    assert.strictEqual(dartRes.status, 200);
+    console.log('  -> /assets/models/items/Dart.obj served (200 OK)');
+
+    const spiderRes = await get('/assets/models/monsters/Spider.obj');
+    assert.strictEqual(spiderRes.status, 200);
+    console.log('  -> /assets/models/monsters/Spider.obj served (200 OK)');
+
+    // Test 10: Client HTML Structure & Component Verification
+    console.log('Test 10: Client HTML Structure & Component Verification');
+    assert(indexRes.body.includes('id="store-actions-bar"'), 'store-actions-bar must be present in index.html');
+    assert(indexRes.body.includes('id="btn-store-buy"'), 'btn-store-buy must be present');
+    assert(indexRes.body.includes('id="btn-store-sell"'), 'btn-store-sell must be present');
+    assert(indexRes.body.includes('id="btn-store-examine"'), 'btn-store-examine must be present');
+    assert(indexRes.body.includes('id="btn-store-exit"'), 'btn-store-exit must be present');
+    assert(indexRes.body.includes('id="map-resize-handle"'), 'map-resize-handle must be present');
+    assert(indexRes.body.includes('id="msg-resize-handle"'), 'msg-resize-handle must be present');
+    console.log('  -> Store actions bar, item action buttons, and window resize handles verified in index.html');
+
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);
 }

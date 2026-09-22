@@ -348,6 +348,24 @@ class WebHUD {
         }
     }
 
+    setCustomMinimapSize(w, h) {
+        if (!this.minimapCanvas) return;
+        const validW = Math.max(140, Math.min(800, Math.round(w)));
+        const validH = Math.max(140, Math.min(800, Math.round(h)));
+        this.minimapCanvas.width = validW;
+        this.minimapCanvas.height = validH;
+        if (this.minimapContainer) {
+            this.minimapContainer.style.width = `${validW}px`;
+        }
+        const hintEl = document.getElementById('minimap-hint-text');
+        if (hintEl) {
+            hintEl.textContent = `[ ] ${validW}px • +/- ${this.minimapZoom.toFixed(1)}x`;
+        }
+        if (this.lastFrame && this.lastFrame.map && this.lastFrame.player) {
+            this.renderMinimap(this.lastFrame.map, this.lastFrame.player, this.lastFrame.monsters || [], this.currentCameraYaw);
+        }
+    }
+
     setupMinimapControls() {
         if (this.minimapHeader) {
             this.minimapHeader.style.cursor = 'pointer';
@@ -938,22 +956,31 @@ class WebHUD {
             this.currentTurn = player.game_turn;
         }
 
-        // Message Feed Window Visibility & -more- prompt chip
+        const hasPlayer = Boolean(player && (player.name || player.hp_max > 0));
+
+        // Message Feed Window Visibility: Always visible in town and dungeon when player exists
         if (this.messageFeedWindow) {
-            if (frame.phase === 'play') {
+            if (hasPlayer || frame.phase === 'play') {
                 this.messageFeedWindow.style.display = 'flex';
             } else {
                 this.messageFeedWindow.style.display = 'none';
             }
         }
 
+        // Automatic -more- prompt advance: Space should never be needed in message log interaction
+        if (frame.ui && frame.ui.more) {
+            if (window.__app && window.__app.network) {
+                window.__app.network.sendKey('space');
+            }
+        }
+
         const moreBadge = document.getElementById('msg-more-indicator');
         if (moreBadge) {
-            moreBadge.style.display = (frame.ui && frame.ui.more) ? 'inline-block' : 'none';
+            moreBadge.style.display = 'none'; // Auto-advanced, no pulsing chip required
         }
 
         // Atmospheric initial greeting when entering play phase (Town or Dungeon)
-        if (frame.phase === 'play' && (!this.messageHistory || this.messageHistory.length === 0)) {
+        if ((hasPlayer || frame.phase === 'play') && (!this.messageHistory || this.messageHistory.length === 0)) {
             const depth = player.depth !== undefined ? player.depth : 0;
             if (depth === 0) {
                 this.addMessage("Welcome to the Town of Angband! Visit the General Store and Armory to equip your journey.", "#ffd700");
@@ -985,11 +1012,13 @@ class WebHUD {
             let line0 = frame.term.rows[0].g.trim();
             line0 = line0.replace(/\s*[-–—]more[-–—]\s*$/i, '');
             line0 = line0.replace(/\s*\[more\]\s*$/i, '');
+            line0 = line0.replace(/\s*\[?\s*press\s+space\s*\]?\s*$/i, '');
             line0 = line0.trim();
             if (line0 && line0.length > 0 && line0 !== this.lastTermRow0 &&
                 !line0.startsWith('---') && !line0.startsWith('===') &&
                 !line0.includes('Select an option') &&
-                !line0.includes('Press any key')) {
+                !line0.includes('Press any key') &&
+                !line0.toLowerCase().includes('press space')) {
                 this.lastTermRow0 = line0;
                 if (!this.messageHistory || !this.messageHistory.some(m => m.text === line0 || m.text.includes(line0) || line0.includes(m.text))) {
                     this.addMessage(line0, '#ffd700');

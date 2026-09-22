@@ -178,7 +178,17 @@ The project has achieved the **Tier 4 Visual & Environmental Overhaul**: deliver
   - **Dedicated Load Saved Game Modal (`#load-modal`)**: Built ornate modal with dynamic queries to `/api/saves`. Displays all saved adventurers with name, class/race/level/depth summary, date, file size, and interactive `Load [Enter]` and `Delete [Del/D]` actions with confirmation safeguards.
   - **In-Game Pause Menu (`#pause-modal`)**: Pressing <kbd>Esc</kbd> in free-roaming 3D world (or clicking ⚙ Menu) opens the in-game Game Menu (matching Godot `Main.cs:1822`), offering Resume Game, Save Game Now (Ctrl-S), Load Other Character..., Start Over (Random/Custom), Guide, Fullscreen (F11), and Save & Quit to Main Menu.
   - **Contextual Store & Terminal Toolbar**: When entering stores (e.g. Armoury, General Store, Weaponsmith), the terminal card dynamically updates its title (e.g. `⚔ ARMOURY`) and buttons (`Exit Store (Esc)`), strictly hiding the `⚔ Quick Start Hero (@)` birth button during active play so players never confuse a shop screen with character creation.
-- **Verification**: 11/11 engine bridge tests, 7/7 server tests, 0 warnings dotnet build, end-to-end WebSocket connection and live save lifecycle tests verified on Google Cloud Run revision `angband3d-cloud-00036-t4p`.
+- **Regression Repairs & Comprehensive UX/3D Polish Milestone**:
+  - **Global Sound Mute**: Universal mute toggling across all game states, menus, and views via <kbd>Ctrl+M</kbd> shortcut, pause menu toggle in Godot, and `#btn-sound-toggle` in Web UI (`AudioManager.cs`, `Main.cs`, `input.js`, `audio.js`).
+  - **Shop Menus & Action Bar**: Auto-dismissing rumor `-more-` prompts when entering stores, providing explicit Buy (`p`), Sell (`s`), Examine (`i`), and Exit (`Esc`) action buttons, and enabling direct row clicking to purchase store inventory items (`terminal.js`, `hud.js`, `index.html`, `app.js`).
+  - **Hero Creation Guarding**: `btn-quick-birth`, `btn-term-reroll`, and `btn-term-custom` buttons strictly hidden once a player exists (`hasPlayer`), preventing birth options from intruding on shop or in-game terminal menus.
+  - **Message Log in Town**: Message feed window is available and active from game start in town (`hasPlayer || frame.phase === 'play'`).
+  - **Message Log & Minimap Separation + Automated `-more-`**: Message log relocated to avoid minimap overlap; removed distracting pulsing animation; automatically clears `-more-` prompts by sending `space` to engine so space is never required during message log reading.
+  - **Mouse Resizable & Moveable HUD Windows**: Both the Minimap and Message Log windows are freely draggable via their header bars and resizable via bottom-right drag handles, with real-time canvas resizing and persistent layout coordinates in `localStorage`.
+  - **Dungeon Undiscovered Terrain**: Reverted unmapped tiles (`FEAT_NONE`) to authentic dark subterranean void space rather than synthesizing fake granite walls.
+  - **Item Models & Textures**: Resolved pebbles, stones, rocks, shots, and bullets to `Mineral` models/fbx and procedural stone geometries instead of arrows; routed darts to `Dart` models.
+  - **Monster Models**: Fixed non-humanoid FBX models (`Rat`, `Snake`, `Spider`, `Frog`, `Wasp`) by removing improper `QueueFree()` calls; added model bindings for kobolds (`Puglin.glb`) and demons/imps (`Imp.glb`).
+- **Verification**: 11/11 engine bridge smoke tests, 10/10 node server unit tests, 0 warnings dotnet build across client/angband3d.csproj.
 
 ---
 

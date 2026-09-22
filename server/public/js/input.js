@@ -26,6 +26,18 @@ class InputController {
             // Unlock audio on first user key interaction
             if (this.audio) this.audio.unlock();
 
+            // Global Sound Mute Toggle (Ctrl+M or Cmd+M) available at any game state or menu
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) {
+                e.preventDefault();
+                const soundBtn = document.getElementById('btn-sound');
+                if (soundBtn) {
+                    soundBtn.click();
+                } else if (this.audio) {
+                    this.audio.enabled = !this.audio.enabled;
+                }
+                return;
+            }
+
             // Toggle Fullscreen (F11 or Alt+Enter)
             if (e.key === 'F11' || (e.key === 'Enter' && e.altKey)) {
                 e.preventDefault();
@@ -376,12 +388,13 @@ class InputController {
 
     handleTerminalKey(e) {
         const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+        const inPlay = Boolean(lastFrame && lastFrame.player && (lastFrame.player.name || lastFrame.player.hp_max > 0));
         const screenText = (lastFrame && lastFrame.term && lastFrame.term.rows)
             ? lastFrame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
             : '';
-        const isReviewScreen = screenText.includes("use as is") || screenText.includes("'y': use") ||
+        const isReviewScreen = !inPlay && (screenText.includes("use as is") || screenText.includes("'y': use") ||
                                screenText.includes("to start over") || screenText.includes("r to reroll") ||
-                               screenText.includes("reroll") || screenText.includes("'s' to start");
+                               screenText.includes("reroll") || screenText.includes("'s' to start"));
 
         // Reroll hotkey on review screen ('R') -> Re-randomize
         if (isReviewScreen && (e.key === 'r' || e.key === 'R')) {

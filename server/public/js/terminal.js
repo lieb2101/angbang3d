@@ -98,6 +98,20 @@ class WebTerminal {
         // Check if row has a letter or symbol menu item e.g. "a) Human", "@) Random", "*) All"
         const match = line.match(/^\s*([a-zA-Z0-9@*?])[\)\.\:]/);
         if (match) {
+            const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+            const inStore = Boolean(lastFrame && lastFrame.ui && lastFrame.ui.overlay > 0);
+            if (inStore) {
+                // If top-level store command prompt, clicking an inventory item initiates purchase ('p' + letter)
+                const fullText = (this.lastRows || []).map(r => r.g || '').join(' ').toLowerCase();
+                const alreadyPromptingItem = fullText.includes('which item') || fullText.includes('purchase which') || fullText.includes('sell which') || fullText.includes('examine which');
+                if (alreadyPromptingItem) {
+                    this.onSelectKey(match[1]);
+                } else {
+                    this.onSelectKey('p');
+                    setTimeout(() => this.onSelectKey(match[1]), 50);
+                }
+                return;
+            }
             this.onSelectKey(match[1]);
             return;
         }

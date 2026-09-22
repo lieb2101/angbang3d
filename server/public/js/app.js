@@ -178,6 +178,187 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Interactive Store Actions Bar controls
+    const btnStoreBuy = document.getElementById('btn-store-buy');
+    if (btnStoreBuy) {
+        btnStoreBuy.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            if (audio) audio.playMenuNav();
+            network.sendKey('p');
+        });
+    }
+    const btnStoreSell = document.getElementById('btn-store-sell');
+    if (btnStoreSell) {
+        btnStoreSell.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            if (audio) audio.playMenuNav();
+            network.sendKey('s');
+        });
+    }
+    const btnStoreExamine = document.getElementById('btn-store-examine');
+    if (btnStoreExamine) {
+        btnStoreExamine.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            if (audio) audio.playMenuNav();
+            network.sendKey('i');
+        });
+    }
+    const btnStoreExit = document.getElementById('btn-store-exit');
+    if (btnStoreExit) {
+        btnStoreExit.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            if (audio) audio.playMenuNav();
+            network.sendKey('escape');
+            forceTerminal = false;
+            if (terminalContainer) terminalContainer.classList.add('hidden');
+            if (input) input.setTerminalMode(false);
+        });
+    }
+
+    // Draggable and Resizable Windows Coordinator (Minimap and Message Log)
+    function setupDraggableAndResizableWindows() {
+        const makeWindowDraggableAndResizable = (winEl, headerEl, resizeHandleEl, storageKey, onResize) => {
+            if (!winEl) return;
+
+            // Restore saved position
+            try {
+                const savedPos = localStorage.getItem(storageKey + '_pos');
+                if (savedPos) {
+                    const pos = JSON.parse(savedPos);
+                    if (typeof pos.left === 'number' && typeof pos.top === 'number') {
+                        const maxLeft = Math.max(0, window.innerWidth - 60);
+                        const maxTop = Math.max(0, window.innerHeight - 40);
+                        winEl.style.left = `${Math.min(pos.left, maxLeft)}px`;
+                        winEl.style.top = `${Math.min(pos.top, maxTop)}px`;
+                        winEl.style.right = 'auto';
+                        winEl.style.bottom = 'auto';
+                    }
+                }
+            } catch (_) {}
+
+            // Restore saved size
+            try {
+                const savedSize = localStorage.getItem(storageKey + '_size');
+                if (savedSize) {
+                    const sz = JSON.parse(savedSize);
+                    if (typeof sz.width === 'number' && typeof sz.height === 'number') {
+                        winEl.style.width = `${sz.width}px`;
+                        winEl.style.height = `${sz.height}px`;
+                        if (onResize) onResize(sz.width, sz.height);
+                    }
+                }
+            } catch (_) {}
+
+            // Dragging via window header
+            if (headerEl) {
+                let isDragging = false;
+                let startX = 0, startY = 0;
+                let initialLeft = 0, initialTop = 0;
+
+                headerEl.addEventListener('mousedown', (e) => {
+                    if (e.target.closest('button, input, select, a, kbd')) return;
+                    e.preventDefault();
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    const rect = winEl.getBoundingClientRect();
+                    initialLeft = rect.left;
+                    initialTop = rect.top;
+                    winEl.style.left = `${initialLeft}px`;
+                    winEl.style.top = `${initialTop}px`;
+                    winEl.style.right = 'auto';
+                    winEl.style.bottom = 'auto';
+
+                    const onMouseMove = (ev) => {
+                        if (!isDragging) return;
+                        const dx = ev.clientX - startX;
+                        const dy = ev.clientY - startY;
+                        const newLeft = Math.max(0, Math.min(window.innerWidth - 60, initialLeft + dx));
+                        const newTop = Math.max(0, Math.min(window.innerHeight - 40, initialTop + dy));
+                        winEl.style.left = `${newLeft}px`;
+                        winEl.style.top = `${newTop}px`;
+                    };
+
+                    const onMouseUp = () => {
+                        if (isDragging) {
+                            isDragging = false;
+                            window.removeEventListener('mousemove', onMouseMove);
+                            window.removeEventListener('mouseup', onMouseUp);
+                            const rect = winEl.getBoundingClientRect();
+                            try {
+                                localStorage.setItem(storageKey + '_pos', JSON.stringify({ left: rect.left, top: rect.top }));
+                            } catch (_) {}
+                        }
+                    };
+
+                    window.addEventListener('mousemove', onMouseMove);
+                    window.addEventListener('mouseup', onMouseUp);
+                });
+            }
+
+            // Resizing via bottom-right handle
+            if (resizeHandleEl) {
+                let isResizing = false;
+                let startX = 0, startY = 0;
+                let initialW = 0, initialH = 0;
+
+                resizeHandleEl.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    isResizing = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    const rect = winEl.getBoundingClientRect();
+                    initialW = rect.width;
+                    initialH = rect.height;
+
+                    const onMouseMove = (ev) => {
+                        if (!isResizing) return;
+                        const dx = ev.clientX - startX;
+                        const dy = ev.clientY - startY;
+                        const newW = Math.max(140, Math.min(window.innerWidth - 20, initialW + dx));
+                        const newH = Math.max(50, Math.min(window.innerHeight - 20, initialH + dy));
+                        winEl.style.width = `${newW}px`;
+                        winEl.style.height = `${newH}px`;
+                        if (onResize) onResize(newW, newH);
+                    };
+
+                    const onMouseUp = () => {
+                        if (isResizing) {
+                            isResizing = false;
+                            window.removeEventListener('mousemove', onMouseMove);
+                            window.removeEventListener('mouseup', onMouseUp);
+                            const rect = winEl.getBoundingClientRect();
+                            try {
+                                localStorage.setItem(storageKey + '_size', JSON.stringify({ width: rect.width, height: rect.height }));
+                            } catch (_) {}
+                        }
+                    };
+
+                    window.addEventListener('mousemove', onMouseMove);
+                    window.addEventListener('mouseup', onMouseUp);
+                });
+            }
+        };
+
+        // Initialize Minimap Container Drag & Resize
+        const mapWin = document.getElementById('minimap-container');
+        const mapHeader = document.getElementById('minimap-header');
+        const mapResize = document.getElementById('map-resize-handle');
+        makeWindowDraggableAndResizable(mapWin, mapHeader, mapResize, 'angband_map', (w, h) => {
+            if (hud && typeof hud.setCustomMinimapSize === 'function') {
+                hud.setCustomMinimapSize(w, h);
+            }
+        });
+
+        // Initialize Message Feed Window Drag & Resize
+        const msgWin = document.getElementById('message-feed-window');
+        const msgHeader = document.getElementById('message-feed-header');
+        const msgResize = document.getElementById('msg-resize-handle');
+        makeWindowDraggableAndResizable(msgWin, msgHeader, msgResize, 'angband_msg', null);
+    }
+    setupDraggableAndResizableWindows();
+
     dungeon.audio = audio;
     hud.audio = audio;
 
@@ -849,7 +1030,58 @@ window.addEventListener('DOMContentLoaded', () => {
         const termCustomBtn = document.getElementById('btn-term-custom');
         const termAdvanceBtn = document.getElementById('btn-term-advance');
         const termEscapeBtn = document.getElementById('btn-term-escape');
+        const storeActionsBar = document.getElementById('store-actions-bar');
         if (!terminalTitle || !termEscapeBtn) return;
+
+        const hasPlayer = Boolean(frame && frame.player && (frame.player.name || frame.player.hp_max > 0));
+
+        // When player exists (in play / stores / menus), NEVER show birth or reroll buttons!
+        if (hasPlayer) {
+            if (quickBirthBtn) quickBirthBtn.style.display = 'none';
+            if (termRerollBtn) termRerollBtn.style.display = 'none';
+            if (termCustomBtn) termCustomBtn.style.display = 'none';
+
+            const inOverlay = Boolean(frame.ui && (frame.ui.overlay || 0) > 0);
+            if (inOverlay) {
+                // In store or full-screen menu overlay
+                let storeName = 'STORE';
+                if (frame.term && frame.term.rows) {
+                    for (let r = 0; r < Math.min(4, frame.term.rows.length); r++) {
+                        const line = (frame.term.rows[r].g || '').trim();
+                        const m = line.match(/([\w\s]+)\s*\(\d+\)/);
+                        if (m) {
+                            storeName = m[1].trim();
+                            break;
+                        } else if (line.toLowerCase().includes('inventory')) {
+                            storeName = 'INVENTORY';
+                            break;
+                        } else if (line.toLowerCase().includes('equipment')) {
+                            storeName = 'EQUIPMENT';
+                            break;
+                        }
+                    }
+                }
+                terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
+                if (termAdvanceBtn) {
+                    termAdvanceBtn.style.display = 'inline-flex';
+                    termAdvanceBtn.textContent = 'Advance (Enter)';
+                }
+                termEscapeBtn.textContent = 'Exit Store (Esc)';
+                if (storeActionsBar) storeActionsBar.style.display = 'flex';
+            } else {
+                terminalTitle.textContent = '⚔ ANGBAND CLASSIC TERMINAL';
+                if (termAdvanceBtn) {
+                    termAdvanceBtn.style.display = 'inline-flex';
+                    termAdvanceBtn.textContent = 'Advance (Enter)';
+                }
+                termEscapeBtn.textContent = 'Close (Esc)';
+                if (storeActionsBar) storeActionsBar.style.display = 'none';
+            }
+            return;
+        }
+
+        // Before player exists (Character Creation & Setup)
+        if (storeActionsBar) storeActionsBar.style.display = 'none';
 
         const screenText = (frame && frame.term && frame.term.rows)
             ? frame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
@@ -858,8 +1090,8 @@ window.addEventListener('DOMContentLoaded', () => {
                                screenText.includes("to start over") || screenText.includes("r to reroll") ||
                                screenText.includes("'s' to start");
 
-        // Case 1: Final character review screen (Only during setup/birth, NEVER in active play with map)
-        if (isReviewScreen && (!frame.map || !frame.player || (frame.phase && frame.phase !== 'play'))) {
+        // Case 1: Final character review screen
+        if (isReviewScreen) {
             terminalTitle.textContent = '⚔ REVIEW YOUR HERO';
             if (quickBirthBtn) quickBirthBtn.style.display = 'none';
             if (termRerollBtn) termRerollBtn.style.display = 'inline-flex';
@@ -872,58 +1104,16 @@ window.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Case 2: Character Creation / Birth before player exists or map exists
-        if (!frame || !frame.player || !frame.map || (frame.phase && frame.phase !== 'play')) {
-            terminalTitle.textContent = '⚔ CHARACTER CREATION';
-            if (quickBirthBtn) quickBirthBtn.style.display = 'inline-flex';
-            if (termRerollBtn) termRerollBtn.style.display = 'none';
-            if (termCustomBtn) termCustomBtn.style.display = 'none';
-            if (termAdvanceBtn) {
-                termAdvanceBtn.style.display = 'inline-flex';
-                termAdvanceBtn.textContent = 'Advance (Enter)';
-            }
-            termEscapeBtn.textContent = 'Back (Esc)';
-            return;
-        }
-
-        // Case 3: In active play (player exists) — NEVER show character creation or reroll!
-        if (quickBirthBtn) quickBirthBtn.style.display = 'none';
+        // Case 2: Character Creation / Birth before player exists
+        terminalTitle.textContent = '⚔ CHARACTER CREATION';
+        if (quickBirthBtn) quickBirthBtn.style.display = 'inline-flex';
         if (termRerollBtn) termRerollBtn.style.display = 'none';
         if (termCustomBtn) termCustomBtn.style.display = 'none';
-
-        if (frame.ui && (frame.ui.overlay || 0) > 0) {
-            // In store or full-screen menu overlay
-            let storeName = 'STORE';
-            if (frame.term && frame.term.rows) {
-                for (let r = 0; r < Math.min(4, frame.term.rows.length); r++) {
-                    const line = (frame.term.rows[r].g || '').trim();
-                    const m = line.match(/([\w\s]+)\s*\(\d+\)/);
-                    if (m) {
-                        storeName = m[1].trim();
-                        break;
-                    } else if (line.toLowerCase().includes('inventory')) {
-                        storeName = 'INVENTORY';
-                        break;
-                    } else if (line.toLowerCase().includes('equipment')) {
-                        storeName = 'EQUIPMENT';
-                        break;
-                    }
-                }
-            }
-            terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
-            if (termAdvanceBtn) {
-                termAdvanceBtn.style.display = 'inline-flex';
-                termAdvanceBtn.textContent = 'Advance (Enter)';
-            }
-            termEscapeBtn.textContent = 'Exit Store (Esc)';
-        } else {
-            terminalTitle.textContent = '⚔ ANGBAND CLASSIC TERMINAL';
-            if (termAdvanceBtn) {
-                termAdvanceBtn.style.display = 'inline-flex';
-                termAdvanceBtn.textContent = 'Advance (Enter)';
-            }
-            termEscapeBtn.textContent = 'Close (Esc)';
+        if (termAdvanceBtn) {
+            termAdvanceBtn.style.display = 'inline-flex';
+            termAdvanceBtn.textContent = 'Advance (Enter)';
         }
+        termEscapeBtn.textContent = 'Back (Esc)';
     }
 
     function needsTerminal(frame) {

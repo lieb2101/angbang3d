@@ -1408,6 +1408,8 @@ class Dungeon3D {
         loadItem('scythe', '/assets/models/weapons/Scythe.obj', weaponMat, 0.22, 0.05);
         loadItem('}', '/assets/models/weapons/Bow_Wooden.obj', woodMat, 0.22, 0.05);
         loadItem('{', '/assets/models/weapons/Arrow.obj', woodMat, 0.20, 0.05);
+        loadItem('pebble', '/assets/models/items/Mineral.obj', weaponMat, 0.16, 0.05);
+        loadItem('dart', '/assets/models/items/Dart.obj', weaponMat, 0.18, 0.05);
         loadItem('shield_heater', '/assets/models/weapons/Shield_Heater.obj', armorMat, 0.22, 0.05);
         loadItem('shield_round', '/assets/models/weapons/Shield_Round.obj', armorMat, 0.20, 0.05);
     }
@@ -2050,35 +2052,6 @@ class Dungeon3D {
                 let known = outdoors || (flag & 0x1) !== 0;
                 let inView = outdoors || (flag & 0x2) !== 0;
                 let lighting = (flag >> 2) & 0x3; // 0=LOS lit, 1=torch, 2=room lit, 3=dark
-
-                // Check if this tile is a perimeter boundary wall bordering an in-view walkable floor/door.
-                // In Angband, room boundary bedrock often remains feat 0 or unknown until directly touched by LOS rays,
-                // which previously caused visible rooms to float like disconnected floor slabs in empty black voids!
-                if (!outdoors && (feat === 0 || !inView || feat === 15 || feat === 21 || feat === 22)) {
-                    let bordersInViewWalkable = false;
-                    for (let dy = -1; dy <= 1; dy++) {
-                        for (let dx = -1; dx <= 1; dx++) {
-                            if (dx === 0 && dy === 0) continue;
-                            const nx = x + dx;
-                            const ny = y + dy;
-                            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                                const nFlag = this.getFlagAt(map, nx, ny);
-                                if ((nFlag & 0x2) !== 0) { // neighbor is inView
-                                    const nFeat = this.getFeatAt(map, nx, ny);
-                                    if (this.isWalkableOrPortal(nFeat)) {
-                                        bordersInViewWalkable = true;
-                                        if (feat === 0) feat = 21; // Granite wall boundary
-                                        inView = true;
-                                        known = true;
-                                        if (lighting === 3) lighting = (nFlag >> 2) & 0x3;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if (bordersInViewWalkable) break;
-                    }
-                }
 
                 // Unexplored dark space (not known and not in view) or feat 0 must NOT be rendered.
                 // True fog-of-war (1:1 with Godot DungeonWorld.cs:2410-2415):
@@ -4184,8 +4157,20 @@ class Dungeon3D {
         else if (g === '}' || lowerName.includes('bow') || lowerName.includes('crossbow') || lowerName.includes('arbalest') || lowerName.includes('sling')) {
             tmpl = this.itemTemplates.get('}');
         }
-        // Arrows & Missiles (Glyph '{')
-        else if (g === '{' || lowerName.includes('arrow') || lowerName.includes('bolt') || lowerName.includes('shot')) {
+        // Slings Ammo: Pebbles, Stones, Rocks (Glyph '{')
+        else if (lowerName.includes('pebble') || lowerName.includes('stone') || lowerName.includes('rock')) {
+            tmpl = this.itemTemplates.get('pebble') || this.itemTemplates.get('*');
+        }
+        // Darts
+        else if (lowerName.includes('dart')) {
+            tmpl = this.itemTemplates.get('dart');
+        }
+        // Shots & Bullets (Iron shot, sling bullet)
+        else if (lowerName.includes('shot') || lowerName.includes('bullet')) {
+            tmpl = this.itemTemplates.get('pebble') || this.itemTemplates.get('*');
+        }
+        // Arrows & Bolts (Glyph '{')
+        else if (g === '{' || lowerName.includes('arrow') || lowerName.includes('bolt')) {
             tmpl = this.itemTemplates.get('{');
         }
 
@@ -4279,6 +4264,10 @@ class Dungeon3D {
             // Staves, Wands, Polearms (Glyphs '/', '_', '|')
             else if (g === '/' || g === '_' || g === '|') {
                 mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.55, 8), mat);
+            }
+            // Sling ammo / Pebbles / Stones / Rocks / Shots
+            else if (lowerName.includes('pebble') || lowerName.includes('stone') || lowerName.includes('rock') || lowerName.includes('shot') || lowerName.includes('bullet')) {
+                mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(0.08, 1), mat);
             }
             // Food (Glyph ',')
             else if (g === ',') {

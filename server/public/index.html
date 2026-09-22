@@ -19,8 +19,14 @@
             <div class="terminal-card">
                 <div class="terminal-toolbar">
                     <div class="terminal-title" id="terminal-title">⚔ ANGBAND CLASSIC TERMINAL</div>
+                    <div id="store-actions-bar" class="store-actions-bar" style="display: none;">
+                        <button id="btn-store-buy" class="btn-store-action" title="Purchase item from store inventory [p]">💰 Buy (p)</button>
+                        <button id="btn-store-sell" class="btn-store-action" title="Sell item from your pack [s]">🏷 Sell (s)</button>
+                        <button id="btn-store-examine" class="btn-store-action" title="Examine item details [i]">🔍 Examine (i)</button>
+                        <button id="btn-store-exit" class="btn-store-action" title="Exit store and return to town [Esc]">🚪 Exit (Esc)</button>
+                    </div>
                     <div class="terminal-actions">
-                        <button id="btn-quick-birth" class="btn-gold" title="Quickly create a random hero and jump straight into the 3D dungeon!">⚔ Quick Start Hero (@)</button>
+                        <button id="btn-quick-birth" class="btn-gold" style="display: none;" title="Quickly create a random hero and jump straight into the 3D dungeon!">⚔ Quick Start Hero (@)</button>
                         <button id="btn-term-reroll" class="btn-gold-outline" style="display: none;" title="Reroll this character with new random attributes">🎲 Reroll Hero (R)</button>
                         <button id="btn-term-custom" class="btn-gold-outline" style="display: none;" title="Customize your character by choosing race, class, and stats">🛠 Custom Hero (C)</button>
                         <button id="btn-term-advance" class="btn-gold-outline" title="Press Enter to confirm or advance">Advance (Enter)</button>
@@ -33,10 +39,10 @@
 
         <!-- Top Landscape Message Feed Window (Full message history with scrollback) -->
         <div id="message-feed-window" class="message-feed-window">
-            <div class="message-feed-header">
+            <div class="message-feed-header" id="message-feed-header" title="Drag header to move message log">
                 <div class="message-feed-title-wrap">
                     <span class="message-feed-title">📜 MESSAGE LOG</span>
-                    <span id="msg-more-indicator" class="msg-more-chip" style="display: none;" title="Press Space or Enter to dismiss prompt">[-more- Press Space]</span>
+                    <span id="msg-more-indicator" class="msg-more-chip" style="display: none;" title="Messages updating automatically">[-more-]</span>
                 </div>
                 <div class="message-feed-controls">
                     <button id="btn-msg-size-toggle" class="msg-ctrl-btn" title="Toggle Message Log Size">▲ Expand</button>
@@ -48,20 +54,21 @@
             <div id="message-feed-scroll" class="message-feed-scroll">
                 <div id="message-feed-list" class="message-feed-list"></div>
             </div>
+            <div id="msg-resize-handle" class="window-resize-handle" title="Drag to resize message log"></div>
         </div>
 
         <!-- Top Right Telemetry & Controls -->
         <div id="top-right-bar">
             <div id="ping-badge" class="badge">Cloud [Connecting...]</div>
             <button id="btn-controls" class="icon-btn" title="View Complete Controls &amp; Commands Guide [?]">⌨ Controls (?)</button>
-            <button id="btn-sound" class="icon-btn">🔊 Sound</button>
+            <button id="btn-sound" class="icon-btn" title="Toggle Sound / Mute [Ctrl-M]">🔊 Sound</button>
             <button id="btn-fullscreen" class="icon-btn">⛶ Fullscreen</button>
             <button id="btn-menu" class="icon-btn" title="Main Menu [Esc]">⚙ Menu</button>
         </div>
 
         <!-- 2D Minimap & Camera Tilt Bar -->
         <div id="minimap-container" class="compact">
-            <div class="minimap-header" id="minimap-header" title="Click or [ ] to resize • Mouse wheel or - / + to zoom">
+            <div class="minimap-header" id="minimap-header" title="Drag header to move • Click or [ ] to resize • Mouse wheel or - / + to zoom">
                 <span id="minimap-title-text">MINIMAP</span>
                 <span id="minimap-hint-text" class="minimap-hint">[ ] Size  +/- Zoom</span>
                 <span id="val-depth" style="color:#ffd700;">Town</span>
@@ -90,6 +97,7 @@
                     <button id="btn-tilt-down" class="tilt-btn" title="Tilt Camera Down [PageDown]">▼ <kbd>PgDn</kbd></button>
                 </div>
             </div>
+            <div id="map-resize-handle" class="window-resize-handle" title="Drag to resize minimap"></div>
         </div>
 
         <!-- On-Screen Virtual Touch D-Pad (Mobile / Tablet) -->

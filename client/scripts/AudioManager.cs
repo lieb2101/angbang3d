@@ -151,6 +151,21 @@ public partial class AudioManager : Node
         }
     }
 
+    public bool Muted { get; set; } = false;
+
+    public static bool IsMuted => Instance?.Muted ?? false;
+
+    public static bool ToggleMute()
+    {
+        EnsureInitialized();
+        if (Instance != null)
+        {
+            Instance.Muted = !Instance.Muted;
+            return Instance.Muted;
+        }
+        return false;
+    }
+
     public static void Play(SoundEffect effect, float pitchScale = 1.0f, float volumeDb = 0f)
     {
         EnsureInitialized();
@@ -180,6 +195,7 @@ public partial class AudioManager : Node
 
     private void PlayInternal(SoundEffect effect, float pitchScale, float volumeDb)
     {
+        if (Muted) return;
         var stream = ResolveStream(effect);
         if (stream == null) return;
 
@@ -208,6 +224,7 @@ public partial class AudioManager : Node
 
     private void PlayAtInternal(SoundEffect effect, Vector3 position, float pitchScale, float volumeDb)
     {
+        if (Muted) return;
         var stream = ResolveStream(effect);
         if (stream == null) return;
 

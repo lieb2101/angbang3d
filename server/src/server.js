@@ -305,6 +305,7 @@ const server = http.createServer((req, res) => {
             '.obj': 'text/plain; charset=utf-8',
             '.mtl': 'text/plain; charset=utf-8',
             '.gltf': 'model/gltf+json',
+            '.glb': 'model/gltf-binary',
             '.bin': 'application/octet-stream',
             '.wav': 'audio/wav',
             '.ogg': 'audio/ogg',
@@ -319,7 +320,7 @@ const server = http.createServer((req, res) => {
         let cacheControl = 'public, max-age=3600, must-revalidate';
         if (ext === '.html') {
             cacheControl = 'no-cache, no-store, must-revalidate';
-        } else if (['.png', '.jpg', '.jpeg', '.webp', '.obj', '.mtl', '.gltf', '.bin', '.wasm', '.pck', '.wav', '.ogg', '.mp3'].includes(ext)) {
+        } else if (['.png', '.jpg', '.jpeg', '.webp', '.obj', '.mtl', '.gltf', '.glb', '.bin', '.wasm', '.pck', '.wav', '.ogg', '.mp3'].includes(ext)) {
             cacheControl = 'public, max-age=86400, immutable';
         }
 

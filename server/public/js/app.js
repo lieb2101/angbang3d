@@ -1062,6 +1062,10 @@ window.addEventListener('DOMContentLoaded', () => {
         const termAdvanceBtn = document.getElementById('btn-term-advance');
         const termEscapeBtn = document.getElementById('btn-term-escape');
         const storeActionsBar = document.getElementById('store-actions-bar');
+        const itemActionsBar = document.getElementById('item-actions-bar');
+        const itemButtonsList = document.getElementById('item-buttons-list');
+        const btnItemSwitch = document.getElementById('btn-item-switch');
+        const btnItemCancel = document.getElementById('btn-item-cancel');
         if (!terminalTitle || !termEscapeBtn) return;
 
         const inPlay = Boolean(frame && frame.phase === 'play' && frame.map);
@@ -1074,6 +1078,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (!inPlay) {
             // NEVER show store actions bar during character creation or review
             if (storeActionsBar) storeActionsBar.style.display = 'none';
+            if (itemActionsBar) itemActionsBar.style.display = 'none';
 
             const isReviewScreen = screenText.includes("use as is") || screenText.includes("'y': use") ||
                                    screenText.includes("to start over") || screenText.includes("r to reroll") ||
@@ -1174,28 +1179,98 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (storeNames[playerFeat]) storeName = storeNames[playerFeat];
             }
             terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
-            // IN STORE: Show ONLY shop options! No character creation or redundant advance buttons!
+            // IN STORE: Show ONLY shop options!
             if (storeActionsBar) storeActionsBar.style.display = 'flex';
+            if (itemActionsBar) itemActionsBar.style.display = 'none';
             if (termAdvanceBtn) termAdvanceBtn.style.display = 'none';
             if (termEscapeBtn) termEscapeBtn.style.display = 'none'; // btn-store-exit handles exit cleanly
         } else {
-            // Normal in-game menu, inventory, equipment, or help screen
-            if (screenText.includes('inventory') && !hasStoreText) {
-                terminalTitle.textContent = '⚔ INVENTORY';
-            } else if (screenText.includes('equipment')) {
-                terminalTitle.textContent = '⚔ EQUIPMENT';
+            // Normal in-game menu, inventory, equipment, or action screen
+            const isItemPrompt = screenText.includes('select item:') ||
+                                 screenText.includes('inven:') ||
+                                 screenText.includes('equip:') ||
+                                 screenText.includes('throw which item?') ||
+                                 screenText.includes('quaff which potion?') ||
+                                 screenText.includes('read which scroll?') ||
+                                 screenText.includes('fire which item?');
+
+            if (screenText.includes('throw which item?')) {
+                terminalTitle.textContent = '🎯 THROW ITEM';
+            } else if (screenText.includes('quaff which potion?')) {
+                terminalTitle.textContent = '🧪 QUAFF POTION';
+            } else if (screenText.includes('read which scroll?')) {
+                terminalTitle.textContent = '📜 READ SCROLL';
+            } else if (screenText.includes('fire which item?')) {
+                terminalTitle.textContent = '🏹 FIRE / SHOOT';
+            } else if ((screenText.includes('inven:') || screenText.includes('inventory')) && !hasStoreText) {
+                terminalTitle.textContent = '🎒 INVENTORY PACK';
+            } else if (screenText.includes('equip:') || screenText.includes('equipment')) {
+                terminalTitle.textContent = '🛡 EQUIPPED GEAR';
             } else if (screenText.includes('character sheet')) {
                 terminalTitle.textContent = '⚔ CHARACTER SHEET';
             } else {
                 terminalTitle.textContent = '⚔ ANGBAND CLASSIC TERMINAL';
             }
-            if (termAdvanceBtn) {
-                termAdvanceBtn.style.display = 'inline-flex';
-                termAdvanceBtn.textContent = 'Advance (Enter)';
-            }
-            termEscapeBtn.style.display = 'inline-flex';
-            termEscapeBtn.textContent = 'Close (Esc)';
+
             if (storeActionsBar) storeActionsBar.style.display = 'none';
+
+            if (isItemPrompt && itemActionsBar && itemButtonsList) {
+                itemActionsBar.style.display = 'flex';
+                if (termAdvanceBtn) termAdvanceBtn.style.display = 'none';
+                termEscapeBtn.style.display = 'none';
+
+                // Render item buttons
+                itemButtonsList.innerHTML = '';
+                const detectedLetters = new Set();
+                if (frame.term && frame.term.rows) {
+                    for (let i = 0; i < frame.term.rows.length; i++) {
+                        const rowStr = frame.term.rows[i].g || '';
+                        const m = rowStr.match(/\b([a-z])\)\s+([^\n\r]+)/);
+                        if (m && !detectedLetters.has(m[1])) {
+                            const letter = m[1];
+                            detectedLetters.add(letter);
+                            const rawName = m[2].trim();
+                            const cleanName = rawName.replace(/\s{2,}\d+\.\d+\s+lb.*$/, '').trim();
+                            const btn = document.createElement('button');
+                            btn.className = 'btn-item-pill';
+                            btn.innerHTML = `<span class="item-key-letter">[${letter}]</span> <span class="item-name-text">${cleanName}</span>`;
+                            btn.title = `Select ${cleanName} [${letter}]`;
+                            btn.addEventListener('click', () => {
+                                if (audio) audio.playMenuNav();
+                                network.sendKey(letter);
+                            });
+                            itemButtonsList.appendChild(btn);
+                        }
+                    }
+                }
+
+                if (btnItemSwitch) {
+                    const hasEquip = screenText.includes('equip');
+                    btnItemSwitch.textContent = hasEquip ? '🔄 View Pack [/]' : '🔄 View Gear [/]';
+                    btnItemSwitch.onclick = () => {
+                        if (audio) audio.playMenuNav();
+                        network.sendKey('/');
+                    };
+                }
+
+                if (btnItemCancel) {
+                    btnItemCancel.onclick = () => {
+                        if (audio) audio.playMenuNav();
+                        network.sendKey('escape');
+                        forceTerminal = false;
+                        if (terminalContainer) terminalContainer.classList.add('hidden');
+                        if (input) input.setTerminalMode(false);
+                    };
+                }
+            } else {
+                if (itemActionsBar) itemActionsBar.style.display = 'none';
+                if (termAdvanceBtn) {
+                    termAdvanceBtn.style.display = 'inline-flex';
+                    termAdvanceBtn.textContent = 'Advance (Enter)';
+                }
+                termEscapeBtn.style.display = 'inline-flex';
+                termEscapeBtn.textContent = 'Close (Esc)';
+            }
         }
     }
 
@@ -1223,6 +1298,15 @@ window.addEventListener('DOMContentLoaded', () => {
                              screenText.includes('purchase which item') ||
                              screenText.includes('sell which item');
         if (hasStoreText) return true;
+
+        const isItemPrompt = screenText.includes('select item:') ||
+                             screenText.includes('inven:') ||
+                             screenText.includes('equip:') ||
+                             screenText.includes('throw which item?') ||
+                             screenText.includes('quaff which potion?') ||
+                             screenText.includes('read which scroll?') ||
+                             screenText.includes('fire which item?');
+        if (isItemPrompt) return true;
 
         return !ui.awaiting_command && !ui.more;
     }

@@ -710,14 +710,32 @@ class InputController {
                         }
                         this.dungeon.triggerAttackAnimation();
                         if (this.audio) this.audio.playWhoosh();
-                        this.network.sendKey('enter');
+                        const fwdKey = this.getRelativeDirectionKey(8) || 'up';
+                        this.network.sendKey(fwdKey);
+                    } else if (key === 'R') {
+                        // In Angband, 'R' prompts for rest duration defaulting to '&' (rest until healed)
+                        this.network.sendKey('R');
+                        setTimeout(() => {
+                            this.network.sendKey('enter');
+                        }, 80);
+                    } else if (key === 'o') {
+                        // Open door in front of camera facing
+                        if (this.audio) this.audio.playDoor();
+                        const fwdKey = this.getRelativeDirectionKey(8) || 'up';
+                        this.network.sendKey('o');
+                        setTimeout(() => {
+                            this.network.sendKey(fwdKey);
+                        }, 80);
                     } else if (key === 'tab') {
                         if (this.toggleTerminalView) this.toggleTerminalView();
                     } else {
                         if (this.audio) {
                             if (key === 'm') this.audio.playSpell();
-                            else if (key === 'i' || key === 'e') this.audio.playMenuOpen();
+                            else if (key === 'i' || key === 'e' || key === 'v') this.audio.playMenuOpen();
                             else if (key === 'g') this.audio.playItemPickup();
+                            else if (key === 'q') this.audio.playMenuOpen();
+                            else if (key === 'r') this.audio.playMenuOpen();
+                            else if (key === 'f') this.audio.playWhoosh();
                         }
                         this.network.sendKey(key);
                     }
@@ -726,6 +744,7 @@ class InputController {
         };
 
         bind('btn-attack', 'attack');
+        bind('btn-throw', 'v');
         bind('btn-fire', 'f');
         bind('btn-cast', 'm');
         bind('btn-quaff', 'q');

@@ -10,13 +10,12 @@ class WebHUD {
         this.minimapContainer = document.getElementById('minimap-container');
         this.minimapHeader = document.getElementById('minimap-header');
 
-        // Minimap sizing and zoom presets (Matches Overlay.cs:56-61)
+        // Minimap sizing and zoom presets (Unified and responsive)
         this.minimapSizes = [
-            { cls: 'compact', name: 'Compact', w: 180, h: 180 },
             { cls: 'standard', name: 'Standard', w: 260, h: 260 },
             { cls: 'expanded', name: 'Expanded', w: 360, h: 360 },
-            { cls: 'tactical', name: 'Tactical', w: 480, h: 480 },
-            { cls: 'command', name: 'Command', w: 620, h: 620 }
+            { cls: 'tactical', name: 'Tactical', w: 460, h: 460 },
+            { cls: 'compact', name: 'Compact', w: 220, h: 220 }
         ];
         this.minimapSizeIndex = 0;
         this.minimapZoom = 1.0;
@@ -124,6 +123,8 @@ class WebHUD {
         if (this.minimapContainer) {
             this.minimapContainer.classList.remove('compact', 'standard', 'expanded', 'tactical', 'command');
             this.minimapContainer.classList.add(size.cls);
+            this.minimapContainer.style.width = `${size.w}px`;
+            this.minimapContainer.style.height = 'auto';
         }
 
         this.updateMinimapHeader();
@@ -391,7 +392,16 @@ class WebHUD {
     }
 
     adjustMinimapZoom(delta) {
-        this.minimapZoom = Math.max(0.35, Math.min(4.5, Math.round((this.minimapZoom + delta) * 100) / 100));
+        this.minimapZoom = Math.max(0.5, Math.min(3.0, Math.round((this.minimapZoom + delta) * 100) / 100));
+        if (this.audio) this.audio.playMenuNav();
+        this.updateMinimapHeader();
+        if (this.lastFrame && this.lastFrame.map && this.lastFrame.player) {
+            this.renderMinimap(this.lastFrame.map, this.lastFrame.player, this.lastFrame.monsters || [], this.currentCameraYaw);
+        }
+    }
+
+    resetMinimapZoom() {
+        this.minimapZoom = 1.0;
         if (this.audio) this.audio.playMenuNav();
         this.updateMinimapHeader();
         if (this.lastFrame && this.lastFrame.map && this.lastFrame.player) {
@@ -403,23 +413,23 @@ class WebHUD {
         const size = this.minimapSizes[this.minimapSizeIndex];
         const hintEl = document.getElementById('minimap-hint-text');
         if (hintEl && size) {
-            hintEl.textContent = `[ ] ${size.w}px • +/- ${this.minimapZoom.toFixed(1)}x`;
+            hintEl.textContent = `[⛶] ${size.name} • ${this.minimapZoom.toFixed(1)}x`;
         }
     }
 
     setCustomMinimapSize(w, h) {
         if (!this.minimapCanvas) return;
-        const validW = Math.max(140, Math.min(800, Math.round(w)));
-        const validH = Math.max(140, Math.min(800, Math.round(h)));
-        this.minimapCanvas.width = validW;
-        this.minimapCanvas.height = validH;
+        const validW = Math.max(200, Math.min(800, Math.round(w)));
+        const validH = Math.max(200, Math.min(800, Math.round(h)));
         if (this.minimapContainer) {
             this.minimapContainer.style.width = `${validW}px`;
+            this.minimapContainer.style.height = `${validH}px`;
         }
-        const hintEl = document.getElementById('minimap-hint-text');
-        if (hintEl) {
-            hintEl.textContent = `[ ] ${validW}px • +/- ${this.minimapZoom.toFixed(1)}x`;
-        }
+        // Deduct ~76px for header, controls bar, and tilt bar so canvas never clips
+        const canvasH = Math.max(120, validH - 76);
+        this.minimapCanvas.width = validW;
+        this.minimapCanvas.height = canvasH;
+        this.updateMinimapHeader();
         if (this.lastFrame && this.lastFrame.map && this.lastFrame.player) {
             this.renderMinimap(this.lastFrame.map, this.lastFrame.player, this.lastFrame.monsters || [], this.currentCameraYaw);
         }
@@ -438,6 +448,54 @@ class WebHUD {
                 e.preventDefault();
                 this.adjustMinimapZoom(e.deltaY < 0 ? 0.15 : -0.15);
             }, { passive: false });
+        }
+
+        const btnZoomOut = document.getElementById('btn-map-zoom-out');
+        if (btnZoomOut) {
+            btnZoomOut.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.adjustMinimapZoom(-0.2);
+            });
+        }
+
+        const btnZoomIn = document.getElementById('btn-map-zoom-in');
+        if (btnZoomIn) {
+            btnZoomIn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.adjustMinimapZoom(0.2);
+            });
+        }
+
+        const btnToggleSize = document.getElementById('btn-map-toggle-size');
+        if (btnToggleSize) {
+            btnToggleSize.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.cycleMinimapSize(1);
+            });
+        }
+
+        const btnRecenter = document.getElementById('btn-map-recenter');
+        if (btnRecenter) {
+            btnRecenter.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.resetMinimapZoom();
+            });
+        }
+
+        const btnSizeDec = document.getElementById('btn-map-size-dec');
+        if (btnSizeDec) {
+            btnSizeDec.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.cycleMinimapSize(-1);
+            });
+        }
+
+        const btnSizeInc = document.getElementById('btn-map-size-inc');
+        if (btnSizeInc) {
+            btnSizeInc.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.cycleMinimapSize(1);
+            });
         }
     }
 

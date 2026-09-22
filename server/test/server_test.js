@@ -222,9 +222,37 @@ async function runTests() {
     assert(freshAppJs.includes("const terminalTitle = document.getElementById('term-title') || document.getElementById('terminal-title');"), 'app.js must lookup term-title correctly');
     assert(freshAppJs.includes("network.sendKey('.');"), 'app.js must auto-send period to enter store when stepping onto store tile');
     assert(dungeonCss.includes("flex: 1;"), 'dungeon.css message-feed-scroll must flex: 1 to fill message feed window');
-    console.log('  -> Store entrance tile automatically triggers store entry command (.)');
-    console.log('  -> Store actions toolbar title and buttons correctly bound');
-    console.log('  -> Message feed scroll container styled to fill full window height');
+    // Test 15: Unified Minimap Controls Bar & Responsive Flex Sizing
+    console.log('Test 15: Unified Minimap Controls Bar & Responsive Flex Sizing');
+    assert(indexRes.body.includes('id="btn-map-toggle-size"'), 'btn-map-toggle-size must be present in index.html');
+    assert(indexRes.body.includes('id="btn-map-recenter"'), 'btn-map-recenter must be present in index.html');
+    assert(indexRes.body.includes('id="btn-map-zoom-out"'), 'btn-map-zoom-out must be present in index.html');
+    assert(indexRes.body.includes('id="btn-map-zoom-in"'), 'btn-map-zoom-in must be present in index.html');
+    assert(dungeonCss.includes('#minimap-container.standard'), 'dungeon.css must define standard minimap container');
+    assert(dungeonCss.includes('flex: 1 1 auto;'), 'dungeon.css minimap-canvas must flex-fit');
+    assert(hudJs.includes('resetMinimapZoom()'), 'hud.js must implement resetMinimapZoom');
+    assert(hudJs.includes("hintEl.textContent = `[⛶] ${size.name} • ${this.minimapZoom.toFixed(1)}x`;"), 'hud.js must format unified minimap hint cleanly');
+    console.log('  -> Minimap controls unified with zoom and size presets');
+    console.log('  -> Minimap canvas configured with flex-fit to avoid clipping controls');
+
+    // Test 16: Interactive Action Menus (Throw, Item Actions Bar, Prompt Titles)
+    console.log('Test 16: Interactive Action Menus (Throw, Item Actions Bar, Prompt Titles)');
+    assert(indexRes.body.includes('id="btn-throw"'), 'btn-throw must be present in index.html');
+    assert(indexRes.body.includes('id="item-actions-bar"'), 'item-actions-bar must be present in index.html');
+    assert(indexRes.body.includes('id="item-buttons-list"'), 'item-buttons-list must be present in index.html');
+    assert(indexRes.body.includes('id="btn-item-switch"'), 'btn-item-switch must be present in index.html');
+    assert(indexRes.body.includes('id="btn-item-cancel"'), 'btn-item-cancel must be present in index.html');
+    assert(inputJs.includes("bind('btn-throw', 'v');"), 'input.js must bind btn-throw to v');
+    assert(freshAppJs.includes("terminalTitle.textContent = '🎒 INVENTORY PACK';"), 'app.js must recognize inventory pack prompt');
+    assert(freshAppJs.includes("terminalTitle.textContent = '🛡 EQUIPPED GEAR';"), 'app.js must recognize equipment gear prompt');
+    assert(freshAppJs.includes("terminalTitle.textContent = '🎯 THROW ITEM';"), 'app.js must recognize throw prompt');
+    assert(freshAppJs.includes("terminalTitle.textContent = '🧪 QUAFF POTION';"), 'app.js must recognize quaff prompt');
+    assert(freshAppJs.includes("terminalTitle.textContent = '📜 READ SCROLL';"), 'app.js must recognize read prompt');
+    assert(freshAppJs.includes("terminalTitle.textContent = '🏹 FIRE / SHOOT';"), 'app.js must recognize fire prompt');
+    assert(dungeonCss.includes('.btn-item-pill'), 'dungeon.css must define .btn-item-pill styles');
+    console.log('  -> Throw button (v) added to action bar and bound');
+    console.log('  -> Interactive Item Actions Bar dynamically populates item selection buttons');
+    console.log('  -> Action prompts (inventory, gear, throw, quaff, read, fire) detected with dedicated titles');
 
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);

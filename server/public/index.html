@@ -25,6 +25,13 @@
                         <button id="btn-store-examine" class="btn-store-action" title="Examine item details [i]">🔍 Examine (i)</button>
                         <button id="btn-store-exit" class="btn-store-action" title="Exit store and return to town [Esc]">🚪 Exit (Esc)</button>
                     </div>
+                    <div id="item-actions-bar" class="item-actions-bar" style="display: none;">
+                        <div id="item-buttons-list" class="item-buttons-list"></div>
+                        <div class="item-bar-controls">
+                            <button id="btn-item-switch" class="btn-item-action" title="Switch between Inventory and Equipment [/]">🔄 Switch [/]</button>
+                            <button id="btn-item-cancel" class="btn-item-action" title="Close menu and return to 3D world [Esc]">✕ Close [Esc]</button>
+                        </div>
+                    </div>
                     <div class="terminal-actions">
                         <button id="btn-quick-birth" class="btn-gold" style="display: none;" title="Quickly create a random hero and jump straight into the 3D dungeon!">⚔ Quick Start Hero (@)</button>
                         <button id="btn-term-reroll" class="btn-gold-outline" style="display: none;" title="Reroll this character with new random attributes">🎲 Reroll Hero (R)</button>
@@ -67,7 +74,7 @@
         </div>
 
         <!-- 2D Minimap & Camera Tilt Bar -->
-        <div id="minimap-container" class="compact">
+        <div id="minimap-container" class="standard">
             <div class="minimap-header" id="minimap-header" title="Drag header to move • Click or [ ] to resize • Mouse wheel or - / + to zoom">
                 <span id="minimap-title-text">MINIMAP</span>
                 <span id="minimap-hint-text" class="minimap-hint">[ ] Size  +/- Zoom</span>
@@ -77,15 +84,17 @@
             <!-- Minimap Explicit Size & Zoom Control Bar -->
             <div id="minimap-controls-bar" class="minimap-controls-bar">
                 <div class="map-ctrl-grp">
-                    <span class="map-ctrl-lbl">SIZE</span>
-                    <button id="btn-map-size-dec" class="map-ctrl-btn" title="Shrink Minimap Size ["><kbd>[</kbd> -</button>
-                    <button id="btn-map-size-inc" class="map-ctrl-btn" title="Enlarge Minimap Size ]">+ <kbd>]</kbd></button>
+                    <span class="map-ctrl-lbl">ZOOM</span>
+                    <button id="btn-map-zoom-out" class="map-ctrl-btn" title="Zoom Out Minimap Radar [-]"><kbd>-</kbd></button>
+                    <button id="btn-map-zoom-in" class="map-ctrl-btn" title="Zoom In Minimap Radar [+]"><kbd>+</kbd></button>
                 </div>
                 <div class="map-ctrl-divider"></div>
                 <div class="map-ctrl-grp">
-                    <span class="map-ctrl-lbl">ZOOM</span>
-                    <button id="btn-map-zoom-out" class="map-ctrl-btn" title="Zoom Out Minimap Radar -"><kbd>-</kbd></button>
-                    <button id="btn-map-zoom-in" class="map-ctrl-btn" title="Zoom In Minimap Radar + / ="><kbd>+</kbd></button>
+                    <button id="btn-map-toggle-size" class="map-ctrl-btn" title="Toggle Compact / Expanded View [ / ]"><kbd>⛶</kbd> Size</button>
+                    <button id="btn-map-recenter" class="map-ctrl-btn" title="Reset Zoom to 1.0x [Home]"><kbd>●</kbd> Reset</button>
+                    <!-- Legacy compatibility anchors -->
+                    <button id="btn-map-size-dec" class="map-ctrl-btn" style="display:none;" title="Shrink Minimap Size ["><kbd>[</kbd></button>
+                    <button id="btn-map-size-inc" class="map-ctrl-btn" style="display:none;" title="Enlarge Minimap Size ]"><kbd>]</kbd></button>
                 </div>
             </div>
             <!-- Camera Head Tilt Controls Widget -->
@@ -149,12 +158,13 @@
             <div id="hud-center-column">
                 <!-- Quick Action Bar -->
                 <div id="action-bar" class="hud-panel">
-                    <button id="btn-attack" class="action-btn" title="Attack adjacent monster in front [Space/Enter]">⚔ Attack <kbd>Space</kbd></button>
+                    <button id="btn-attack" class="action-btn" title="Attack adjacent monster in front [Space]">⚔ Attack <kbd>Space</kbd></button>
+                    <button id="btn-throw" class="action-btn" title="Throw item at target [v]">🎯 Throw <kbd>v</kbd></button>
                     <button id="btn-fire" class="action-btn" title="Shoot ranged weapon from quiver [f]">🏹 Shoot <kbd>f</kbd></button>
                     <button id="btn-cast" class="action-btn" title="Cast spell or prayer [m]">✨ Cast <kbd>m</kbd></button>
                     <button id="btn-quaff" class="action-btn" title="Drink / quaff potion [q]">🧪 Potion <kbd>q</kbd></button>
                     <button id="btn-read" class="action-btn" title="Read magical scroll [r]">📜 Scroll <kbd>r</kbd></button>
-                    <button id="btn-door" class="action-btn" title="Open closed door or chest [o]">🚪 Door <kbd>o</kbd></button>
+                    <button id="btn-door" class="action-btn" title="Open closed door or chest in front [o]">🚪 Door <kbd>o</kbd></button>
                     <button id="btn-pickup" class="action-btn" title="Pick up item from dungeon floor [g]">💎 Get <kbd>g</kbd></button>
                     <button id="btn-rest" class="action-btn" title="Rest until fully healed [R]">⏳ Rest <kbd>R</kbd></button>
                     <button id="btn-inventory" class="action-btn" title="Open inventory pack [i]">🎒 Pack <kbd>i</kbd></button>

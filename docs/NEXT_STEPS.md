@@ -203,9 +203,24 @@ The project has achieved the **Tier 4 Visual & Environmental Overhaul**: deliver
   - **Confirmed Default Window Coordinates & Scale**:
     - Minimap Radar: `top: 14px; left: 18px;`
     - Message Log: `top: 14px; left: 320px;`
+- **Character Creation Navigation & Main Menu Escape**:
+  - `Escape` keypress and `Back (Esc)` toolbar button now detect character creation beginning (`!inPlay && !isReviewScreen`) and return directly to the Main Menu overlay (`returnToMainMenu()`), cleanly disconnecting and preventing the blank screen lock.
+  - Review screen `Back (Esc)` continues to step back to character creation beginning (`'s'`).
+- **Message Log in Town Display & Width Constraint Fix**:
+  - Corrected `#message-feed-window` CSS constraints to `width: min(580px, calc(100vw - 340px)); min-width: 260px; height: 180px; min-height: 90px;`, fixing layout collapse on standard viewports.
+  - Added safe clamping in `makeWindowDraggableAndResizable` so no stored `localStorage` values can position the window offscreen or collapse it.
+  - Ensured `this.messageFeedWindow` is lazily queried and forced visible with `display: flex; visibility: visible; opacity: 1` whenever `inPlay` (`frame.phase === 'play'` or `frame.player.name`).
+  - Guaranteed town welcome message seeding on town entry.
+  - Removed duplicate `network.sendKey('space')` from `hud.js` to eliminate racing double-space key events.
+- **Automatic Shop Menu Opening & Action Bar Isolation**:
+  - Updated `needsTerminal(frame)` to immediately route to the terminal when `frame.ui.overlay > 0` or whenever stepping onto a store entrance tile (feats 7..14).
+  - Expanded `updateTerminalToolbar(frame)` to detect all Angband store variations (`Armoury`, `Alchemy Shop`, `Magic User's`, `Weapon Smiths`, `Your Home`, `Store Inventory`, `Home Inventory`) and mapped store names from `playerFeat`.
+  - Exclusively displays `store-actions-bar` (`💰 Buy (p)`, `🏷 Sell (s)`, `🔍 Examine (i)`, `🚪 Exit (Esc)`) and hides generic advance/creation buttons.
+  - Guarded auto-space flushing so spaces are NEVER auto-sent while inside a store overlay (`!isOverlay`), preventing store interactions from being unintentionally cancelled or dismissed.
 - **Verification**: 11/11 engine bridge smoke tests, 11/11 node server unit tests, 0 warnings dotnet build across client/angband3d.csproj. Live deployment verified on Google Cloud Run:
-  - `angband3d-cloud`: Revision `angband3d-cloud-00044-847` (https://angband3d-cloud-564958309282.us-central1.run.app)
-  - `angband3d-web`: Revision `angband3d-web-00002-zkt` (https://angband3d-web-564958309282.us-central1.run.app)
+  - `angband3d-cloud` (us-central1): Revision `angband3d-cloud-00047-6rl` (https://angband3d-cloud-564958309282.us-central1.run.app)
+  - `angband3d-cloud` (us-east1): Revision `angband3d-cloud-00008-2gt` (https://angband3d-cloud-564958309282.us-east1.run.app)
+  - `angband3d-web` (us-central1): Revision `angband3d-web-00005-djt` (https://angband3d-web-564958309282.us-central1.run.app)
   - Live WebSocket handshake, health check, save API, store entry, and gameplay action verified via automated cloud integration test suites.
 
 ---

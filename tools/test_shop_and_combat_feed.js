@@ -1,7 +1,8 @@
 const WebSocket = require('../server/node_modules/ws');
 const assert = require('assert');
 
-const ws = new WebSocket('wss://angband3d-cloud-564958309282.us-east1.run.app/ws?user=E2ETest_' + Math.random().toString(36).substring(2, 6));
+const targetUrl = process.argv[2] || 'wss://angband3d-cloud-564958309282.us-east1.run.app/ws';
+const ws = new WebSocket(targetUrl + (targetUrl.includes('?') ? '&' : '?') + 'user=E2ETest_' + Math.random().toString(36).substring(2, 6));
 
 let seq = 0;
 let lastFrame = null;

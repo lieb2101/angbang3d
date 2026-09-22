@@ -97,6 +97,8 @@ Rather than rewriting Angband rules in C#, Angband runs as a headless child proc
 7. **Object identification integrity**: `object_kind_name(..., false)` is used so unidentified items show their flavor, not actual identity.
 8. **Never use `-n` blindly**: It overwrites existing save files. Client uses unique slot names via `FreeSlot()`.
 9. **C# String Interpolation**: Nested quotes inside interpolated strings (`$"...{"NESW"[i]}..."`) cause build failures on Mono SDK; use separate variable lookups.
+10. **Map Feature String Encoding**: In the JSON bridge, `map.rows[y].f` encodes tile feature indices as a string of 2 hex characters per tile (`w * 2`). Never index `f[px]` directly as a character; always decode using `parseInt(f.substring(px * 2, px * 2 + 2), 16)`.
+11. **Engine Message Ring-Buffer Baseline**: The C engine retains up to 24 previous messages across phase boundaries (e.g. `Accept character history? [y/n]`). When entering active play (`inPlay && !wasInPlay`), the frontend must baseline-seed `prevMessages = frame.messages` and `lastTermRow0` so historical birth prompts are not treated as new in-game messages.
 
 ## Token Efficiency & LLM Rate Limit Protocol
 1. **Zero-Discovery Startup**: Consult the Key Files Reference above rather than running exploratory searches.

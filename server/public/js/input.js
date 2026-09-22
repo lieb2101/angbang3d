@@ -128,21 +128,16 @@ class InputController {
                 ? window.__app.getAppState()
                 : 'game';
 
-            // 1. Splash Screen Mode
+            // 1. Splash Screen Mode: Any key continues to Main Menu (matches Godot SplashContinueRequested)
             if (appState === 'splash') {
-                if (e.key === ' ' || e.key === 'Enter' || e.key === '1') {
-                    e.preventDefault();
-                    if (window.__app) window.__app.showMainMenu();
-                    return;
-                }
                 if (e.key === '2' || e.key === 'g' || e.key === 'G') {
                     e.preventDefault();
-                    if (window.__app) window.__app.showGuide(0);
+                    if (window.__app) window.__app.showGuide(0, 'splash');
                     return;
                 }
                 if (e.key === '3' || e.key === 'c' || e.key === 'C') {
                     e.preventDefault();
-                    if (window.__app) window.__app.showGuide(5);
+                    if (window.__app) window.__app.showGuide(5, 'splash');
                     return;
                 }
                 if (e.key === 'w' || e.key === 'W') {
@@ -150,10 +145,9 @@ class InputController {
                     window.open('https://angband.readthedocs.io/', '_blank');
                     return;
                 }
-                if (e.key === 'Escape') {
-                    e.preventDefault();
-                    return;
-                }
+                // Any key advances from splash screen to main menu
+                e.preventDefault();
+                if (window.__app) window.__app.showMainMenu();
                 return;
             }
 
@@ -174,7 +168,7 @@ class InputController {
                     if (window.__app) window.__app.navigateMenu(1);
                     return;
                 }
-                if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+                if (['1', '2', '3', '4', '5', '6', '7'].includes(e.key)) {
                     e.preventDefault();
                     const idx = parseInt(e.key, 10) - 1;
                     if (window.__app) {
@@ -191,7 +185,71 @@ class InputController {
                 return;
             }
 
-            // 3. Game Guide & Primer Mode
+            // 3. Load Saved Game Menu Mode
+            if (appState === 'loadMenu') {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.hideLoadMenu();
+                    return;
+                }
+                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.navigateLoadList(-1);
+                    return;
+                }
+                if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.navigateLoadList(1);
+                    return;
+                }
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.loadSelectedSave();
+                    return;
+                }
+                if (e.key === 'Delete' || e.key === 'd' || e.key === 'D') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.deleteSelectedSave();
+                    return;
+                }
+                return;
+            }
+
+            // 4. In-Game Pause Menu Mode (Game Menu)
+            if (appState === 'pauseMenu') {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.resumeGame();
+                    return;
+                }
+                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.navigatePauseMenu(-1);
+                    return;
+                }
+                if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.navigatePauseMenu(1);
+                    return;
+                }
+                if (['1', '2', '3', '4', '5', '6', '7', '8'].includes(e.key)) {
+                    e.preventDefault();
+                    const idx = parseInt(e.key, 10) - 1;
+                    if (window.__app) {
+                        window.__app.selectPauseMenuItem(idx);
+                        window.__app.activatePauseMenuItem();
+                    }
+                    return;
+                }
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.activatePauseMenuItem();
+                    return;
+                }
+                return;
+            }
+
+            // 5. Game Guide & Primer Mode
             if (appState === 'guide') {
                 if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
@@ -243,7 +301,7 @@ class InputController {
                 return;
             }
 
-            // Escape: reliably cancel prompts, dismiss menus/overlays, or return to Main Menu
+            // Escape: reliably cancel prompts, dismiss menus/overlays, or open Pause Menu (1:1 with Godot Main.cs:1820-1835)
             if (e.key === 'Escape') {
                 e.preventDefault();
                 if (this.audio) this.audio.playMenuNav();
@@ -254,17 +312,16 @@ class InputController {
                     return;
                 }
 
-                // If the game has an active prompt, overlay/store, or more prompt: send escape to dismiss it
                 const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
                 const ui = lastFrame ? lastFrame.ui : null;
-                const hasActivePrompt = !ui || (ui.overlay && ui.overlay > 0) || ui.more || !ui.awaiting_command || this.inTerminal;
+                const inContextMenu = !lastFrame || (lastFrame.phase !== 'play') || (ui && (ui.overlay > 0 || ui.more || !ui.awaiting_command)) || this.inTerminal;
 
-                if (hasActivePrompt) {
+                if (inContextMenu) {
                     this.network.sendKey('escape');
                 } else {
-                    // In free 3D exploration with no sub-menus open, Escape returns to Main Menu
-                    if (window.__app && window.__app.returnToMainMenu) {
-                        window.__app.returnToMainMenu();
+                    // In free 3D exploration with no sub-menus open, Escape opens Game Menu
+                    if (window.__app && window.__app.showPauseMenu) {
+                        window.__app.showPauseMenu();
                     }
                 }
                 return;

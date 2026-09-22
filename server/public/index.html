@@ -18,7 +18,7 @@
         <div id="terminal-container" class="hidden">
             <div class="terminal-card">
                 <div class="terminal-toolbar">
-                    <div class="terminal-title">⚔ ANGBAND CLASSIC TERMINAL</div>
+                    <div class="terminal-title" id="terminal-title">⚔ ANGBAND CLASSIC TERMINAL</div>
                     <div class="terminal-actions">
                         <button id="btn-quick-birth" class="btn-gold" title="Quickly create a random hero and jump straight into the 3D dungeon!">⚔ Quick Start Hero (@)</button>
                         <button id="btn-term-advance" class="btn-gold-outline" title="Press Enter to confirm or advance">Advance (Enter)</button>
@@ -265,41 +265,49 @@
                             <span class="menu-desc" id="menu-continue-desc">Checking saved adventurers...</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-menu-random" data-index="1">
+                    <button class="menu-option-btn" id="btn-menu-load" data-index="1">
                         <span class="menu-bullet">►</span>
                         <span class="menu-num">[2]</span>
                         <div class="menu-text-col">
-                            <span class="menu-label">New Character (Random — Quick Start &amp; Review)</span>
-                            <span class="menu-desc">Generate a ready-to-play random hero and jump straight into the 3D town!</span>
+                            <span class="menu-label">Load Saved Game...</span>
+                            <span class="menu-desc">Choose an adventurer from your realm archive or delete obsolete saves.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-menu-custom" data-index="2">
+                    <button class="menu-option-btn" id="btn-menu-random" data-index="2">
                         <span class="menu-bullet">►</span>
                         <span class="menu-num">[3]</span>
                         <div class="menu-text-col">
-                            <span class="menu-label">New Character (Custom — Race, Class &amp; Stats)</span>
+                            <span class="menu-label">Start from Scratch (Random — Quick Start &amp; Review)</span>
+                            <span class="menu-desc">Generate a ready-to-play random hero and jump straight into the 3D town!</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-menu-custom" data-index="3">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[4]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Start from Scratch (Custom — Race, Class &amp; Stats)</span>
                             <span class="menu-desc">Choose race, class, and roll stats in the classic terminal wizard.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-menu-guide" data-index="3">
+                    <button class="menu-option-btn" id="btn-menu-guide" data-index="4">
                         <span class="menu-bullet">►</span>
-                        <span class="menu-num">[4]</span>
+                        <span class="menu-num">[5]</span>
                         <div class="menu-text-col">
                             <span class="menu-label">Game Guide &amp; Primer</span>
                             <span class="menu-desc">3D controls, combat, spellcasting, survival tactics, and dungeon lore.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-menu-credits" data-index="4">
+                    <button class="menu-option-btn" id="btn-menu-credits" data-index="5">
                         <span class="menu-bullet">►</span>
-                        <span class="menu-num">[5]</span>
+                        <span class="menu-num">[6]</span>
                         <div class="menu-text-col">
                             <span class="menu-label">Summary &amp; Credits</span>
                             <span class="menu-desc">Thunderbear Studios, Angband Devteam, and development history.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-menu-wiki" data-index="5">
+                    <button class="menu-option-btn" id="btn-menu-wiki" data-index="6">
                         <span class="menu-bullet">►</span>
-                        <span class="menu-num">[6]</span>
+                        <span class="menu-num">[7]</span>
                         <div class="menu-text-col">
                             <span class="menu-label">Angband Online Wiki &amp; Manual</span>
                             <span class="menu-desc">Official monster, artifact, and spell compendium (external link).</span>
@@ -308,7 +316,120 @@
                 </div>
 
                 <div class="main-menu-footer">
-                    <span>[↑/↓] Navigate &nbsp;•&nbsp; [1-6] Quick Select &nbsp;•&nbsp; [Enter/Space/Click] Choose &nbsp;•&nbsp; [Esc] Splash Screen</span>
+                    <span>[↑/↓] Navigate &nbsp;•&nbsp; [1-7] Quick Select &nbsp;•&nbsp; [Enter/Space/Click] Choose &nbsp;•&nbsp; [Esc] Splash Screen</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Load Saved Game Modal -->
+        <div id="load-modal" class="hidden">
+            <div class="load-card">
+                <div class="main-menu-ornament-corner top-left"></div>
+                <div class="main-menu-ornament-corner top-right"></div>
+                <div class="main-menu-ornament-corner bottom-left"></div>
+                <div class="main-menu-ornament-corner bottom-right"></div>
+
+                <div class="main-menu-header">
+                    <h2 class="main-menu-title">⚔ LOAD SAVED GAME ⚔</h2>
+                    <div class="main-menu-subtitle">Select an adventurer from your realm archive to continue the descent</div>
+                </div>
+
+                <div id="load-save-list" class="load-save-list">
+                    <div class="save-loading-state">
+                        <div class="spinner"></div>
+                        <span>Scanning realm archives...</span>
+                    </div>
+                </div>
+
+                <div class="load-footer">
+                    <span>[↑/↓] Navigate &nbsp;•&nbsp; [Enter] Load Selected &nbsp;•&nbsp; [Del / D] Delete Save &nbsp;•&nbsp; [Esc] Back</span>
+                    <button id="btn-load-back" class="btn-gold-outline">[Esc] Back</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- In-Game Pause Menu Modal (Matches Godot OpenPauseMenu) -->
+        <div id="pause-modal" class="hidden">
+            <div class="main-menu-card pause-card">
+                <div class="main-menu-ornament-corner top-left"></div>
+                <div class="main-menu-ornament-corner top-right"></div>
+                <div class="main-menu-ornament-corner bottom-left"></div>
+                <div class="main-menu-ornament-corner bottom-right"></div>
+
+                <div class="main-menu-header">
+                    <h2 class="main-menu-title">⚔ GAME MENU ⚔</h2>
+                    <div class="main-menu-subtitle" id="pause-char-display">Current Character: Hero</div>
+                </div>
+
+                <div class="main-menu-options" id="pause-menu-options">
+                    <button class="menu-option-btn selected" id="btn-pause-resume" data-index="0">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[1]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Resume Game</span>
+                            <span class="menu-desc">Return to the first-person 3D dungeon.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-pause-save" data-index="1">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[2]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Save Game Now (Ctrl-S)</span>
+                            <span class="menu-desc">Commit your hero's progress immediately to the server.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-pause-load" data-index="2">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[3]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Load Other Character...</span>
+                            <span class="menu-desc">Switch to an alternate adventurer or previous checkpoint.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-pause-random" data-index="3">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[4]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Start Over (Random Hero)</span>
+                            <span class="menu-desc">Roll a brand-new ready-to-play adventurer from scratch.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-pause-custom" data-index="4">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[5]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Start Over (Custom Hero)</span>
+                            <span class="menu-desc">Choose race, class, and roll stats in the classic wizard.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-pause-guide" data-index="5">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[6]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Game Guide &amp; Primer</span>
+                            <span class="menu-desc">Controls, combat, spells, and survival handbook.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-pause-fullscreen" data-index="6">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[7]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Toggle Fullscreen (F11)</span>
+                            <span class="menu-desc">Expand viewport to fill your display.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-pause-quit" data-index="7">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[8]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Save &amp; Quit to Main Menu</span>
+                            <span class="menu-desc">Safely save your adventurer and return to the main title screen.</span>
+                        </div>
+                    </button>
+                </div>
+
+                <div class="main-menu-footer">
+                    <span>[↑/↓] Navigate &nbsp;•&nbsp; [1-8] Quick Select &nbsp;•&nbsp; [Enter/Click] Choose &nbsp;•&nbsp; [Esc] Resume Game</span>
                 </div>
             </div>
         </div>

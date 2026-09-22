@@ -18,12 +18,20 @@ class GameNetwork {
         this.onStatus = null;
     }
 
-    connect(charName = 'Adventurer', isNew = false) {
+    connect(charName = 'Adventurer', isNew = false, saveFile = null) {
+        this.manualDisconnect = false;
+        this.currentChar = charName;
+        this.currentIsNew = isNew;
+        this.currentSave = saveFile;
+
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
         let wsUrl = `${protocol}//${host}/ws?user=${encodeURIComponent(charName)}`;
         if (isNew) {
             wsUrl += '&new=1';
+        }
+        if (saveFile) {
+            wsUrl += `&save=${encodeURIComponent(saveFile)}`;
         }
 
         if (this.onStatus) this.onStatus('Connecting to Cloud Realm...');
@@ -67,9 +75,24 @@ class GameNetwork {
 
         this.ws.onclose = () => {
             this.connected = false;
+            if (this.manualDisconnect) {
+                if (this.onStatus) this.onStatus('Disconnected');
+                return;
+            }
             if (this.onStatus) this.onStatus('Disconnected from server. Reconnecting in 3s...');
-            setTimeout(() => this.connect(charName), 3000);
+            setTimeout(() => {
+                if (!this.manualDisconnect) {
+                    this.connect(this.currentChar, this.currentIsNew, this.currentSave);
+                }
+            }, 3000);
         };
+    }
+
+    disconnect() {
+        this.manualDisconnect = true;
+        if (this.ws) {
+            try { this.ws.close(); } catch (_) {}
+        }
     }
 
     startPingHeartbeat() {

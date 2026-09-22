@@ -4253,12 +4253,22 @@ class Dungeon3D {
         }
         this.camera.rotation.z = roll;
 
-        // Live real-time broadcast of camera yaw to HUD for smooth needle & vision cone
-        if (window.__app && window.__app.hud && typeof window.__app.hud.onCameraTurn === 'function') {
+        // Live real-time broadcast of camera movement & yaw to HUD for smooth needle, vision cone & minimap
+        if (window.__app && window.__app.hud) {
             const curYaw = -this.camera.rotation.y;
-            if (Math.abs(curYaw - (this._lastBroadcastYaw || 0)) > 0.003) {
+            const contX = this.cellSize > 0 ? (this.camera.position.x / this.cellSize) : 0;
+            const contY = this.cellSize > 0 ? (this.camera.position.z / this.cellSize) : 0;
+            const moved = Math.abs(contX - (this._lastBroadcastX || 0)) > 0.015 || Math.abs(contY - (this._lastBroadcastY || 0)) > 0.015;
+            const turned = Math.abs(curYaw - (this._lastBroadcastYaw || 0)) > 0.003;
+            if (moved || turned) {
+                this._lastBroadcastX = contX;
+                this._lastBroadcastY = contY;
                 this._lastBroadcastYaw = curYaw;
-                window.__app.hud.onCameraTurn(curYaw);
+                if (typeof window.__app.hud.onCameraMove === 'function') {
+                    window.__app.hud.onCameraMove(contX, contY, curYaw);
+                } else if (typeof window.__app.hud.onCameraTurn === 'function') {
+                    window.__app.hud.onCameraTurn(curYaw);
+                }
             }
         }
 

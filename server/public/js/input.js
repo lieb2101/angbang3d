@@ -81,7 +81,9 @@ class InputController {
                 // [N] Reroll new character (matches Godot Main.cs:1688)
                 if (e.key === 'n' || e.key === 'N') {
                     e.preventDefault();
-                    if (window.__app && window.__app.hud && window.__app.hud.rerollCharacter) {
+                    if (window.__app && window.__app.startNewRandomHero) {
+                        window.__app.startNewRandomHero();
+                    } else if (window.__app && window.__app.hud && window.__app.hud.rerollCharacter) {
                         window.__app.hud.rerollCharacter();
                     } else {
                         const randomId = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -93,18 +95,11 @@ class InputController {
                 // [M] or [Escape] Main menu (matches Godot Main.cs:1692)
                 if (e.key === 'm' || e.key === 'M' || e.key === 'Escape') {
                     e.preventDefault();
-                    if (window.__app && window.__app.hud) {
-                        window.__app.hud.hideDeathModal();
+                    if (window.__app && window.__app.returnToMainMenu) {
+                        window.__app.returnToMainMenu();
+                    } else {
+                        window.location.href = '/';
                     }
-                    window.location.href = '/';
-                    return;
-                }
-                if (e.key === 'Escape') {
-                    e.preventDefault();
-                    if (window.__app && window.__app.hud) {
-                        window.__app.hud.hideDeathModal();
-                    }
-                    window.location.href = '/';
                     return;
                 }
 
@@ -129,6 +124,113 @@ class InputController {
                 return;
             }
 
+            const appState = (window.__app && typeof window.__app.getAppState === 'function')
+                ? window.__app.getAppState()
+                : 'game';
+
+            // 1. Splash Screen Mode
+            if (appState === 'splash') {
+                if (e.key === ' ' || e.key === 'Enter' || e.key === '1') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.showMainMenu();
+                    return;
+                }
+                if (e.key === '2' || e.key === 'g' || e.key === 'G') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.showGuide(0);
+                    return;
+                }
+                if (e.key === '3' || e.key === 'c' || e.key === 'C') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.showGuide(5);
+                    return;
+                }
+                if (e.key === 'w' || e.key === 'W') {
+                    e.preventDefault();
+                    window.open('https://angband.readthedocs.io/', '_blank');
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    return;
+                }
+                return;
+            }
+
+            // 2. Main Menu Mode
+            if (appState === 'mainMenu') {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.showSplash();
+                    return;
+                }
+                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.navigateMenu(-1);
+                    return;
+                }
+                if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.navigateMenu(1);
+                    return;
+                }
+                if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+                    e.preventDefault();
+                    const idx = parseInt(e.key, 10) - 1;
+                    if (window.__app) {
+                        window.__app.selectMenuItem(idx);
+                        window.__app.activateMenuItem();
+                    }
+                    return;
+                }
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.activateMenuItem();
+                    return;
+                }
+                return;
+            }
+
+            // 3. Game Guide & Primer Mode
+            if (appState === 'guide') {
+                if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.hideGuide();
+                    return;
+                }
+                if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+                    e.preventDefault();
+                    const idx = parseInt(e.key, 10) - 1;
+                    if (window.__app) window.__app.switchGuideTab(idx);
+                    return;
+                }
+                if (e.key === 'Tab' || e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.cycleGuideTab(1);
+                    return;
+                }
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.cycleGuideTab(-1);
+                    return;
+                }
+                if (e.key === 'w' || e.key === 'W') {
+                    e.preventDefault();
+                    window.open('https://angband.readthedocs.io/', '_blank');
+                    return;
+                }
+                if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(e.key)) {
+                    e.preventDefault();
+                    const guideBody = document.getElementById('guide-body');
+                    if (guideBody) {
+                        const delta = (e.key === 'ArrowUp' ? -40 : e.key === 'ArrowDown' ? 40 : e.key === 'PageUp' ? -200 : 200);
+                        guideBody.scrollTop += delta;
+                    }
+                    return;
+                }
+                return;
+            }
+
             // Any manual key cancels automated quick birth
             if (window.__app && window.__app.cancelQuickBirth) {
                 window.__app.cancelQuickBirth();
@@ -141,13 +243,29 @@ class InputController {
                 return;
             }
 
-            // Escape: reliably cancel prompts, dismiss menus/overlays, and return from forced terminal view
+            // Escape: reliably cancel prompts, dismiss menus/overlays, or return to Main Menu
             if (e.key === 'Escape') {
                 e.preventDefault();
                 if (this.audio) this.audio.playMenuNav();
-                this.network.sendKey('escape');
+
+                // If in forced terminal view, toggle back to 3D world
                 if (window.__app && window.__app.isForceTerminal && window.__app.isForceTerminal()) {
                     if (this.toggleTerminalView) this.toggleTerminalView();
+                    return;
+                }
+
+                // If the game has an active prompt, overlay/store, or more prompt: send escape to dismiss it
+                const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+                const ui = lastFrame ? lastFrame.ui : null;
+                const hasActivePrompt = !ui || (ui.overlay && ui.overlay > 0) || ui.more || !ui.awaiting_command || this.inTerminal;
+
+                if (hasActivePrompt) {
+                    this.network.sendKey('escape');
+                } else {
+                    // In free 3D exploration with no sub-menus open, Escape returns to Main Menu
+                    if (window.__app && window.__app.returnToMainMenu) {
+                        window.__app.returnToMainMenu();
+                    }
                 }
                 return;
             }

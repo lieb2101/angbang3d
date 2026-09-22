@@ -252,18 +252,27 @@ class WebHUD {
         ctx.closePath();
         ctx.fill();
 
+        // Fixed north marker notch on compass bezel
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - radius + 1);
+        ctx.lineTo(cx - 3, cy - radius + 6);
+        ctx.lineTo(cx + 3, cy - radius + 6);
+        ctx.closePath();
+        ctx.fill();
+
         // Center golden jewel rivet
         ctx.fillStyle = '#ffd700';
         ctx.beginPath();
         ctx.arc(cx, cy, 2.2, 0, Math.PI * 2);
         ctx.fill();
 
-        // 8-Point Compass Heading
-        const headingDirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-        let normYaw = (yaw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
-        const headingIdx = Math.round(normYaw / (Math.PI / 4)) % 8;
+        // Update compass facing label if present
         if (this.compassLabel) {
-            this.compassLabel.textContent = headingDirs[headingIdx];
+            const normYaw = (yaw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+            const sector = Math.round(normYaw / (Math.PI / 4)) % 8;
+            const names = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+            this.compassLabel.textContent = names[sector] || 'N';
         }
     }
 
@@ -288,18 +297,23 @@ class WebHUD {
         const px = player.x;
         const py = player.y;
 
-        const ox = Math.max(0, Math.min(map.w - cols, px - Math.floor(cols / 2)));
-        const oy = Math.max(0, Math.min(map.h - lines, py - Math.floor(lines / 2)));
+        // Use continuous player coordinates when stepping/animating for butter-smooth 60fps tracking
+        const drawPx = (typeof this.continuousX === 'number' && !isNaN(this.continuousX)) ? this.continuousX : px;
+        const drawPy = (typeof this.continuousY === 'number' && !isNaN(this.continuousY)) ? this.continuousY : py;
 
-        const cx = (px - ox) * cellSize + cellSize / 2;
-        const cy = (py - oy) * cellSize + cellSize / 2;
+        const ox = Math.max(0, Math.min(map.w - cols, Math.floor(drawPx) - Math.floor(cols / 2)));
+        const oy = Math.max(0, Math.min(map.h - lines, Math.floor(drawPy) - Math.floor(lines / 2)));
+
+        const cx = (drawPx - ox) * cellSize + cellSize / 2;
+        const cy = (drawPy - oy) * cellSize + cellSize / 2;
 
         // Direction vector from continuous camera yaw
         const dir = { x: Math.sin(yaw), y: -Math.cos(yaw) };
         const side = { x: -dir.y, y: dir.x };
 
-        // 1. Offscreen Tile Cache Generation: Only re-rasterize ASCII glyphs when map/player pos/zoom changes
-        const cacheKey = `${map.seq || 0}_${px}_${py}_${this.minimapZoom}_${w}_${h}_${ox}_${oy}`;
+        // 1. Offscreen Tile Cache Generation: Re-rasterize ASCII glyphs when map sequence, viewport scroll, or zoom changes
+        const frameSeq = (this.lastFrame && this.lastFrame.seq !== undefined) ? this.lastFrame.seq : 0;
+        const cacheKey = `${frameSeq}_${ox}_${oy}_${this.minimapZoom}_${w}_${h}`;
         if (cacheKey !== this.minimapTileCacheKey || this.minimapTileCanvas.width !== w || this.minimapTileCanvas.height !== h) {
             this.minimapTileCanvas.width = w;
             this.minimapTileCanvas.height = h;
@@ -349,8 +363,6 @@ class WebHUD {
                         tCtx.fillStyle = 'rgba(8, 10, 15, 0.65)';
                     }
                     tCtx.fillRect(sx, sy, cellSize, cellSize);
-
-                    if (mx === px && my === py) continue; // Drawn as directional pointer below
 
                     const attrIdx = mx * 2;
                     const attrVal = (row.a && attrIdx + 1 < row.a.length) ? parseInt(row.a.substring(attrIdx, attrIdx + 2), 16) : 1;
@@ -525,12 +537,11 @@ class WebHUD {
         const facingName = facingNames[facing] || 'N';
 
         // Minimap Header (Overlay.cs:1404)
-        if (this.minimapHeader && player.x !== undefined && player.y !== undefined) {
-            this.minimapHeader.innerHTML = `
-                <span>MINIMAP (${player.x},${player.y}) ${locStr}</span>
-                <span class="minimap-hint">[ ] Size • +/- Zoom</span>
-                <span style="color:#ffd700;">[${arrowChar} ${facingName}]</span>
-            `;
+        if (player.x !== undefined && player.y !== undefined) {
+            const titleEl = document.getElementById('minimap-title-text');
+            if (titleEl) {
+                titleEl.innerHTML = `MINIMAP (${player.x},${player.y}) <span style="color:#ffd700;">[${arrowChar} ${facingName}]</span>`;
+            }
         }
 
         // Contextual Diagonal Movement Hint (Row 1)

@@ -15,7 +15,7 @@
         <canvas id="viewport-canvas"></canvas>
 
         <!-- 80x24 Terminal View (Birth menus, stores, death disclosure) -->
-        <div id="terminal-container">
+        <div id="terminal-container" class="hidden">
             <div class="terminal-card">
                 <div class="terminal-toolbar">
                     <div class="terminal-title">⚔ ANGBAND CLASSIC TERMINAL</div>
@@ -39,6 +39,7 @@
             <div id="ping-badge" class="badge">Cloud [Connecting...]</div>
             <button id="btn-sound" class="icon-btn">🔊 Sound</button>
             <button id="btn-fullscreen" class="icon-btn">⛶ Fullscreen</button>
+            <button id="btn-menu" class="icon-btn" title="Main Menu [Esc]">⚙ Menu</button>
         </div>
 
         <!-- 2D Minimap -->
@@ -210,11 +211,227 @@
             </div>
         </div>
 
+        <!-- Splash Screen Overlay -->
+        <div id="splash-overlay">
+            <div class="splash-card">
+                <div class="splash-ornament-corner top-left"></div>
+                <div class="splash-ornament-corner top-right"></div>
+                <div class="splash-ornament-corner bottom-left"></div>
+                <div class="splash-ornament-corner bottom-right"></div>
+
+                <div class="splash-presentation">★ &nbsp; T H U N D E R B E A R &nbsp; S T U D I O S &nbsp; ★</div>
+                <div class="splash-presents">— &nbsp; P R E S E N T S &nbsp; —</div>
+                
+                <div class="splash-logo-container">
+                    <img src="/assets/thunderbear_logo.png" alt="Thunderbear Studios" class="splash-logo">
+                </div>
+
+                <h1 class="splash-title">A N G B A N D &nbsp; 3 D</h1>
+                <div class="splash-subtitle">The Classic Roguelike Dungeon Crawler • Reborn in First-Person 3D</div>
+                <div class="splash-engine-tag">Angband 4.2.6 C Engine • Three.js WebGL Architecture • Procedural Dungeon Depths</div>
+
+                <button id="btn-splash-start" class="btn-splash-start">
+                    [ PRESS SPACE / ENTER / CLICK TO ENTER MAIN MENU ]
+                </button>
+
+                <div class="splash-shortcuts">
+                    <button class="splash-shortcut-btn" id="btn-splash-menu"><kbd>[1]</kbd> Main Menu</button>
+                    <button class="splash-shortcut-btn" id="btn-splash-guide"><kbd>[2]</kbd> Game Guide &amp; Primer</button>
+                    <button class="splash-shortcut-btn" id="btn-splash-credits"><kbd>[3]</kbd> Summary &amp; Credits</button>
+                    <a href="https://angband.readthedocs.io/" target="_blank" rel="noopener noreferrer" class="splash-shortcut-btn"><kbd>[W]</kbd> Angband Wiki</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Menu Overlay -->
+        <div id="main-menu-overlay" class="hidden">
+            <div class="main-menu-card">
+                <div class="main-menu-ornament-corner top-left"></div>
+                <div class="main-menu-ornament-corner top-right"></div>
+                <div class="main-menu-ornament-corner bottom-left"></div>
+                <div class="main-menu-ornament-corner bottom-right"></div>
+
+                <div class="main-menu-header">
+                    <h2 class="main-menu-title">⚔ A N G B A N D &nbsp; 3 D ⚔</h2>
+                    <div class="main-menu-subtitle">Choose your path to begin the descent into the pits of Angband</div>
+                </div>
+
+                <div class="main-menu-options" id="main-menu-options">
+                    <button class="menu-option-btn selected" id="btn-menu-continue" data-index="0">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[1]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label" id="menu-continue-label">Continue Last Played</span>
+                            <span class="menu-desc" id="menu-continue-desc">Checking saved adventurers...</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-menu-random" data-index="1">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[2]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">New Character (Random — Quick Start &amp; Review)</span>
+                            <span class="menu-desc">Generate a ready-to-play random hero and jump straight into the 3D town!</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-menu-custom" data-index="2">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[3]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">New Character (Custom — Race, Class &amp; Stats)</span>
+                            <span class="menu-desc">Choose race, class, and roll stats in the classic terminal wizard.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-menu-guide" data-index="3">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[4]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Game Guide &amp; Primer</span>
+                            <span class="menu-desc">3D controls, combat, spellcasting, survival tactics, and dungeon lore.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-menu-credits" data-index="4">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[5]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Summary &amp; Credits</span>
+                            <span class="menu-desc">Thunderbear Studios, Angband Devteam, and development history.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-menu-wiki" data-index="5">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[6]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Angband Online Wiki &amp; Manual</span>
+                            <span class="menu-desc">Official monster, artifact, and spell compendium (external link).</span>
+                        </div>
+                    </button>
+                </div>
+
+                <div class="main-menu-footer">
+                    <span>[↑/↓] Navigate &nbsp;•&nbsp; [1-6] Quick Select &nbsp;•&nbsp; [Enter/Space/Click] Choose &nbsp;•&nbsp; [Esc] Splash Screen</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Guide & Credits Modal -->
+        <div id="guide-modal" class="hidden">
+            <div class="guide-card">
+                <div class="guide-header">
+                    <div class="guide-title">ANGBAND 3D — ADVENTURER'S SURVIVAL GUIDE &amp; PRIMER</div>
+                    <button id="btn-guide-close" class="btn-guide-close" title="Close [Esc]">✕</button>
+                </div>
+                <div class="guide-tabs">
+                    <button class="guide-tab active" data-tab="0">1. Overview</button>
+                    <button class="guide-tab" data-tab="1">2. 3D Controls</button>
+                    <button class="guide-tab" data-tab="2">3. Commands</button>
+                    <button class="guide-tab" data-tab="3">4. Survival</button>
+                    <button class="guide-tab" data-tab="4">5. Stats &amp; Magic</button>
+                    <button class="guide-tab" data-tab="5">6. Credits &amp; Links</button>
+                </div>
+                <div class="guide-body" id="guide-body">
+                    <!-- Tab 0: Overview -->
+                    <div class="guide-tab-content active" id="guide-tab-0">
+                        <div class="guide-section-header">[ OVERVIEW &amp; LORE ]</div>
+                        <p class="guide-p">Deep beneath the ruins of Angband, the Iron Hell of the First Age, Morgoth Bauglir sits upon his subterranean throne of black adamant, crowned with three burning Silmarils. As a valiant adventurer seeking glory, vengeance, or boundless treasure, you begin your journey in the frontier town above.</p>
+                        <p class="guide-p">Angband 3D combines the deep, turn-based roguelike mechanics of the venerable <strong>Angband 4.2.6 C engine</strong> with a modern, immersive <strong>first-person 3D dungeon crawler viewport</strong>. The world operates in true turn-based time: nothing moves until you decide to take an action.</p>
+                        <ul class="guide-list">
+                            <li>• <strong>100 Procedural Dungeon Depths (5000ft)</strong>: Each dungeon floor is procedurally generated with winding corridors, monster vaults, and secret treasure caches.</li>
+                            <li>• <strong>Instant 3D Camera Turning</strong>: Turning your camera left or right costs zero engine turns, allowing you to freely look around corners and inspect threats without advancing game time.</li>
+                            <li>• <strong>Seamless CRT Terminal Integration</strong>: Switch between the 3D first-person world and the classic 80x24 roguelike CRT terminal at any time by pressing <kbd>Tab</kbd>.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Tab 1: 3D Controls -->
+                    <div class="guide-tab-content" id="guide-tab-1">
+                        <div class="guide-section-header">[ 3D FIRST-PERSON NAVIGATION ]</div>
+                        <ul class="guide-list">
+                            <li>• <kbd>↑ / W</kbd> or <kbd>Numpad 8</kbd>: Step forward in camera facing direction.</li>
+                            <li>• <kbd>↓ / S</kbd> or <kbd>Numpad 2</kbd>: Step backward.</li>
+                            <li>• <kbd>← / A</kbd> or <kbd>→</kbd>: Instant 90° Camera Turn (Zero game turns consumed).</li>
+                            <li>• <kbd>Numpad 4 / 6</kbd>: Strafe step left or right without turning.</li>
+                            <li>• <kbd>Numpad 7 / 9 / 1 / 3</kbd>: Diagonal movement (Forward-Left, Forward-Right, etc.).</li>
+                            <li>• <kbd>.</kbd> or <kbd>Numpad 5</kbd>: Rest / Pass turn (1 game turn).</li>
+                            <li>• <kbd>PageUp / PageDown</kbd>: Tilt head camera up or down. <kbd>Home</kbd> recenters view.</li>
+                            <li>• <kbd>[ / ]</kbd>: Cycle Minimap size (Compact, Standard, Expanded, Tactical, Command).</li>
+                            <li>• <kbd>+ / -</kbd> or <kbd>Mouse Wheel</kbd>: Zoom Minimap radar in or out.</li>
+                            <li>• <kbd>Tab</kbd>: Toggle between 3D Dungeon and Classic 80x24 CRT Terminal view.</li>
+                            <li>• <kbd>F11 / Alt+Enter</kbd>: Toggle Fullscreen mode.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Tab 2: Commands -->
+                    <div class="guide-tab-content" id="guide-tab-2">
+                        <div class="guide-section-header">[ COMBAT &amp; ACTION COMMANDS ]</div>
+                        <ul class="guide-list">
+                            <li>• <kbd>Space / Enter</kbd>: Attack adjacent monster in front or confirm message prompt.</li>
+                            <li>• <kbd>i</kbd>: Open Inventory pack (inspect, examine, identify items).</li>
+                            <li>• <kbd>e</kbd>: Inspect Equipment worn on character body.</li>
+                            <li>• <kbd>w</kbd>: Wield weapon, wear armor, or equip rings and amulets.</li>
+                            <li>• <kbd>t</kbd>: Take off / un-wield equipped armor or weapon.</li>
+                            <li>• <kbd>d</kbd>: Drop an item from inventory onto the dungeon floor.</li>
+                            <li>• <kbd>g</kbd>: Pick up items or gold coins from the ground.</li>
+                            <li>• <kbd>q</kbd>: Quaff potion (Healing, Cure Poison, Speed, Resistances).</li>
+                            <li>• <kbd>r</kbd>: Read magic scroll (Phase Door, Teleport, Word of Recall).</li>
+                            <li>• <kbd>m</kbd>: Cast spell or pray (Mages, Priests, Rangers, Paladins, Rogues).</li>
+                            <li>• <kbd>&gt;</kbd>: Descend downstairs to deeper dungeon floor.</li>
+                            <li>• <kbd>&lt;</kbd>: Ascend upstairs toward the safety of town.</li>
+                            <li>• <kbd>R</kbd>: Rest until fully recovered in Hit Points and Mana.</li>
+                            <li>• <kbd>Esc</kbd>: Cancel targeting, close open menus, or dismiss prompts.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Tab 3: Survival -->
+                    <div class="guide-tab-content" id="guide-tab-3">
+                        <div class="guide-section-header">[ ESSENTIAL SURVIVAL TACTICS ]</div>
+                        <ul class="guide-list">
+                            <li>• <strong>Light Is Life</strong>: Subterranean depths are shrouded in pitch blackness. Always maintain an active brass lantern, torches, and flasks of oil purchased from the General Store.</li>
+                            <li>• <strong>Never Run Out of Food</strong>: Starvation will weaken and ultimately kill your adventurer. Always keep food rations or hard biscuits in your pack.</li>
+                            <li>• <strong>Emergency Escapes</strong>: Always carry multiple <em>Scrolls of Phase Door</em> and <em>Scrolls of Teleportation</em>. In dangerous fights, fleeing to fight another day is always the right decision.</li>
+                            <li>• <strong>Word of Recall</strong>: A magical scroll that teleports you between the town and your deepest dungeon depth. It takes several turns to charge; use it in safe corridors.</li>
+                            <li>• <strong>Audio Awareness</strong>: Positional 3D audio alerts you to monster movements, spell impacts, trap triggers, and footfalls before they come into visual sight.</li>
+                            <li>• <strong>Town Services</strong>: Visit the General Store, Armory, Weaponsmith, Magic Shop, Temple, and Alchemist in town (Depth 0) to re-supply between dungeon dives.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Tab 4: Stats & Magic -->
+                    <div class="guide-tab-content" id="guide-tab-4">
+                        <div class="guide-section-header">[ ATTRIBUTES &amp; MAGIC DISCIPLINES ]</div>
+                        <ul class="guide-list">
+                            <li>• <strong>STR (Strength)</strong>: Determines melee attack damage, number of blows per round, and carrying weight capacity.</li>
+                            <li>• <strong>INT (Intelligence)</strong>: Primary casting stat for Mages and Rangers. Governs spell success chance, mana reserves, and magical devices.</li>
+                            <li>• <strong>WIS (Wisdom)</strong>: Primary casting stat for Priests and Paladins. Governs prayer success, divine mana, and saving throws.</li>
+                            <li>• <strong>DEX (Dexterity)</strong>: Adds Armor Class bonuses, improves hit accuracy, enables dodging, and grants extra attacks.</li>
+                            <li>• <strong>CON (Constitution)</strong>: Determines your Maximum Hit Points (HP) and resistance to stunning and physical shock.</li>
+                            <li>• <strong>Magic Disciplines</strong>: Sorcery, Elemental Magic, and Holy Invocations offer devastating fireballs, ice storms, healing rays, and magical detections.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Tab 5: Credits -->
+                    <div class="guide-tab-content" id="guide-tab-5">
+                        <div class="guide-section-header">[ CREDITS &amp; ACKNOWLEDGMENTS ]</div>
+                        <p class="guide-p"><strong>Angband 3D</strong> is proudly presented by <strong>Thunderbear Studios</strong>.</p>
+                        <ul class="guide-list">
+                            <li>• <strong>Production &amp; 3D Direction</strong>: Thunderbear Studios</li>
+                            <li>• <strong>Original Game Engine</strong>: The Angband Development Team (Angband 4.2.6 C Engine)</li>
+                            <li>• <strong>3D WebGL Graphics Engine</strong>: Three.js (r128)</li>
+                            <li>• <strong>Desktop C# Reference Client</strong>: Godot Engine 4.x</li>
+                            <li>• <strong>Audio &amp; Soundscapes</strong>: Freesound &amp; OpenGameArt community contributors</li>
+                            <li>• <strong>Community Wiki &amp; Manual</strong>: <a href="https://angband.readthedocs.io/" target="_blank" rel="noopener noreferrer" style="color: var(--gold-bright);">https://angband.readthedocs.io/</a></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="guide-footer">
+                    <span>[1-6] Tabs • [Tab / Left / Right] Cycle Tabs • [Up/Down/Wheel] Scroll • [Esc] Back</span>
+                    <button id="btn-guide-back" class="btn-gold-outline">[Esc / Enter] Return to Menu</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Initial Connection Spinner -->
-        <div id="loading-overlay">
+        <div id="loading-overlay" class="hidden">
             <div class="spinner"></div>
             <h2 style="color: var(--gold-bright); letter-spacing: 2px;">ANGBAND 3D</h2>
-            <p style="color: var(--text-muted); font-size: 14px;">Connecting to Cloud Realm & Spawning Engine...</p>
+            <p style="color: var(--text-muted); font-size: 14px;">Connecting to Cloud Realm &amp; Spawning Engine...</p>
         </div>
     </div>
 

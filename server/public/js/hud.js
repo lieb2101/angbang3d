@@ -233,6 +233,8 @@ class WebHUD {
                 }
             });
         }
+    }
+
     resetMessages(welcomeText = null) {
         if (!this.messageFeedList) {
             this.messageFeedList = document.getElementById('message-feed-list');

@@ -195,7 +195,18 @@ async function runTests() {
     assert(inputJs.includes("const inPlay = Boolean(lastFrame && lastFrame.phase === 'play' && lastFrame.map);"), 'input.js must strictly define inPlay by phase and map');
     console.log('  -> Store actions bar strictly quarantined to inPlay states with verified map context');
     console.log('  -> Store menus strictly isolate shop options and hide creation/advance buttons');
-    console.log('  -> Message log starts clean with town greeting and filters creation history');
+    // Test 12: Client JS Syntax & Compilation Integrity
+    console.log('Test 12: Client JS Syntax & Compilation Integrity');
+    const clientScripts = ['app.js', 'hud.js', 'input.js', 'terminal.js', 'audio.js', 'dungeon3d.js', 'network.js'];
+    for (const scriptName of clientScripts) {
+        const scriptCode = fs.readFileSync(path.join(__dirname, '../public/js', scriptName), 'utf8');
+        try {
+            new Function(scriptCode);
+            console.log(`  -> ${scriptName} syntax verified cleanly`);
+        } catch (syntaxErr) {
+            assert.fail(`${scriptName} failed syntax evaluation: ${syntaxErr.message}`);
+        }
+    }
 
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);

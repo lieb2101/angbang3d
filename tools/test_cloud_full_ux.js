@@ -1,6 +1,7 @@
 const WebSocket = require('../server/node_modules/ws');
 
-const wsUrl = 'wss://angband3d-cloud-564958309282.us-east1.run.app/ws?user=FullUxTest_' + Math.random().toString(36).substring(2, 6);
+const CLOUD_HOST = process.env.CLOUD_HOST || 'angband3d-cloud-564958309282.us-central1.run.app';
+const wsUrl = `wss://${CLOUD_HOST}/ws?user=FullUxTest_` + Math.random().toString(36).substring(2, 6);
 const ws = new WebSocket(wsUrl);
 
 let seq = 0;

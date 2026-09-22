@@ -252,6 +252,41 @@ class WebHUD {
         }
     }
 
+    getMessageColor(text, attr) {
+        if (!text) return '#c8d1dc';
+        const t = text.toLowerCase();
+        if (t.includes('you hit') || t.includes('you slash') || t.includes('you crush') || 
+            t.includes('you smite') || t.includes('you shoot') || t.includes('you destroy') || 
+            t.includes('dies.') || t.includes('destroyed.') || t.includes('killed.')) {
+            return '#ffd166'; // Player offensive success (Gold)
+        }
+        if (t.includes('hit') || t.includes('slash') || t.includes('crush') || 
+            t.includes('bite') || t.includes('claw') || t.includes('sting') || 
+            t.includes('touch') || t.includes('spit') || t.includes('breath') || 
+            t.includes('burn') || t.includes('wounds') || t.includes('damage') ||
+            t.includes('attacks')) {
+            return '#ff6b6b'; // Monster attacks player (Light Red)
+        }
+        if (t.includes('heal') || t.includes('feel very good') || t.includes('cure') || 
+            t.includes('restore') || t.includes('regenerate')) {
+            return '#06d6a0'; // Healing (Emerald Green)
+        }
+        if (t.includes('spell') || t.includes('prayer') || t.includes('magic') || 
+            t.includes('scroll') || t.includes('glows') || t.includes('shines') || 
+            t.includes('teleport') || t.includes('detect')) {
+            return '#4cc9f0'; // Magic (Sky Blue)
+        }
+        if (t.includes('cannot') || t.includes('no potions') || t.includes('no scrolls') || 
+            t.includes('nothing to fire') || t.includes('no spells') || t.includes('wall in the way') || 
+            t.includes('nothing there') || t.includes('misses you') || t.includes('you miss')) {
+            return '#ff9900'; // Warning / Miss / Blocked (Orange)
+        }
+        if (window.getAngbandColorString && attr !== undefined && attr > 1) {
+            return window.getAngbandColorString(attr);
+        }
+        return '#c8d1dc'; // Default clear text (Light Slate)
+    }
+
     addMessage(text, color = '#ffd700', rawText = null) {
         if (!text || !text.trim()) return;
         let trimmed = text.trim();
@@ -1112,8 +1147,9 @@ class WebHUD {
             this.lastTermRow0 = null;
         }
 
-        // Multi-Line Message Log Queue: ONLY capture in-game messages during active play
+        // Multi-Line Message Log Queue: Capture ALL in-game messages during active play
         if (inPlay) {
+            let newItems = [];
             // 1. Process structured engine messages
             if (frame.messages && Array.isArray(frame.messages)) {
                 const curList = frame.messages.filter(m => m && m.text && m.text.trim().length > 0 &&
@@ -1123,11 +1159,6 @@ class WebHUD {
                 if (curList.length > 0) {
                     const prevLast = prevList.length > 0 ? prevList[prevList.length - 1] : null;
                     const curLast = curList[curList.length - 1];
-
-                    // Did the last message increment its count?
-                    if (prevLast && curLast && prevLast.text === curLast.text && curLast.count > prevLast.count) {
-                        this.updateLastMessageCount(curLast.text.trim(), curLast.count);
-                    }
 
                     // Suffix matching to find newly appended messages
                     let matchedOverlap = 0;
@@ -1145,17 +1176,19 @@ class WebHUD {
                         }
                     }
 
-                    const newItems = curList.slice(matchedOverlap);
+                    newItems = curList.slice(matchedOverlap);
                     for (const item of newItems) {
-                        if (prevLast && item.text === prevLast.text) continue;
                         let text = item.text.trim();
                         if (item.count && item.count > 1) {
                             text += ` (x${item.count})`;
                         }
-                        const col = (window.getAngbandColorString && item.attr !== undefined)
-                            ? window.getAngbandColorString(item.attr)
-                            : '#ffd700';
+                        const col = this.getMessageColor(item.text.trim(), item.attr);
                         this.addMessage(text, col, item.text.trim());
+                    }
+
+                    // If no new items were appended, did the last message increment its count?
+                    if (newItems.length === 0 && prevLast && curLast && prevLast.text === curLast.text && curLast.count > (prevLast.count || 1)) {
+                        this.updateLastMessageCount(curLast.text.trim(), curLast.count);
                     }
 
                     this.lastSeenMessages = curList.map(m => ({ text: m.text, count: m.count, attr: m.attr }));
@@ -1169,15 +1202,28 @@ class WebHUD {
                 line0 = line0.replace(/\s*\[more\]\s*$/i, '');
                 line0 = line0.replace(/\s*\[?\s*press\s+space\s*\]?\s*$/i, '');
                 line0 = line0.trim();
-                if (line0 && line0.length > 0 && line0 !== this.lastTermRow0 &&
-                    !line0.startsWith('---') && !line0.startsWith('===') &&
-                    !line0.includes('Select an option') &&
-                    !line0.includes('Press any key') &&
-                    !line0.toLowerCase().includes('press space')) {
-                    this.lastTermRow0 = line0;
-                    const lastHistory = this.messageHistory.length > 0 ? this.messageHistory[this.messageHistory.length - 1] : null;
-                    if (!lastHistory || lastHistory.rawText !== line0) {
-                        this.addMessage(line0, '#ffd700', line0);
+                const isMenuPrompt = line0.includes('Select Item:') ||
+                                     line0.includes('(Inven:') ||
+                                     line0.includes('(Equip:') ||
+                                     line0.includes('which item?') ||
+                                     line0.includes('which potion?') ||
+                                     line0.includes('which scroll?') ||
+                                     line0.includes('which spell?') ||
+                                     line0.includes('which prayer?') ||
+                                     line0.includes('Direction or <click>') ||
+                                     line0.includes('Select an option') ||
+                                     line0.includes('Press any key') ||
+                                     line0.startsWith('---') ||
+                                     line0.startsWith('===');
+
+                if (line0 && line0.length > 0 && !isMenuPrompt) {
+                    const alreadyInNewItems = newItems.some(it => it.text && it.text.trim() === line0);
+                    const isNewAction = frame.seq !== this.lastTermRow0Seq || line0 !== this.lastTermRow0;
+                    if (!alreadyInNewItems && isNewAction) {
+                        this.lastTermRow0 = line0;
+                        this.lastTermRow0Seq = frame.seq;
+                        const col = this.getMessageColor(line0);
+                        this.addMessage(line0, col, line0);
                     }
                 }
             }

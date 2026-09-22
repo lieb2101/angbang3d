@@ -1147,10 +1147,21 @@ window.addEventListener('DOMContentLoaded', () => {
                              screenText.includes('purchase which item') ||
                              screenText.includes('sell which item') ||
                              screenText.includes('examine which item');
-        const inOverlay = Boolean(frame.ui && (frame.ui.overlay || 0) > 0);
-        const inTown = Boolean(frame.player && (frame.player.depth === 0 || frame.player.depth === undefined));
+        const isItemPrompt = screenText.includes('select item:') ||
+                             screenText.includes('inven:') ||
+                             screenText.includes('equip:') ||
+                             screenText.includes('which item?') ||
+                             screenText.includes('which potion?') ||
+                             screenText.includes('which scroll?') ||
+                             screenText.includes('which spell?') ||
+                             screenText.includes('which prayer?') ||
+                             screenText.includes('which book?') ||
+                             screenText.includes('wear/wield') ||
+                             screenText.includes('take off') ||
+                             screenText.includes('destroy which');
 
-        const isStore = isStoreFeat || hasStoreText || (inOverlay && inTown);
+        const inOverlay = Boolean(frame.ui && (frame.ui.overlay || 0) > 0);
+        const isStore = !isItemPrompt && (hasStoreText || (isStoreFeat && inOverlay));
 
         if (isStore) {
             // Player is inside a store
@@ -1179,29 +1190,29 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (storeNames[playerFeat]) storeName = storeNames[playerFeat];
             }
             terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
-            // IN STORE: Show ONLY shop options!
+            // IN STORE: Show store actions bar
             if (storeActionsBar) storeActionsBar.style.display = 'flex';
             if (itemActionsBar) itemActionsBar.style.display = 'none';
             if (termAdvanceBtn) termAdvanceBtn.style.display = 'none';
             if (termEscapeBtn) termEscapeBtn.style.display = 'none'; // btn-store-exit handles exit cleanly
         } else {
             // Normal in-game menu, inventory, equipment, or action screen
-            const isItemPrompt = screenText.includes('select item:') ||
-                                 screenText.includes('inven:') ||
-                                 screenText.includes('equip:') ||
-                                 screenText.includes('throw which item?') ||
-                                 screenText.includes('quaff which potion?') ||
-                                 screenText.includes('read which scroll?') ||
-                                 screenText.includes('fire which item?');
-
             if (screenText.includes('throw which item?')) {
                 terminalTitle.textContent = '🎯 THROW ITEM';
-            } else if (screenText.includes('quaff which potion?')) {
+            } else if (screenText.includes('quaff which potion?') || screenText.includes('quaff')) {
                 terminalTitle.textContent = '🧪 QUAFF POTION';
-            } else if (screenText.includes('read which scroll?')) {
+            } else if (screenText.includes('read which scroll?') || screenText.includes('read')) {
                 terminalTitle.textContent = '📜 READ SCROLL';
-            } else if (screenText.includes('fire which item?')) {
+            } else if (screenText.includes('fire which item?') || screenText.includes('fire') || screenText.includes('shoot')) {
                 terminalTitle.textContent = '🏹 FIRE / SHOOT';
+            } else if (screenText.includes('which spell?') || screenText.includes('which prayer?') || screenText.includes('which book?')) {
+                terminalTitle.textContent = '✨ CAST SPELL / PRAYER';
+            } else if (screenText.includes('wear') || screenText.includes('wield')) {
+                terminalTitle.textContent = '⚔ WEAR / WIELD ITEM';
+            } else if (screenText.includes('take off')) {
+                terminalTitle.textContent = '🔄 TAKE OFF GEAR';
+            } else if (screenText.includes('drop which')) {
+                terminalTitle.textContent = '📦 DROP ITEM';
             } else if ((screenText.includes('inven:') || screenText.includes('inventory')) && !hasStoreText) {
                 terminalTitle.textContent = '🎒 INVENTORY PACK';
             } else if (screenText.includes('equip:') || screenText.includes('equipment')) {
@@ -1225,7 +1236,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (frame.term && frame.term.rows) {
                     for (let i = 0; i < frame.term.rows.length; i++) {
                         const rowStr = frame.term.rows[i].g || '';
-                        const m = rowStr.match(/\b([a-z])\)\s+([^\n\r]+)/);
+                        const m = rowStr.match(/\b([a-zA-Z0-9])\)\s+([^\n\r]+)/);
                         if (m && !detectedLetters.has(m[1])) {
                             const letter = m[1];
                             detectedLetters.add(letter);
@@ -1302,10 +1313,15 @@ window.addEventListener('DOMContentLoaded', () => {
         const isItemPrompt = screenText.includes('select item:') ||
                              screenText.includes('inven:') ||
                              screenText.includes('equip:') ||
-                             screenText.includes('throw which item?') ||
-                             screenText.includes('quaff which potion?') ||
-                             screenText.includes('read which scroll?') ||
-                             screenText.includes('fire which item?');
+                             screenText.includes('which item?') ||
+                             screenText.includes('which potion?') ||
+                             screenText.includes('which scroll?') ||
+                             screenText.includes('which spell?') ||
+                             screenText.includes('which prayer?') ||
+                             screenText.includes('which book?') ||
+                             screenText.includes('wear/wield') ||
+                             screenText.includes('take off') ||
+                             screenText.includes('destroy which');
         if (isItemPrompt) return true;
 
         return !ui.awaiting_command && !ui.more;
@@ -1353,25 +1369,6 @@ window.addEventListener('DOMContentLoaded', () => {
             const hasOverlay = frame.ui && (frame.ui.overlay || 0) > 0;
             if (!hasOverlay && (birthReviewActive || (forceTerminal && !window.__manualTerminalOpen))) {
                 confirmHeroBirth();
-            }
-
-            // Auto-enter shop when stepping onto a store entrance tile in town
-            if (frame.ui && (frame.ui.overlay || 0) === 0 && frame.ui.awaiting_command) {
-                const py = frame.player.y;
-                const px = frame.player.x;
-                if (frame.map.rows && frame.map.rows[py] && frame.map.rows[py].f) {
-                    const feat = parseInt(frame.map.rows[py].f.substring(px * 2, px * 2 + 2), 16) || 0;
-                    const isStoreTile = feat >= 7 && feat <= 14;
-                    const tileKey = `${px},${py}`;
-                    if (isStoreTile) {
-                        if (lastEnteredShopTile !== tileKey) {
-                            lastEnteredShopTile = tileKey;
-                            network.sendKey('.');
-                        }
-                    } else {
-                        lastEnteredShopTile = null;
-                    }
-                }
             }
         }
 

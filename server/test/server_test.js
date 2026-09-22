@@ -215,12 +215,12 @@ async function runTests() {
     console.log('  -> WebHUD message feed implements in-place repeat count updates');
     console.log('  -> Real-time combat and term row 0 message stream parsing verified');
 
-    // Test 14: Automatic Shop Space Navigation & Auto-Hold Trigger
-    console.log('Test 14: Automatic Shop Space Navigation & Auto-Hold Trigger');
+    // Test 14: Automatic Shop Space Navigation & Store Interface Routing
+    console.log('Test 14: Automatic Shop Space Navigation & Store Interface Routing');
     const dungeonCss = fs.readFileSync(path.join(__dirname, '../public/css/dungeon.css'), 'utf8');
     const freshAppJs = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
     assert(freshAppJs.includes("const terminalTitle = document.getElementById('term-title') || document.getElementById('terminal-title');"), 'app.js must lookup term-title correctly');
-    assert(freshAppJs.includes("network.sendKey('.');"), 'app.js must auto-send period to enter store when stepping onto store tile');
+    assert(freshAppJs.includes("const isStore = !isItemPrompt && (hasStoreText || (isStoreFeat && inOverlay));"), 'app.js must accurately detect store interface without misclassifying item menus');
     assert(dungeonCss.includes("flex: 1;"), 'dungeon.css message-feed-scroll must flex: 1 to fill message feed window');
     // Test 15: Unified Minimap Controls Bar & Responsive Flex Sizing
     console.log('Test 15: Unified Minimap Controls Bar & Responsive Flex Sizing');

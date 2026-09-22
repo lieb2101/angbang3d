@@ -135,7 +135,7 @@ console.log('  -> Step 3: Message repeat count updated in-place without duplicat
 // 4. Combat message (attacking monster)
 const frame4 = {
     phase: 'play',
-    player: { name: 'Hero', depth: 1 },
+    player: { name: 'Hero', depth: 0 },
     messages: [
         { text: 'There is a wall in the way!', count: 2, attr: 1 },
         { text: 'You strike the giant rat.', count: 1, attr: 1 }
@@ -151,7 +151,7 @@ console.log('  -> Step 4: Combat message added cleanly OK');
 // 5. Monster counter-attacks on row 0
 const frame5 = {
     phase: 'play',
-    player: { name: 'Hero', depth: 1 },
+    player: { name: 'Hero', depth: 0 },
     messages: [
         { text: 'There is a wall in the way!', count: 2, attr: 1 },
         { text: 'You strike the giant rat.', count: 1, attr: 1 }

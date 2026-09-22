@@ -413,6 +413,46 @@ class WebHUD {
         // With persistent landscape window, messages do not disappear from view, but retain history!
     }
 
+    updateTopMessageBanner(frame) {
+        const banner = document.getElementById('top-message-banner');
+        const textEl = document.getElementById('message-text');
+        if (!banner || !textEl || !frame) return;
+
+        const ui = frame.ui || {};
+        const isPrompt = Boolean(ui.more || (!ui.awaiting_command && (ui.overlay || 0) === 0));
+
+        let displayMsg = '';
+        if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
+            let row0 = frame.term.rows[0].g.trim();
+            if (row0.length > 0 && !row0.startsWith('===') && !row0.startsWith('---')) {
+                displayMsg = row0;
+            }
+        }
+
+        if (!displayMsg && frame.messages && Array.isArray(frame.messages) && frame.messages.length > 0) {
+            const valid = frame.messages.filter(m => m && m.text && m.text.trim().length > 0 &&
+                !m.text.trim().startsWith('===') && !m.text.trim().startsWith('---'));
+            if (valid.length > 0) {
+                const last = valid[valid.length - 1];
+                displayMsg = last.text.trim();
+                if (last.count && last.count > 1 && !this.isCombatMessage(displayMsg)) {
+                    displayMsg += ` (x${last.count})`;
+                }
+            }
+        }
+
+        if (displayMsg) {
+            textEl.textContent = displayMsg;
+            if (isPrompt) {
+                banner.classList.add('prompt');
+                textEl.style.color = '#ffd700';
+            } else {
+                banner.classList.remove('prompt');
+                textEl.style.color = this.getMessageColor(displayMsg);
+            }
+        }
+    }
+
     extractNewMessages(prevList, currentList) {
         if (!prevList || prevList.length === 0) return currentList || [];
         if (!currentList || currentList.length === 0) return [];
@@ -1157,8 +1197,13 @@ class WebHUD {
                 ? "Welcome to the Town of Angband! Visit the General Store and Armory to equip your journey."
                 : `You descend into Dungeon Level ${depth} (${depth * 50}ft).`;
             this.resetMessages(welcomeMsg);
-            this.lastSeenMessages = [];
-            this.lastTermRow0 = null;
+            this.lastSeenMessages = (frame.messages && Array.isArray(frame.messages))
+                ? frame.messages.filter(m => m && m.text && m.text.trim().length > 0 &&
+                    !m.text.trim().startsWith('===') && !m.text.trim().startsWith('---')).map(m => ({ text: m.text, count: m.count, attr: m.attr }))
+                : [];
+            this.lastTermRow0 = (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g)
+                ? frame.term.rows[0].g.trim()
+                : null;
         }
 
         // Track staircase floor transitions (Town <-> Dungeon depths)
@@ -1184,26 +1229,47 @@ class WebHUD {
                 const prevList = this.lastSeenMessages || [];
 
                 if (curList.length > 0) {
-                    const prevLast = prevList.length > 0 ? prevList[prevList.length - 1] : null;
-                    const curLast = curList[curList.length - 1];
-
-                    // Suffix matching to find newly appended messages
-                    let matchedOverlap = 0;
-                    for (let k = Math.min(prevList.length, curList.length); k > 0; k--) {
-                        let match = true;
-                        for (let j = 0; j < k; j++) {
-                            if (prevList[prevList.length - k + j].text !== curList[j].text) {
-                                match = false;
+                    if (prevList.length === 0) {
+                        newItems = curList;
+                    } else {
+                        // Suffix matching to find newly appended messages
+                        let matchedOverlap = 0;
+                        const maxK = Math.min(prevList.length, curList.length);
+                        for (let k = maxK; k > 0; k--) {
+                            let match = true;
+                            for (let j = 0; j < k; j++) {
+                                if (prevList[prevList.length - k + j].text !== curList[j].text) {
+                                    match = false;
+                                    break;
+                                }
+                            }
+                            if (match) {
+                                matchedOverlap = k;
                                 break;
                             }
                         }
-                        if (match) {
-                            matchedOverlap = k;
-                            break;
+
+                        newItems = curList.slice(matchedOverlap);
+
+                        // If no new items were appended, did the last message increment its count?
+                        if (newItems.length === 0 && prevList.length > 0) {
+                            const prevLast = prevList[prevList.length - 1];
+                            const curLast = curList[curList.length - 1];
+                            if (prevLast && curLast && prevLast.text === curLast.text && curLast.count > (prevLast.count || 1)) {
+                                const diff = curLast.count - (prevLast.count || 1);
+                                const col = this.getMessageColor(curLast.text.trim(), curLast.attr);
+                                const isCombat = this.isCombatMessage(curLast.text.trim());
+                                if (isCombat) {
+                                    for (let c = 0; c < diff; c++) {
+                                        this.addMessage(curLast.text.trim(), col, curLast.text.trim());
+                                    }
+                                } else {
+                                    this.updateLastMessageCount(curLast.text.trim(), curLast.count);
+                                }
+                            }
                         }
                     }
 
-                    newItems = curList.slice(matchedOverlap);
                     for (const item of newItems) {
                         let text = item.text.trim();
                         if (item.count && item.count > 1 && !this.isCombatMessage(text)) {
@@ -1213,25 +1279,11 @@ class WebHUD {
                         this.addMessage(text, col, item.text.trim());
                     }
 
-                    // If no new items were appended, did the last message increment its count?
-                    if (newItems.length === 0 && prevLast && curLast && prevLast.text === curLast.text && curLast.count > (prevLast.count || 1)) {
-                        const diff = curLast.count - (prevLast.count || 1);
-                        const col = this.getMessageColor(curLast.text.trim(), curLast.attr);
-                        const isCombat = this.isCombatMessage(curLast.text.trim());
-                        if (isCombat) {
-                            for (let c = 0; c < diff; c++) {
-                                this.addMessage(curLast.text.trim(), col, curLast.text.trim());
-                            }
-                        } else {
-                            this.updateLastMessageCount(curLast.text.trim(), curLast.count);
-                        }
-                    }
-
                     this.lastSeenMessages = curList.map(m => ({ text: m.text, count: m.count, attr: m.attr }));
                 }
             }
 
-            // 2. Also capture dynamic action lines on term row 0 during play (combat, spell, status, prompts)
+            // 2. Also capture distinct dynamic action lines on term row 0 during play (prompts, status changes)
             if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
                 let line0 = frame.term.rows[0].g.trim();
                 line0 = line0.replace(/\s*[-–—]more[-–—]\s*$/i, '');
@@ -1254,15 +1306,19 @@ class WebHUD {
 
                 if (line0 && line0.length > 0 && !isMenuPrompt) {
                     const alreadyInNewItems = newItems.some(it => it.text && it.text.trim() === line0);
-                    const isNewAction = frame.seq !== this.lastTermRow0Seq || line0 !== this.lastTermRow0;
+                    const isNewAction = line0 !== this.lastTermRow0;
                     if (!alreadyInNewItems && isNewAction) {
-                        this.lastTermRow0 = line0;
-                        this.lastTermRow0Seq = frame.seq;
                         const col = this.getMessageColor(line0);
                         this.addMessage(line0, col, line0);
                     }
+                    this.lastTermRow0 = line0;
+                } else if (!line0) {
+                    this.lastTermRow0 = '';
                 }
             }
+
+            // 3. Update the Top In-Game Message & Combat Banner (1:1 with Godot Overlay.cs:1572-1587)
+            this.updateTopMessageBanner(frame);
         }
 
         this.wasInPlay = inPlay;
@@ -1295,6 +1351,14 @@ class WebHUD {
         const hi = parseInt(row.f[idx], 16) || 0;
         const lo = parseInt(row.f[idx + 1], 16) || 0;
         return (hi << 4) | lo;
+    }
+
+    isStoreKind(feat) {
+        return feat >= 7 && feat <= 14;
+    }
+
+    isWalkableOrPortal(feat) {
+        return feat === 1 || feat === 2 || feat === 3 || feat === 4 || feat === 5 || feat === 6 || feat === 16 || feat === 23 || feat === 24 || this.isStoreKind(feat);
     }
 
     /* -------------------------------------------------------------

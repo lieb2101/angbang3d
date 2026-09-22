@@ -7,12 +7,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/dungeon.css?v=2.3">
+    <link rel="stylesheet" href="/css/dungeon.css?v=3.2">
 </head>
 <body>
     <div id="app-container">
         <!-- 3D Dungeon WebGL Viewport -->
         <canvas id="viewport-canvas"></canvas>
+
+        <!-- Top Live Message & Combat Banner (1:1 with Godot Overlay.cs:1572-1587) -->
+        <div id="top-message-banner" class="top-message-banner">
+            <span id="message-text" class="top-message-text">Welcome to the Town of Angband!</span>
+        </div>
 
         <!-- 80x24 Terminal View (Birth menus, stores, death disclosure) -->
         <div id="terminal-container" class="hidden">
@@ -627,12 +632,12 @@
     <script src="/js/vendor/GLTFLoader.js"></script>
 
     <!-- Client Subsystems -->
-    <script src="/js/audio.js?v=2.2"></script>
-    <script src="/js/terminal.js?v=2.2"></script>
-    <script src="/js/dungeon3d.js?v=2.2"></script>
-    <script src="/js/hud.js?v=2.2"></script>
-    <script src="/js/network.js?v=2.2"></script>
-    <script src="/js/input.js?v=2.2"></script>
-    <script src="/js/app.js?v=2.2"></script>
+    <script src="/js/audio.js?v=3.2"></script>
+    <script src="/js/terminal.js?v=3.2"></script>
+    <script src="/js/dungeon3d.js?v=3.2"></script>
+    <script src="/js/hud.js?v=3.2"></script>
+    <script src="/js/network.js?v=3.2"></script>
+    <script src="/js/input.js?v=3.2"></script>
+    <script src="/js/app.js?v=3.2"></script>
 </body>
 </html>

@@ -53,7 +53,48 @@ html, body {
     z-index: 1;
 }
 
-/* Terminal Container Layer (Character creation, stores, help, death disclosure) */
+/* Live Action & Combat Message Banner (1:1 with Godot Overlay.cs:1572-1587) */
+.top-message-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 34px;
+    background: rgba(6, 8, 14, 0.92);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(212, 175, 55, 0.35);
+    display: flex;
+    align-items: center;
+    padding: 0 460px 0 16px;
+    z-index: 20;
+    pointer-events: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.top-message-text {
+    font-family: var(--font-terminal);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #e0e6ed;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.5px;
+}
+
+.top-message-banner.prompt {
+    background: rgba(40, 26, 4, 0.96);
+    border-bottom-color: rgba(255, 215, 0, 0.85);
+}
+
+.top-message-banner.prompt .top-message-text {
+    color: #ffd700;
+    font-weight: bold;
+}
+
+/* Terminal Container Layer (Character creation, stores, help, death disclosure, and menus) */
 #terminal-container {
     position: absolute;
     top: 0;
@@ -64,43 +105,16 @@ html, body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    background: rgba(4, 5, 8, 0.95);
-    z-index: 10;
-    transition: opacity 0.25s ease;
+    background: rgba(4, 5, 8, 0.97);
+    z-index: 100;
+    transition: opacity 0.15s ease;
     padding: 16px;
 }
 
 #terminal-container.hidden {
     opacity: 0;
     pointer-events: none;
-}
-
-/* In-Game Contextual Modal (Shops, Inventory, Equipment, Spells over 3D Viewport) */
-#terminal-container.in-game-modal {
-    background: rgba(3, 5, 10, 0.70);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    z-index: 100;
-}
-
-#terminal-container.in-game-modal .terminal-card {
-    background: rgba(10, 14, 22, 0.94);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(212, 175, 55, 0.65);
-    box-shadow: 0 12px 50px rgba(0, 0, 0, 0.95), 0 0 30px rgba(212, 175, 55, 0.25);
-    animation: modalPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes modalPopIn {
-    from {
-        opacity: 0;
-        transform: scale(0.96) translateY(8px);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1) translateY(0);
-    }
+    display: none !important;
 }
 
 .terminal-card {
@@ -184,7 +198,7 @@ html, body {
 /* Top Landscape Message Feed Window (Full message history with scrollback) */
 #message-feed-window {
     position: absolute;
-    top: 14px;
+    top: 42px;
     left: 320px;
     transform: none;
     z-index: 6;
@@ -371,10 +385,10 @@ html, body {
 /* Top Telemetry & Controls */
 #top-right-bar {
     position: absolute;
-    top: 14px;
-    right: 18px;
+    top: 3px;
+    right: 12px;
     display: flex;
-    gap: 10px;
+    gap: 6px;
     align-items: center;
     z-index: 1000; /* Always above all modal/terminal screens so sound & settings are accessible everywhere */
 }
@@ -382,11 +396,11 @@ html, body {
 .badge {
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
-    padding: 6px 14px;
+    padding: 3px 10px;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     color: var(--gold-primary);
 }
 
@@ -394,10 +408,10 @@ html, body {
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
     color: var(--text-primary);
-    padding: 6px 12px;
+    padding: 3px 9px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 11.5px;
     font-family: var(--font-fantasy);
     transition: all 0.2s ease;
 }
@@ -748,7 +762,7 @@ html, body {
 /* Minimap Radar */
 #minimap-container {
     position: absolute;
-    top: 14px;
+    top: 42px;
     left: 18px;
     z-index: 5;
     background: var(--glass-bg);

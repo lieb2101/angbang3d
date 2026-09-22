@@ -44,6 +44,24 @@ window.addEventListener('DOMContentLoaded', () => {
         window.__manualTerminalOpen = false;
         if (terminalContainer) terminalContainer.classList.add('hidden');
         if (input) input.setTerminalMode(false);
+        const quickBirthBtn = document.getElementById('btn-quick-birth');
+        const termRerollBtn = document.getElementById('btn-term-reroll');
+        const termCustomBtn = document.getElementById('btn-term-custom');
+        const termAdvanceBtn = document.getElementById('btn-term-advance');
+        const termEscapeBtn = document.getElementById('btn-term-escape');
+        const terminalTitle = document.getElementById('term-title') || document.getElementById('terminal-title');
+        if (quickBirthBtn) quickBirthBtn.style.display = 'none';
+        if (termRerollBtn) termRerollBtn.style.display = 'none';
+        if (termCustomBtn) termCustomBtn.style.display = 'none';
+        if (termAdvanceBtn) {
+            termAdvanceBtn.style.display = 'none';
+            termAdvanceBtn.textContent = 'Advance (Enter)';
+        }
+        if (termEscapeBtn) {
+            termEscapeBtn.style.display = 'inline-flex';
+            termEscapeBtn.textContent = 'Back (Esc)';
+        }
+        if (terminalTitle) terminalTitle.textContent = '⚔ ANGBAND CLASSIC TERMINAL';
     };
 
     function stepQuickBirth(frame) {
@@ -1321,32 +1339,6 @@ window.addEventListener('DOMContentLoaded', () => {
         const ui = frame.ui;
         if (!ui) return false;
         if ((ui.overlay || 0) > 0) return true;
-
-        // Check if terminal text indicates an active store/inventory/menu screen
-        const screenText = (frame.term && frame.term.rows)
-            ? frame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
-            : '';
-        const hasStoreText = screenText.includes('store inventory') ||
-                             screenText.includes('home inventory') ||
-                             screenText.includes('gold remaining') ||
-                             screenText.includes('purchase which item') ||
-                             screenText.includes('sell which item');
-        if (hasStoreText) return true;
-
-        const isItemPrompt = screenText.includes('select item:') ||
-                             screenText.includes('inven:') ||
-                             screenText.includes('equip:') ||
-                             screenText.includes('which item?') ||
-                             screenText.includes('which potion?') ||
-                             screenText.includes('which scroll?') ||
-                             screenText.includes('which spell?') ||
-                             screenText.includes('which prayer?') ||
-                             screenText.includes('which book?') ||
-                             screenText.includes('wear/wield') ||
-                             screenText.includes('take off') ||
-                             screenText.includes('destroy which');
-        if (isItemPrompt) return true;
-
         return !ui.awaiting_command && !ui.more;
     }
 
@@ -1357,21 +1349,37 @@ window.addEventListener('DOMContentLoaded', () => {
             input.setTerminalMode(false);
             return;
         }
-        const needsTerm = needsTerminal(frame || lastFrame);
+        const currentFrame = frame || lastFrame;
+        const needsTerm = needsTerminal(currentFrame);
+        const hudOverlay = document.getElementById('hud-overlay');
+        const minimapContainer = document.getElementById('minimap-container');
+        const messageFeedWindow = document.getElementById('message-feed-window');
+        const topMessageBanner = document.getElementById('top-message-banner');
+        const touchControls = document.getElementById('touch-controls');
+
         if (needsTerm) {
             terminalContainer.classList.remove('hidden');
-            // If in active play and not manually toggled by user with Tab, show as in-game modal over 3D world
-            const currentFrame = frame || lastFrame;
-            if (currentFrame && currentFrame.phase === 'play' && !window.__manualTerminalOpen) {
-                terminalContainer.classList.add('in-game-modal');
-            } else {
-                terminalContainer.classList.remove('in-game-modal');
-            }
+            terminalContainer.classList.remove('in-game-modal');
+            if (hudOverlay) hudOverlay.style.display = 'none';
+            if (minimapContainer) minimapContainer.style.display = 'none';
+            if (messageFeedWindow) messageFeedWindow.style.display = 'none';
+            if (topMessageBanner) topMessageBanner.style.display = 'none';
+            if (touchControls) touchControls.style.display = 'none';
+
             input.setTerminalMode(true);
             terminal.resize();
+            if (currentFrame && currentFrame.term) {
+                terminal.render(currentFrame.term);
+            }
         } else {
             terminalContainer.classList.add('hidden');
             terminalContainer.classList.remove('in-game-modal');
+            if (hudOverlay) hudOverlay.style.display = 'flex';
+            if (minimapContainer) minimapContainer.style.display = 'flex';
+            if (messageFeedWindow) messageFeedWindow.style.display = 'flex';
+            if (topMessageBanner) topMessageBanner.style.display = 'flex';
+            if (touchControls && window.innerWidth <= 960) touchControls.style.display = 'block';
+
             input.setTerminalMode(false);
         }
     }
@@ -1398,15 +1406,15 @@ window.addEventListener('DOMContentLoaded', () => {
             stepQuickBirth(frame);
         } else if (frame.phase === 'play' && frame.map && frame.player) {
             // Once in active play with map, ensure character birth review is exited and 3D world is active
-            const hasOverlay = frame.ui && (frame.ui.overlay || 0) > 0;
-            if (!hasOverlay && (birthReviewActive || (forceTerminal && !window.__manualTerminalOpen))) {
+            if (birthReviewActive) {
                 confirmHeroBirth();
             }
         }
 
         // Auto-flush -more- prompts seamlessly during play (only in 3D world, NOT inside store/overlay or review screen)
         const isOverlay = frame.ui && (frame.ui.overlay || 0) > 0;
-        if (frame.ui && frame.ui.more && !isOverlay) {
+        const needsTerm = needsTerminal(frame);
+        if (frame.ui && frame.ui.more && !isOverlay && !needsTerm) {
             const screenText = (frame.term && frame.term.rows)
                 ? frame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
                 : '';
@@ -1427,10 +1435,11 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        const showTerm = needsTerminal(frame);
+        // Update View Mode Visibility first so layouts and modes are synced
+        updateViewMode(frame);
 
         // Render Terminal if active or in setup phase
-        if (frame.term && (showTerm || currentPhase !== 'play')) {
+        if (frame.term && (needsTerm || currentPhase !== 'play')) {
             terminal.render(frame.term);
         }
 
@@ -1444,13 +1453,18 @@ window.addEventListener('DOMContentLoaded', () => {
         }
 
         // Update HUD
-        hud.update(frame);
+        try {
+            hud.update(frame);
+        } catch (err) {
+            console.error('[HUD Error]', err);
+        }
 
         // Update Terminal Toolbar & Context
-        updateTerminalToolbar(frame);
-
-        // Update View Mode Visibility
-        updateViewMode(frame);
+        try {
+            updateTerminalToolbar(frame);
+        } catch (err) {
+            console.error('[TerminalToolbar Error]', err);
+        }
     };
 
     network.onBye = (detail) => {

@@ -465,7 +465,13 @@ class InputController {
         else if (e.key === 'End') keySpec = 'end';
         else if (e.key === 'Delete') keySpec = 'delete';
         else if (e.key === 'Enter') keySpec = 'enter';
-        else if (e.key === 'Escape') keySpec = 'escape';
+        else if (e.key === 'Escape') {
+            keySpec = 'escape';
+            if (window.__app && window.__app.setForceTerminal) {
+                window.__app.setForceTerminal(false);
+            }
+            window.__manualTerminalOpen = false;
+        }
         else if (e.key === 'Backspace') keySpec = 'backspace';
         else if (e.key === 'Tab') keySpec = 'tab';
         else if (e.key === ' ') keySpec = 'space';

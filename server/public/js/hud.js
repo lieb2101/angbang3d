@@ -251,7 +251,7 @@ class WebHUD {
         }
     }
 
-    addMessage(text, color = '#ffd700') {
+    addMessage(text, color = '#ffd700', rawText = null) {
         if (!text || !text.trim()) return;
         let trimmed = text.trim();
         if (trimmed.startsWith('---') || trimmed.startsWith('===')) return;
@@ -262,7 +262,7 @@ class WebHUD {
         trimmed = trimmed.trim();
         if (!trimmed) return;
 
-        // Strictly reject any character creation, history prompt, or setup fragments
+        // Strictly reject noisy setup fragments
         const lower = trimmed.toLowerCase();
         if (lower.includes('accept character history') ||
             lower.includes('to start over') ||
@@ -289,9 +289,18 @@ class WebHUD {
         }
 
         const now = Date.now();
-        // Prevent rapid exact duplicate within 500ms on the same turn
+        const baseText = rawText || trimmed;
+
+        // Deduplicate adjacent identical message by incrementing count on existing line
         const lastMsg = this.messageHistory.length > 0 ? this.messageHistory[this.messageHistory.length - 1] : null;
-        if (lastMsg && lastMsg.text === trimmed && (now - lastMsg.timestamp < 500) && lastMsg.turn === this.currentTurn) {
+        if (lastMsg && (lastMsg.rawText === baseText || lastMsg.text === trimmed)) {
+            lastMsg.repeat = (lastMsg.repeat || 1) + 1;
+            if (lastMsg.el) {
+                lastMsg.el.textContent = `${lastMsg.rawText || trimmed} (x${lastMsg.repeat})`;
+            }
+            if (this.messageFeedScroll && !this.userScrolledUp) {
+                this.messageFeedScroll.scrollTop = this.messageFeedScroll.scrollHeight;
+            }
             return;
         }
 
@@ -312,6 +321,8 @@ class WebHUD {
         const msgObj = {
             id: now + '_' + Math.random(),
             text: trimmed,
+            rawText: baseText,
+            repeat: 1,
             color,
             turn: this.currentTurn,
             timestamp: now,
@@ -333,6 +344,20 @@ class WebHUD {
         }
     }
 
+    updateLastMessageCount(rawText, count) {
+        if (!this.messageHistory || this.messageHistory.length === 0) return;
+        const lastMsg = this.messageHistory[this.messageHistory.length - 1];
+        if (lastMsg && (lastMsg.rawText === rawText || lastMsg.text === rawText || lastMsg.text.startsWith(rawText))) {
+            lastMsg.repeat = count;
+            if (lastMsg.el) {
+                lastMsg.el.textContent = `${lastMsg.rawText || rawText} (x${count})`;
+            }
+            if (this.messageFeedScroll && !this.userScrolledUp) {
+                this.messageFeedScroll.scrollTop = this.messageFeedScroll.scrollHeight;
+            }
+        }
+    }
+
     tickMessageQueue() {
         // With persistent landscape window, messages do not disappear from view, but retain history!
     }
@@ -347,7 +372,7 @@ class WebHUD {
             for (let j = 0; j < k; j++) {
                 const p = prevList[prevList.length - k + j];
                 const c = currentList[j];
-                if (p.text !== c.text || p.count !== c.count || p.attr !== c.attr) {
+                if (p.text !== c.text || p.attr !== c.attr) {
                     match = false;
                     break;
                 }
@@ -1023,35 +1048,63 @@ class WebHUD {
                 ? "Welcome to the Town of Angband! Visit the General Store and Armory to equip your journey."
                 : `You descend into Dungeon Level ${depth} (${depth * 50}ft).`;
             this.resetMessages(welcomeMsg);
-            // Baseline-seed engine message buffer and term row 0 so pre-existing setup text is not added as new
-            this.prevMessages = (frame.messages && Array.isArray(frame.messages))
-                ? frame.messages.filter(m => m && m.text && m.text.trim().length > 0)
+            this.lastSeenMessages = (frame.messages && Array.isArray(frame.messages))
+                ? frame.messages.map(m => ({ text: m.text, count: m.count, attr: m.attr }))
                 : [];
-            if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
-                this.lastTermRow0 = frame.term.rows[0].g.trim();
-            }
+            this.lastTermRow0 = null;
         }
 
         // Multi-Line Message Log Queue: ONLY capture in-game messages during active play
         if (inPlay) {
+            // 1. Process structured engine messages
             if (frame.messages && Array.isArray(frame.messages)) {
-                const currentMsgs = frame.messages.filter(m => m && m.text && m.text.trim().length > 0);
-                const newMsgs = this.extractNewMessages(this.prevMessages, currentMsgs);
-                this.prevMessages = currentMsgs;
+                const curList = frame.messages.filter(m => m && m.text && m.text.trim().length > 0 &&
+                    !m.text.trim().startsWith('===') && !m.text.trim().startsWith('---'));
+                const prevList = this.lastSeenMessages || [];
 
-                for (const msg of newMsgs) {
-                    let text = msg.text.trim();
-                    if (msg.count && msg.count > 1) {
-                        text += ` (x${msg.count})`;
+                if (curList.length > 0) {
+                    const prevLast = prevList.length > 0 ? prevList[prevList.length - 1] : null;
+                    const curLast = curList[curList.length - 1];
+
+                    // Did the last message increment its count?
+                    if (prevLast && curLast && prevLast.text === curLast.text && curLast.count > prevLast.count) {
+                        this.updateLastMessageCount(curLast.text.trim(), curLast.count);
                     }
-                    const col = (window.getAngbandColorString && msg.attr !== undefined)
-                        ? window.getAngbandColorString(msg.attr)
-                        : '#ffd700';
-                    this.addMessage(text, col);
+
+                    // Suffix matching to find newly appended messages
+                    let matchedOverlap = 0;
+                    for (let k = Math.min(prevList.length, curList.length); k > 0; k--) {
+                        let match = true;
+                        for (let j = 0; j < k; j++) {
+                            if (prevList[prevList.length - k + j].text !== curList[j].text) {
+                                match = false;
+                                break;
+                            }
+                        }
+                        if (match) {
+                            matchedOverlap = k;
+                            break;
+                        }
+                    }
+
+                    const newItems = curList.slice(matchedOverlap);
+                    for (const item of newItems) {
+                        if (prevLast && item.text === prevLast.text) continue;
+                        let text = item.text.trim();
+                        if (item.count && item.count > 1) {
+                            text += ` (x${item.count})`;
+                        }
+                        const col = (window.getAngbandColorString && item.attr !== undefined)
+                            ? window.getAngbandColorString(item.attr)
+                            : '#ffd700';
+                        this.addMessage(text, col, item.text.trim());
+                    }
+
+                    this.lastSeenMessages = curList.map(m => ({ text: m.text, count: m.count, attr: m.attr }));
                 }
             }
 
-            // Also capture dynamic action lines on term row 0 during play
+            // 2. Also capture dynamic action lines on term row 0 during play (combat, spell, status, prompts)
             if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
                 let line0 = frame.term.rows[0].g.trim();
                 line0 = line0.replace(/\s*[-–—]more[-–—]\s*$/i, '');
@@ -1064,8 +1117,9 @@ class WebHUD {
                     !line0.includes('Press any key') &&
                     !line0.toLowerCase().includes('press space')) {
                     this.lastTermRow0 = line0;
-                    if (!this.messageHistory || !this.messageHistory.some(m => m.text === line0 || m.text.includes(line0) || line0.includes(m.text))) {
-                        this.addMessage(line0, '#ffd700');
+                    const lastHistory = this.messageHistory.length > 0 ? this.messageHistory[this.messageHistory.length - 1] : null;
+                    if (!lastHistory || lastHistory.rawText !== line0) {
+                        this.addMessage(line0, '#ffd700', line0);
                     }
                 }
             }

@@ -410,6 +410,7 @@ window.addEventListener('DOMContentLoaded', () => {
     let selectedSaveIndex = 0;
     let loadedSaves = [];
     let latestSave = null;
+    let lastEnteredShopTile = null;
 
     // DOM Elements for Intro & Modals
     const splashOverlay = document.getElementById('splash-overlay');
@@ -1054,7 +1055,7 @@ window.addEventListener('DOMContentLoaded', () => {
     });
 
     function updateTerminalToolbar(frame) {
-        const terminalTitle = document.getElementById('terminal-title');
+        const terminalTitle = document.getElementById('term-title') || document.getElementById('terminal-title');
         const quickBirthBtn = document.getElementById('btn-quick-birth');
         const termRerollBtn = document.getElementById('btn-term-reroll');
         const termCustomBtn = document.getElementById('btn-term-custom');
@@ -1212,15 +1213,16 @@ window.addEventListener('DOMContentLoaded', () => {
         if (!ui) return false;
         if ((ui.overlay || 0) > 0) return true;
 
-        // Check if player is on a store entrance/tile in town
-        if (frame.map && frame.map.rows && frame.player) {
-            const py = frame.player.y;
-            const px = frame.player.x;
-            if (frame.map.rows[py] && frame.map.rows[py].f) {
-                const feat = parseInt(frame.map.rows[py].f.substring(px * 2, px * 2 + 2), 16) || 0;
-                if (feat >= 7 && feat <= 14) return true;
-            }
-        }
+        // Check if terminal text indicates an active store/inventory/menu screen
+        const screenText = (frame.term && frame.term.rows)
+            ? frame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
+            : '';
+        const hasStoreText = screenText.includes('store inventory') ||
+                             screenText.includes('home inventory') ||
+                             screenText.includes('gold remaining') ||
+                             screenText.includes('purchase which item') ||
+                             screenText.includes('sell which item');
+        if (hasStoreText) return true;
 
         return !ui.awaiting_command && !ui.more;
     }
@@ -1267,6 +1269,25 @@ window.addEventListener('DOMContentLoaded', () => {
             const hasOverlay = frame.ui && (frame.ui.overlay || 0) > 0;
             if (!hasOverlay && (birthReviewActive || (forceTerminal && !window.__manualTerminalOpen))) {
                 confirmHeroBirth();
+            }
+
+            // Auto-enter shop when stepping onto a store entrance tile in town
+            if (frame.ui && (frame.ui.overlay || 0) === 0 && frame.ui.awaiting_command) {
+                const py = frame.player.y;
+                const px = frame.player.x;
+                if (frame.map.rows && frame.map.rows[py] && frame.map.rows[py].f) {
+                    const feat = parseInt(frame.map.rows[py].f.substring(px * 2, px * 2 + 2), 16) || 0;
+                    const isStoreTile = feat >= 7 && feat <= 14;
+                    const tileKey = `${px},${py}`;
+                    if (isStoreTile) {
+                        if (lastEnteredShopTile !== tileKey) {
+                            lastEnteredShopTile = tileKey;
+                            network.sendKey('.');
+                        }
+                    } else {
+                        lastEnteredShopTile = null;
+                    }
+                }
             }
         }
 

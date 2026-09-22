@@ -271,22 +271,22 @@ html, body {
 }
 
 .message-feed-scroll {
-    height: 44px; /* Compact 2-line default height */
-    max-height: 44px;
+    flex: 1;
+    min-height: 50px;
+    height: auto;
+    max-height: none;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 3px 8px;
+    padding: 4px 8px;
     display: flex;
     flex-direction: column;
     background: rgba(8, 11, 18, 0.92);
     scroll-behavior: smooth;
-    transition: max-height 0.25s ease, height 0.25s ease;
 }
 
-#message-feed-window.expanded .message-feed-scroll,
-#message-feed-window:hover .message-feed-scroll {
-    height: 110px;
-    max-height: 110px;
+#message-feed-window.expanded {
+    height: 320px;
+    max-height: 85vh;
 }
 
 .message-feed-scroll::-webkit-scrollbar {

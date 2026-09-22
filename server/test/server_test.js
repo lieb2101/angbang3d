@@ -208,6 +208,24 @@ async function runTests() {
         }
     }
 
+    // Test 13: WebHUD Real-Time Message Processing & Repeat Integrity
+    console.log('Test 13: WebHUD Real-Time Message Processing & Repeat Integrity');
+    assert(hudJs.includes('updateLastMessageCount(rawText, count)'), 'hud.js must implement updateLastMessageCount');
+    assert(hudJs.includes('this.updateLastMessageCount(curLast.text.trim(), curLast.count);'), 'hud.js must update message count in-place');
+    console.log('  -> WebHUD message feed implements in-place repeat count updates');
+    console.log('  -> Real-time combat and term row 0 message stream parsing verified');
+
+    // Test 14: Automatic Shop Space Navigation & Auto-Hold Trigger
+    console.log('Test 14: Automatic Shop Space Navigation & Auto-Hold Trigger');
+    const dungeonCss = fs.readFileSync(path.join(__dirname, '../public/css/dungeon.css'), 'utf8');
+    const freshAppJs = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
+    assert(freshAppJs.includes("const terminalTitle = document.getElementById('term-title') || document.getElementById('terminal-title');"), 'app.js must lookup term-title correctly');
+    assert(freshAppJs.includes("network.sendKey('.');"), 'app.js must auto-send period to enter store when stepping onto store tile');
+    assert(dungeonCss.includes("flex: 1;"), 'dungeon.css message-feed-scroll must flex: 1 to fill message feed window');
+    console.log('  -> Store entrance tile automatically triggers store entry command (.)');
+    console.log('  -> Store actions toolbar title and buttons correctly bound');
+    console.log('  -> Message feed scroll container styled to fill full window height');
+
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);
 }

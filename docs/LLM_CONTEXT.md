@@ -55,6 +55,10 @@ Rather than rewriting Angband rules in C#, Angband runs as a headless child proc
 - `client/scripts/Main.cs`: Main loop, input routing, start/pause menus, script test runner.
 - `client/scripts/DungeonWorld.cs`: 3D procedural grid mesh, camera tweening, torch lighting, entity billboards.
 - `client/scripts/Overlay.cs`: 2D canvas drawing HUD, classic 2D map overlay, 80x24 terminal overlay, and main/pause menus.
+- `server/public/js/dungeon3d.js`: Web 3D exploration engine (Three.js procedural meshes, PBR textures, entity models, fog).
+- `server/public/js/hud.js`: Web HUD overlay, real-time combat message feed, top action banner, minimap, death modal.
+- `server/public/js/app.js`: Web application coordinator, view routing (`needsTerminal`), toolbar/menu isolation.
+- `server/public/js/input.js`: Web input dispatcher (3D movement, vanilla Angband action keys, terminal modal hotkeys).
 - `docs/PROTOCOL.md`: JSON wire specification.
 - `docs/ARCHITECTURE.md`: Technical trade-offs and rationale.
 - `docs/LOW_HANGING_FRUIT_PLAN.md`: Full implementation log of 7 graphics/engine features.

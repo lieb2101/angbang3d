@@ -956,11 +956,11 @@ class WebHUD {
             this.currentTurn = player.game_turn;
         }
 
-        const hasPlayer = Boolean(player && (player.name || player.hp_max > 0));
+        const inPlay = Boolean(frame && frame.phase === 'play' && frame.map);
 
-        // Message Feed Window Visibility: Always visible in town and dungeon when player exists
+        // Message Feed Window Visibility: Always visible in town and dungeon when in play
         if (this.messageFeedWindow) {
-            if (hasPlayer || frame.phase === 'play') {
+            if (inPlay) {
                 this.messageFeedWindow.style.display = 'flex';
             } else {
                 this.messageFeedWindow.style.display = 'none';
@@ -980,7 +980,7 @@ class WebHUD {
         }
 
         // Atmospheric initial greeting when entering play phase (Town or Dungeon)
-        if ((hasPlayer || frame.phase === 'play') && (!this.messageHistory || this.messageHistory.length === 0)) {
+        if (inPlay && (!this.messageHistory || this.messageHistory.length === 0)) {
             const depth = player.depth !== undefined ? player.depth : 0;
             if (depth === 0) {
                 this.addMessage("Welcome to the Town of Angband! Visit the General Store and Armory to equip your journey.", "#ffd700");

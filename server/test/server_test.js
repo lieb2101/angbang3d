@@ -181,7 +181,14 @@ async function runTests() {
     assert(indexRes.body.includes('id="btn-store-exit"'), 'btn-store-exit must be present');
     assert(indexRes.body.includes('id="map-resize-handle"'), 'map-resize-handle must be present');
     assert(indexRes.body.includes('id="msg-resize-handle"'), 'msg-resize-handle must be present');
-    console.log('  -> Store actions bar, item action buttons, and window resize handles verified in index.html');
+    // Test 11: Character Screen Toolbar & Store Isolation Guard
+    console.log('Test 11: Character Screen Toolbar & Store Isolation Guard');
+    const appJs = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
+    const inputJs = fs.readFileSync(path.join(__dirname, '../public/js/input.js'), 'utf8');
+    assert(appJs.includes("const inPlay = Boolean(frame && frame.phase === 'play' && frame.map);"), 'app.js must strictly define inPlay by phase and map');
+    assert(appJs.includes("if (!inPlay) {\n            // NEVER show store actions bar during character creation or review\n            if (storeActionsBar) storeActionsBar.style.display = 'none';"), 'app.js must strictly hide storeActionsBar when not inPlay');
+    assert(inputJs.includes("const inPlay = Boolean(lastFrame && lastFrame.phase === 'play' && lastFrame.map);"), 'input.js must strictly define inPlay by phase and map');
+    console.log('  -> Store actions bar strictly quarantined to inPlay states with verified map context');
 
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);

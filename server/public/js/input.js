@@ -388,13 +388,14 @@ class InputController {
 
     handleTerminalKey(e) {
         const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
-        const inPlay = Boolean(lastFrame && lastFrame.player && (lastFrame.player.name || lastFrame.player.hp_max > 0));
+        const inPlay = Boolean(lastFrame && lastFrame.phase === 'play' && lastFrame.map);
         const screenText = (lastFrame && lastFrame.term && lastFrame.term.rows)
             ? lastFrame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
             : '';
         const isReviewScreen = !inPlay && (screenText.includes("use as is") || screenText.includes("'y': use") ||
                                screenText.includes("to start over") || screenText.includes("r to reroll") ||
-                               screenText.includes("reroll") || screenText.includes("'s' to start"));
+                               screenText.includes("reroll") || screenText.includes("'s' to start") ||
+                               screenText.includes("step back") || screenText.includes("any other key to continue"));
 
         // Reroll hotkey on review screen ('R') -> Re-randomize
         if (isReviewScreen && (e.key === 'r' || e.key === 'R')) {

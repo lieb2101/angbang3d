@@ -1033,87 +1033,105 @@ window.addEventListener('DOMContentLoaded', () => {
         const storeActionsBar = document.getElementById('store-actions-bar');
         if (!terminalTitle || !termEscapeBtn) return;
 
-        const hasPlayer = Boolean(frame && frame.player && (frame.player.name || frame.player.hp_max > 0));
-
-        // When player exists (in play / stores / menus), NEVER show birth or reroll buttons!
-        if (hasPlayer) {
-            if (quickBirthBtn) quickBirthBtn.style.display = 'none';
-            if (termRerollBtn) termRerollBtn.style.display = 'none';
-            if (termCustomBtn) termCustomBtn.style.display = 'none';
-
-            const inOverlay = Boolean(frame.ui && (frame.ui.overlay || 0) > 0);
-            if (inOverlay) {
-                // In store or full-screen menu overlay
-                let storeName = 'STORE';
-                if (frame.term && frame.term.rows) {
-                    for (let r = 0; r < Math.min(4, frame.term.rows.length); r++) {
-                        const line = (frame.term.rows[r].g || '').trim();
-                        const m = line.match(/([\w\s]+)\s*\(\d+\)/);
-                        if (m) {
-                            storeName = m[1].trim();
-                            break;
-                        } else if (line.toLowerCase().includes('inventory')) {
-                            storeName = 'INVENTORY';
-                            break;
-                        } else if (line.toLowerCase().includes('equipment')) {
-                            storeName = 'EQUIPMENT';
-                            break;
-                        }
-                    }
-                }
-                terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
-                if (termAdvanceBtn) {
-                    termAdvanceBtn.style.display = 'inline-flex';
-                    termAdvanceBtn.textContent = 'Advance (Enter)';
-                }
-                termEscapeBtn.textContent = 'Exit Store (Esc)';
-                if (storeActionsBar) storeActionsBar.style.display = 'flex';
-            } else {
-                terminalTitle.textContent = '⚔ ANGBAND CLASSIC TERMINAL';
-                if (termAdvanceBtn) {
-                    termAdvanceBtn.style.display = 'inline-flex';
-                    termAdvanceBtn.textContent = 'Advance (Enter)';
-                }
-                termEscapeBtn.textContent = 'Close (Esc)';
-                if (storeActionsBar) storeActionsBar.style.display = 'none';
-            }
-            return;
-        }
-
-        // Before player exists (Character Creation & Setup)
-        if (storeActionsBar) storeActionsBar.style.display = 'none';
+        const inPlay = Boolean(frame && frame.phase === 'play' && frame.map);
 
         const screenText = (frame && frame.term && frame.term.rows)
             ? frame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
             : '';
-        const isReviewScreen = screenText.includes("use as is") || screenText.includes("'y': use") ||
-                               screenText.includes("to start over") || screenText.includes("r to reroll") ||
-                               screenText.includes("'s' to start");
 
-        // Case 1: Final character review screen
-        if (isReviewScreen) {
-            terminalTitle.textContent = '⚔ REVIEW YOUR HERO';
-            if (quickBirthBtn) quickBirthBtn.style.display = 'none';
-            if (termRerollBtn) termRerollBtn.style.display = 'inline-flex';
-            if (termCustomBtn) termCustomBtn.style.display = 'inline-flex';
+        // If NOT in active play: we are in character creation / birth / review screen
+        if (!inPlay) {
+            // NEVER show store actions bar during character creation or review
+            if (storeActionsBar) storeActionsBar.style.display = 'none';
+
+            const isReviewScreen = screenText.includes("use as is") || screenText.includes("'y': use") ||
+                                   screenText.includes("to start over") || screenText.includes("r to reroll") ||
+                                   screenText.includes("reroll") || screenText.includes("'s' to start") ||
+                                   screenText.includes("step back") || screenText.includes("any other key to continue");
+
+            if (isReviewScreen) {
+                terminalTitle.textContent = '⚔ REVIEW YOUR HERO';
+                if (quickBirthBtn) quickBirthBtn.style.display = 'none';
+                if (termRerollBtn) termRerollBtn.style.display = 'inline-flex';
+                if (termCustomBtn) termCustomBtn.style.display = 'inline-flex';
+                if (termAdvanceBtn) {
+                    termAdvanceBtn.style.display = 'inline-flex';
+                    termAdvanceBtn.textContent = '⚔ Accept & Play (Enter)';
+                }
+                termEscapeBtn.textContent = 'Back (Esc)';
+                return;
+            }
+
+            // Case 2: Early Character Creation (race/class/stat selection)
+            terminalTitle.textContent = '⚔ CHARACTER CREATION';
+            if (quickBirthBtn) quickBirthBtn.style.display = 'inline-flex';
+            if (termRerollBtn) termRerollBtn.style.display = 'none';
+            if (termCustomBtn) termCustomBtn.style.display = 'none';
             if (termAdvanceBtn) {
                 termAdvanceBtn.style.display = 'inline-flex';
-                termAdvanceBtn.textContent = '⚔ Accept & Play (Enter)';
+                termAdvanceBtn.textContent = 'Advance (Enter)';
             }
             termEscapeBtn.textContent = 'Back (Esc)';
             return;
         }
 
-        // Case 2: Character Creation / Birth before player exists
-        terminalTitle.textContent = '⚔ CHARACTER CREATION';
-        if (quickBirthBtn) quickBirthBtn.style.display = 'inline-flex';
+        // --- ACTIVE PLAY (Town or Dungeon) ---
+        // Never show character birth or reroll buttons during active play!
+        if (quickBirthBtn) quickBirthBtn.style.display = 'none';
         if (termRerollBtn) termRerollBtn.style.display = 'none';
         if (termCustomBtn) termCustomBtn.style.display = 'none';
-        if (termAdvanceBtn) {
-            termAdvanceBtn.style.display = 'inline-flex';
-            termAdvanceBtn.textContent = 'Advance (Enter)';
+
+        // Check if player is inside a store in town:
+        // A store is active when inOverlay > 0 AND (the terminal contains store inventory/gold text OR player is on a store feat 7-14)
+        let playerFeat = 0;
+        if (frame.map && frame.map.rows && frame.player) {
+            const py = frame.player.y;
+            const px = frame.player.x;
+            if (frame.map.rows[py] && frame.map.rows[py].f) {
+                playerFeat = frame.map.rows[py].f[px] || 0;
+            }
         }
-        termEscapeBtn.textContent = 'Back (Esc)';
+
+        const isStoreFeat = playerFeat >= 7 && playerFeat <= 14;
+        const hasStoreText = screenText.includes('store inventory') || screenText.includes('gold remaining');
+        const inOverlay = Boolean(frame.ui && (frame.ui.overlay || 0) > 0);
+
+        if (inOverlay && (isStoreFeat || hasStoreText)) {
+            // Player is inside a store
+            let storeName = 'STORE';
+            if (frame.term && frame.term.rows) {
+                for (let r = 0; r < Math.min(4, frame.term.rows.length); r++) {
+                    const line = (frame.term.rows[r].g || '').trim();
+                    const m = line.match(/([\w\s]+)\s*\(\d+\)/);
+                    if (m) {
+                        storeName = m[1].trim();
+                        break;
+                    }
+                }
+            }
+            terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
+            if (termAdvanceBtn) {
+                termAdvanceBtn.style.display = 'inline-flex';
+                termAdvanceBtn.textContent = 'Advance (Enter)';
+            }
+            termEscapeBtn.textContent = 'Exit Store (Esc)';
+            if (storeActionsBar) storeActionsBar.style.display = 'flex';
+        } else {
+            // Normal in-game menu, inventory, equipment, or help screen
+            if (screenText.includes('inventory') && !hasStoreText) {
+                terminalTitle.textContent = '⚔ INVENTORY';
+            } else if (screenText.includes('equipment')) {
+                terminalTitle.textContent = '⚔ EQUIPMENT';
+            } else {
+                terminalTitle.textContent = '⚔ ANGBAND CLASSIC TERMINAL';
+            }
+            if (termAdvanceBtn) {
+                termAdvanceBtn.style.display = 'inline-flex';
+                termAdvanceBtn.textContent = 'Advance (Enter)';
+            }
+            termEscapeBtn.textContent = 'Close (Esc)';
+            if (storeActionsBar) storeActionsBar.style.display = 'none';
+        }
     }
 
     function needsTerminal(frame) {

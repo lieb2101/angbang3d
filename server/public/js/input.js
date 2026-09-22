@@ -555,14 +555,14 @@ class InputController {
             e.preventDefault();
             this.network.sendKey('space');
 
-            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+            if (e.key === 'ArrowLeft') {
                 this.dungeon.turn(-1);
-            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+            } else if (e.key === 'ArrowRight') {
                 this.dungeon.turn(1);
-            } else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.code === 'Numpad8' || e.code === 'Digit8') {
+            } else if (e.key === 'ArrowUp' || e.code === 'Numpad8' || e.code === 'Digit8') {
                 const moveKey = this.getRelativeDirectionKey(8);
                 if (moveKey) setTimeout(() => this.network.sendKey(moveKey), 35);
-            } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S' || e.code === 'Numpad2' || e.code === 'Digit2') {
+            } else if (e.key === 'ArrowDown' || e.code === 'Numpad2' || e.code === 'Digit2') {
                 const moveKey = this.getRelativeDirectionKey(2);
                 if (moveKey) setTimeout(() => this.network.sendKey(moveKey), 35);
             }

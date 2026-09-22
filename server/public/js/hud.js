@@ -287,6 +287,20 @@ class WebHUD {
         return '#c8d1dc'; // Default clear text (Light Slate)
     }
 
+    isCombatMessage(text) {
+        if (!text) return false;
+        const t = text.toLowerCase();
+        return t.includes('you hit') || t.includes('you slash') || t.includes('you crush') ||
+               t.includes('you smite') || t.includes('you shoot') || t.includes('you miss') ||
+               t.includes('misses you') || t.includes('bites you') || t.includes('claws you') ||
+               t.includes('stings you') || t.includes('hits you') || t.includes('crushes you') ||
+               t.includes('slashes you') || t.includes('touches you') || t.includes('spits on you') ||
+               t.includes('burns you') || t.includes('wounds you') || t.includes('damage') ||
+               t.includes('attacks') || t.includes('dies.') || t.includes('destroyed.') ||
+               t.includes('killed.') || t.includes('casts a spell') || t.includes('breathes') ||
+               t.includes('screams in agony');
+    }
+
     addMessage(text, color = '#ffd700', rawText = null) {
         if (!text || !text.trim()) return;
         let trimmed = text.trim();
@@ -326,10 +340,11 @@ class WebHUD {
 
         const now = Date.now();
         const baseText = rawText || trimmed;
+        const isCombat = this.isCombatMessage(trimmed);
 
-        // Deduplicate adjacent identical message by incrementing count on existing line
+        // Only collapse non-combat, repetitive status notices (e.g. repeatedly bumping into a wall)
         const lastMsg = this.messageHistory.length > 0 ? this.messageHistory[this.messageHistory.length - 1] : null;
-        if (lastMsg && (lastMsg.rawText === baseText || lastMsg.text === trimmed)) {
+        if (!isCombat && lastMsg && (lastMsg.rawText === baseText || lastMsg.text === trimmed)) {
             lastMsg.repeat = (lastMsg.repeat || 1) + 1;
             if (lastMsg.el) {
                 lastMsg.el.textContent = `${lastMsg.rawText || trimmed} (x${lastMsg.repeat})`;
@@ -1137,14 +1152,26 @@ class WebHUD {
         // Clean message log start upon entering active play (Town or Dungeon)
         if (inPlay && (!this.wasInPlay || !this.messageHistory || this.messageHistory.length === 0)) {
             const depth = player.depth !== undefined ? player.depth : 0;
+            this.lastDepth = depth;
             const welcomeMsg = depth === 0
                 ? "Welcome to the Town of Angband! Visit the General Store and Armory to equip your journey."
                 : `You descend into Dungeon Level ${depth} (${depth * 50}ft).`;
             this.resetMessages(welcomeMsg);
-            this.lastSeenMessages = (frame.messages && Array.isArray(frame.messages))
-                ? frame.messages.map(m => ({ text: m.text, count: m.count, attr: m.attr }))
-                : [];
+            this.lastSeenMessages = [];
             this.lastTermRow0 = null;
+        }
+
+        // Track staircase floor transitions (Town <-> Dungeon depths)
+        if (inPlay && player.depth !== undefined && this.lastDepth !== undefined && player.depth !== this.lastDepth) {
+            if (player.depth > this.lastDepth) {
+                this.addMessage(`You descend into Dungeon Level ${player.depth} (${player.depth * 50}ft).`, '#ffd700');
+            } else if (player.depth < this.lastDepth) {
+                const ascendMsg = player.depth === 0
+                    ? "You return to the surface of the Town of Angband."
+                    : `You ascend to Dungeon Level ${player.depth} (${player.depth * 50}ft).`;
+                this.addMessage(ascendMsg, '#ffd700');
+            }
+            this.lastDepth = player.depth;
         }
 
         // Multi-Line Message Log Queue: Capture ALL in-game messages during active play
@@ -1179,7 +1206,7 @@ class WebHUD {
                     newItems = curList.slice(matchedOverlap);
                     for (const item of newItems) {
                         let text = item.text.trim();
-                        if (item.count && item.count > 1) {
+                        if (item.count && item.count > 1 && !this.isCombatMessage(text)) {
                             text += ` (x${item.count})`;
                         }
                         const col = this.getMessageColor(item.text.trim(), item.attr);
@@ -1188,7 +1215,16 @@ class WebHUD {
 
                     // If no new items were appended, did the last message increment its count?
                     if (newItems.length === 0 && prevLast && curLast && prevLast.text === curLast.text && curLast.count > (prevLast.count || 1)) {
-                        this.updateLastMessageCount(curLast.text.trim(), curLast.count);
+                        const diff = curLast.count - (prevLast.count || 1);
+                        const col = this.getMessageColor(curLast.text.trim(), curLast.attr);
+                        const isCombat = this.isCombatMessage(curLast.text.trim());
+                        if (isCombat) {
+                            for (let c = 0; c < diff; c++) {
+                                this.addMessage(curLast.text.trim(), col, curLast.text.trim());
+                            }
+                        } else {
+                            this.updateLastMessageCount(curLast.text.trim(), curLast.count);
+                        }
                     }
 
                     this.lastSeenMessages = curList.map(m => ({ text: m.text, count: m.count, attr: m.attr }));

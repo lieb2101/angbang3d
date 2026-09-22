@@ -198,6 +198,14 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     // Interactive Store Actions Bar controls
+    const btnStoreAdvance = document.getElementById('btn-store-advance');
+    if (btnStoreAdvance) {
+        btnStoreAdvance.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            if (audio) audio.playMenuNav();
+            network.sendKey('space');
+        });
+    }
     const btnStoreBuy = document.getElementById('btn-store-buy');
     if (btnStoreBuy) {
         btnStoreBuy.addEventListener('click', () => {
@@ -229,7 +237,11 @@ window.addEventListener('DOMContentLoaded', () => {
             if (audio) audio.playMenuNav();
             network.sendKey('escape');
             forceTerminal = false;
-            if (terminalContainer) terminalContainer.classList.add('hidden');
+            window.__manualTerminalOpen = false;
+            if (terminalContainer) {
+                terminalContainer.classList.add('hidden');
+                terminalContainer.classList.remove('in-game-modal');
+            }
             if (input) input.setTerminalMode(false);
         });
     }
@@ -1195,6 +1207,13 @@ window.addEventListener('DOMContentLoaded', () => {
             if (itemActionsBar) itemActionsBar.style.display = 'none';
             if (termAdvanceBtn) termAdvanceBtn.style.display = 'none';
             if (termEscapeBtn) termEscapeBtn.style.display = 'none'; // btn-store-exit handles exit cleanly
+
+            // If store prompt has -more- (e.g. storekeeper greeting), display Advance button
+            const isStoreMore = Boolean(frame.ui && frame.ui.more) || screenText.includes('-more-');
+            const btnStoreAdv = document.getElementById('btn-store-advance');
+            if (btnStoreAdv) {
+                btnStoreAdv.style.display = isStoreMore ? 'inline-flex' : 'none';
+            }
         } else {
             // Normal in-game menu, inventory, equipment, or action screen
             if (screenText.includes('throw which item?')) {
@@ -1269,7 +1288,11 @@ window.addEventListener('DOMContentLoaded', () => {
                         if (audio) audio.playMenuNav();
                         network.sendKey('escape');
                         forceTerminal = false;
-                        if (terminalContainer) terminalContainer.classList.add('hidden');
+                        window.__manualTerminalOpen = false;
+                        if (terminalContainer) {
+                            terminalContainer.classList.add('hidden');
+                            terminalContainer.classList.remove('in-game-modal');
+                        }
                         if (input) input.setTerminalMode(false);
                     };
                 }
@@ -1330,16 +1353,25 @@ window.addEventListener('DOMContentLoaded', () => {
     function updateViewMode(frame) {
         if (appState !== 'game') {
             terminalContainer.classList.add('hidden');
+            terminalContainer.classList.remove('in-game-modal');
             input.setTerminalMode(false);
             return;
         }
         const needsTerm = needsTerminal(frame || lastFrame);
         if (needsTerm) {
             terminalContainer.classList.remove('hidden');
+            // If in active play and not manually toggled by user with Tab, show as in-game modal over 3D world
+            const currentFrame = frame || lastFrame;
+            if (currentFrame && currentFrame.phase === 'play' && !window.__manualTerminalOpen) {
+                terminalContainer.classList.add('in-game-modal');
+            } else {
+                terminalContainer.classList.remove('in-game-modal');
+            }
             input.setTerminalMode(true);
             terminal.resize();
         } else {
             terminalContainer.classList.add('hidden');
+            terminalContainer.classList.remove('in-game-modal');
             input.setTerminalMode(false);
         }
     }

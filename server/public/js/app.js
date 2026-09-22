@@ -171,6 +171,25 @@ window.addEventListener('DOMContentLoaded', () => {
             if (audio) audio.unlock();
             cancelQuickBirth();
             if (audio) audio.playMenuNav();
+
+            const inPlay = Boolean(lastFrame && lastFrame.phase === 'play' && (lastFrame.map || (lastFrame.player && lastFrame.player.name)));
+            const screenText = (lastFrame && lastFrame.term && lastFrame.term.rows)
+                ? lastFrame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
+                : '';
+            const isReviewScreen = !inPlay && (screenText.includes("use as is") || screenText.includes("'y': use") ||
+                                   screenText.includes("to start over") || screenText.includes("r to reroll") ||
+                                   screenText.includes("reroll") || screenText.includes("'s' to start") ||
+                                   screenText.includes("step back") || screenText.includes("any other key to continue"));
+
+            if (!inPlay) {
+                if (isReviewScreen) {
+                    network.sendKey('s');
+                } else {
+                    returnToMainMenu();
+                }
+                return;
+            }
+
             network.sendKey('escape');
             forceTerminal = false;
             terminalContainer.classList.add('hidden');
@@ -220,31 +239,35 @@ window.addEventListener('DOMContentLoaded', () => {
         const makeWindowDraggableAndResizable = (winEl, headerEl, resizeHandleEl, storageKey, onResize) => {
             if (!winEl) return;
 
-            // Restore saved position
+            // Restore saved position with safe screen bounds
             try {
                 const savedPos = localStorage.getItem(storageKey + '_pos');
                 if (savedPos) {
                     const pos = JSON.parse(savedPos);
                     if (typeof pos.left === 'number' && typeof pos.top === 'number') {
-                        const maxLeft = Math.max(0, window.innerWidth - 60);
-                        const maxTop = Math.max(0, window.innerHeight - 40);
-                        winEl.style.left = `${Math.min(pos.left, maxLeft)}px`;
-                        winEl.style.top = `${Math.min(pos.top, maxTop)}px`;
+                        const maxLeft = Math.max(10, window.innerWidth - 60);
+                        const maxTop = Math.max(10, window.innerHeight - 40);
+                        winEl.style.left = `${Math.max(10, Math.min(pos.left, maxLeft))}px`;
+                        winEl.style.top = `${Math.max(10, Math.min(pos.top, maxTop))}px`;
                         winEl.style.right = 'auto';
                         winEl.style.bottom = 'auto';
                     }
                 }
             } catch (_) {}
 
-            // Restore saved size
+            // Restore saved size with safe minimums
             try {
                 const savedSize = localStorage.getItem(storageKey + '_size');
                 if (savedSize) {
                     const sz = JSON.parse(savedSize);
                     if (typeof sz.width === 'number' && typeof sz.height === 'number') {
-                        winEl.style.width = `${sz.width}px`;
-                        winEl.style.height = `${sz.height}px`;
-                        if (onResize) onResize(sz.width, sz.height);
+                        const minW = storageKey === 'angband_msg' ? 260 : 140;
+                        const minH = storageKey === 'angband_msg' ? 90 : 80;
+                        const w = Math.max(minW, Math.min(window.innerWidth - 20, sz.width));
+                        const h = Math.max(minH, Math.min(window.innerHeight - 20, sz.height));
+                        winEl.style.width = `${w}px`;
+                        winEl.style.height = `${h}px`;
+                        if (onResize) onResize(w, h);
                     }
                 }
             } catch (_) {}
@@ -1089,7 +1112,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (termCustomBtn) termCustomBtn.style.display = 'none';
 
         // Check if player is inside a store in town:
-        // A store is active when inOverlay > 0 AND (the terminal contains store inventory/gold text OR player is on a store feat 7-14)
+        // A store is active when inOverlay > 0 OR player is on a store feat 7-14 OR terminal contains store text
         let playerFeat = 0;
         if (frame.map && frame.map.rows && frame.player) {
             const py = frame.player.y;
@@ -1101,33 +1124,53 @@ window.addEventListener('DOMContentLoaded', () => {
 
         const isStoreFeat = playerFeat >= 7 && playerFeat <= 14;
         const hasStoreText = screenText.includes('store inventory') ||
+                             screenText.includes('home inventory') ||
                              screenText.includes('gold remaining') ||
                              screenText.includes('your home') ||
                              screenText.includes('general store') ||
                              screenText.includes('armory') ||
+                             screenText.includes('armoury') ||
                              screenText.includes('weaponsmith') ||
+                             screenText.includes('weapon smith') ||
                              screenText.includes('temple') ||
                              screenText.includes('alchemist') ||
+                             screenText.includes('alchemy') ||
                              screenText.includes('magic shop') ||
-                             screenText.includes('black market');
+                             screenText.includes('magic user') ||
+                             screenText.includes('black market') ||
+                             screenText.includes('purchase which item') ||
+                             screenText.includes('sell which item') ||
+                             screenText.includes('examine which item');
         const inOverlay = Boolean(frame.ui && (frame.ui.overlay || 0) > 0);
+        const inTown = Boolean(frame.player && (frame.player.depth === 0 || frame.player.depth === undefined));
 
-        if (inOverlay && (isStoreFeat || hasStoreText)) {
+        const isStore = isStoreFeat || hasStoreText || (inOverlay && inTown);
+
+        if (isStore) {
             // Player is inside a store
             let storeName = 'STORE';
             if (frame.term && frame.term.rows) {
                 for (let r = 0; r < Math.min(4, frame.term.rows.length); r++) {
                     const line = (frame.term.rows[r].g || '').trim();
-                    const m = line.match(/([\w\s]+)\s*\(\d+\)/);
-                    if (m) {
-                        storeName = m[1].trim();
-                        break;
-                    }
-                    if (line.toLowerCase().includes('your home')) {
-                        storeName = 'YOUR HOME';
+                    const sm = line.match(/(General Store|Armoury|Armory|Weaponsmith|Weapon Smith|Temple|Alchemy Shop|Alchemist|Magic Shop|Magic User's|Black Market|Your Home)/i);
+                    if (sm) {
+                        storeName = sm[1].trim();
                         break;
                     }
                 }
+            }
+            if (storeName === 'STORE' && isStoreFeat) {
+                const storeNames = {
+                    7: 'GENERAL STORE',
+                    8: 'ARMOURY',
+                    9: 'WEAPONSMITH',
+                    10: 'TEMPLE',
+                    11: 'ALCHEMY SHOP',
+                    12: 'MAGIC SHOP',
+                    13: 'BLACK MARKET',
+                    14: 'YOUR HOME'
+                };
+                if (storeNames[playerFeat]) storeName = storeNames[playerFeat];
             }
             terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
             // IN STORE: Show ONLY shop options! No character creation or redundant advance buttons!
@@ -1168,6 +1211,17 @@ window.addEventListener('DOMContentLoaded', () => {
         const ui = frame.ui;
         if (!ui) return false;
         if ((ui.overlay || 0) > 0) return true;
+
+        // Check if player is on a store entrance/tile in town
+        if (frame.map && frame.map.rows && frame.player) {
+            const py = frame.player.y;
+            const px = frame.player.x;
+            if (frame.map.rows[py] && frame.map.rows[py].f) {
+                const feat = parseInt(frame.map.rows[py].f.substring(px * 2, px * 2 + 2), 16) || 0;
+                if (feat >= 7 && feat <= 14) return true;
+            }
+        }
+
         return !ui.awaiting_command && !ui.more;
     }
 
@@ -1216,8 +1270,9 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Auto-flush -more- prompts seamlessly during play and store entrance
-        if (frame.ui && frame.ui.more) {
+        // Auto-flush -more- prompts seamlessly during play (only in 3D world, NOT inside store/overlay or review screen)
+        const isOverlay = frame.ui && (frame.ui.overlay || 0) > 0;
+        if (frame.ui && frame.ui.more && !isOverlay) {
             const screenText = (frame.term && frame.term.rows)
                 ? frame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
                 : '';

@@ -356,9 +356,29 @@ class InputController {
                 }
 
                 const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+                const inPlay = Boolean(lastFrame && lastFrame.phase === 'play' && (lastFrame.map || (lastFrame.player && lastFrame.player.name)));
+                const screenText = (lastFrame && lastFrame.term && lastFrame.term.rows)
+                    ? lastFrame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
+                    : '';
+                const isReviewScreen = !inPlay && (screenText.includes("use as is") || screenText.includes("'y': use") ||
+                                       screenText.includes("to start over") || screenText.includes("r to reroll") ||
+                                       screenText.includes("reroll") || screenText.includes("'s' to start") ||
+                                       screenText.includes("step back") || screenText.includes("any other key to continue"));
+
+                if (!inPlay) {
+                    if (isReviewScreen) {
+                        this.network.sendKey('s');
+                    } else {
+                        if (window.__app && window.__app.returnToMainMenu) {
+                            window.__app.returnToMainMenu();
+                        }
+                    }
+                    return;
+                }
+
                 const ui = lastFrame ? lastFrame.ui : null;
                 const isForcedTerm = window.__app && window.__app.isForceTerminal && window.__app.isForceTerminal();
-                const inContextMenu = !lastFrame || (lastFrame.phase !== 'play') || (ui && (ui.overlay > 0 || ui.more || !ui.awaiting_command)) || this.inTerminal || isForcedTerm;
+                const inContextMenu = (ui && (ui.overlay > 0 || ui.more || !ui.awaiting_command)) || this.inTerminal || isForcedTerm;
 
                 if (inContextMenu) {
                     // Always forward Escape to the engine to exit store/menu/prompt

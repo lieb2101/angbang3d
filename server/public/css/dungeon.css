@@ -160,11 +160,11 @@ html, body {
     left: 320px;
     transform: none;
     z-index: 6;
-    width: min(580px, calc(100vw - 640px));
-    min-width: 280px;
+    width: min(580px, calc(100vw - 340px));
+    min-width: 260px;
     max-width: 90vw;
     height: 180px;
-    min-height: 100px;
+    min-height: 90px;
     max-height: 80vh;
     background: rgba(8, 11, 18, 0.92);
     backdrop-filter: blur(8px);
@@ -172,7 +172,7 @@ html, body {
     border: 1px solid rgba(212, 175, 55, 0.40);
     border-radius: 6px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.85);
-    display: none; /* Controlled by hud.js based on player existence */
+    display: none; /* Controlled by hud.js based on play phase */
     flex-direction: column;
     overflow: hidden;
     pointer-events: auto;

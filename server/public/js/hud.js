@@ -988,21 +988,24 @@ class WebHUD {
             this.currentTurn = player.game_turn;
         }
 
-        const inPlay = Boolean(frame && frame.phase === 'play' && frame.map);
+        if (!this.messageFeedWindow) {
+            this.messageFeedWindow = document.getElementById('message-feed-window');
+        }
+        if (!this.messageFeedList) {
+            this.messageFeedList = document.getElementById('message-feed-list');
+            this.messageFeedScroll = document.getElementById('message-feed-scroll');
+        }
+
+        const inPlay = Boolean(frame && (frame.phase === 'play' || (frame.player && frame.player.name)));
 
         // Message Feed Window Visibility: Always visible in town and dungeon when in play
         if (this.messageFeedWindow) {
             if (inPlay) {
                 this.messageFeedWindow.style.display = 'flex';
+                this.messageFeedWindow.style.visibility = 'visible';
+                this.messageFeedWindow.style.opacity = '1';
             } else {
                 this.messageFeedWindow.style.display = 'none';
-            }
-        }
-
-        // Automatic -more- prompt advance: Space should never be needed in message log interaction
-        if (frame.ui && frame.ui.more) {
-            if (window.__app && window.__app.network) {
-                window.__app.network.sendKey('space');
             }
         }
 
@@ -1012,7 +1015,7 @@ class WebHUD {
         }
 
         // Clean message log start upon entering active play (Town or Dungeon)
-        if (inPlay && !this.wasInPlay) {
+        if (inPlay && (!this.wasInPlay || !this.messageHistory || this.messageHistory.length === 0)) {
             const depth = player.depth !== undefined ? player.depth : 0;
             const welcomeMsg = depth === 0
                 ? "Welcome to the Town of Angband! Visit the General Store and Armory to equip your journey."

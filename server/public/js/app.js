@@ -21,8 +21,11 @@ window.addEventListener('DOMContentLoaded', () => {
         network.sendKey(key);
     });
 
+    let birthReviewActive = false;
+
     const toggleTerminalView = () => {
         forceTerminal = !forceTerminal;
+        window.__manualTerminalOpen = forceTerminal;
         updateViewMode();
     };
 
@@ -32,6 +35,15 @@ window.addEventListener('DOMContentLoaded', () => {
     const cancelQuickBirth = () => {
         quickBirthActive = false;
         quickBirthStep = 0;
+    };
+
+    const confirmHeroBirth = () => {
+        cancelQuickBirth();
+        birthReviewActive = false;
+        forceTerminal = false;
+        window.__manualTerminalOpen = false;
+        if (terminalContainer) terminalContainer.classList.add('hidden');
+        if (input) input.setTerminalMode(false);
     };
 
     function stepQuickBirth(frame) {
@@ -57,14 +69,23 @@ window.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 1. More prompts (including town arrival -more-)
-        if (hasMore) {
-            network.sendKey('enter');
+        // 1. Character confirmation / review screens ('use as is' or 'S' to start over)
+        // PAUSE HERE: Give the player a moment to inspect stats and choose whether to accept or reroll!
+        if (screenText.includes("use as is") || screenText.includes("'y': use") ||
+            screenText.includes("to start over") || screenText.includes("r to reroll") ||
+            screenText.includes("reroll") || screenText.includes("'s' to start")) {
+            quickBirthActive = false;
+            birthReviewActive = true;
+            forceTerminal = true;
+            updateTerminalToolbar(frame);
+            updateViewMode(frame);
+            console.log('[QuickStart] Reached character review screen; pausing for player inspection.');
             return;
         }
-        // 2. Character confirmation / review screen ('y': use as is)
-        if (screenText.includes("use as is") || screenText.includes("'y': use")) {
-            network.sendKey('Y');
+
+        // 2. More prompts during setup/selection
+        if (hasMore) {
+            network.sendKey('enter');
             return;
         }
         // 3. Quit or overwrite confirmation
@@ -77,14 +98,25 @@ window.addEventListener('DOMContentLoaded', () => {
             network.sendKey('enter');
             return;
         }
-        // 5. Final birth review screen ('to start over' / 'r to reroll' / 'ESC to quit')
-        if (screenText.includes('to start over') || screenText.includes('r to reroll') || screenText.includes('reroll')) {
-            network.sendKey('enter');
-            return;
-        }
-        // 6. Selection menu: trait, race, class, roller -> send '@' for random
+        // 5. Selection menu: trait, race, class, roller -> send '@' for random
         network.sendKey('@');
     }
+
+    const rerollHero = () => {
+        cancelQuickBirth();
+        if (audio) audio.playMenuNav();
+        network.sendKey('s');
+        quickBirthActive = true;
+        quickBirthStep = 0;
+    };
+
+    const startCustomHeroCreation = () => {
+        cancelQuickBirth();
+        if (audio) audio.playMenuNav();
+        network.sendKey('s');
+        quickBirthActive = false;
+        quickBirthStep = 0;
+    };
 
     // Terminal Toolbar action buttons
     const quickBirthBtn = document.getElementById('btn-quick-birth');
@@ -107,11 +139,28 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const termRerollBtn = document.getElementById('btn-term-reroll');
+    if (termRerollBtn) {
+        termRerollBtn.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            rerollHero();
+        });
+    }
+
+    const termCustomBtn = document.getElementById('btn-term-custom');
+    if (termCustomBtn) {
+        termCustomBtn.addEventListener('click', () => {
+            if (audio) audio.unlock();
+            startCustomHeroCreation();
+        });
+    }
+
     const termAdvanceBtn = document.getElementById('btn-term-advance');
     if (termAdvanceBtn) {
         termAdvanceBtn.addEventListener('click', () => {
             if (audio) audio.unlock();
-            cancelQuickBirth();
+            confirmHeroBirth();
+            if (audio) audio.playWhoosh();
             network.sendKey('enter');
         });
     }
@@ -143,7 +192,9 @@ window.addEventListener('DOMContentLoaded', () => {
         isForceTerminal: () => forceTerminal,
         setForceTerminal: (val) => { forceTerminal = val; updateViewMode(); },
         toggleTerminalView,
-        cancelQuickBirth
+        cancelQuickBirth,
+        confirmHeroBirth,
+        rerollHero
     };
 
     let lastFrame = null;
@@ -732,53 +783,158 @@ window.addEventListener('DOMContentLoaded', () => {
         btnLoadBack.addEventListener('click', () => hideLoadMenu());
     }
 
+    // Guide Modal & Controls Toolbar Listeners
+    const btnControls = document.getElementById('btn-controls');
+    if (btnControls) {
+        btnControls.addEventListener('click', () => {
+            showGuide(1, appState === 'game' ? 'game' : null);
+        });
+    }
+
+    const btnGuideHud = document.getElementById('btn-guide-hud');
+    if (btnGuideHud) {
+        btnGuideHud.addEventListener('click', () => {
+            showGuide(2, 'game');
+        });
+    }
+
+    const btnGuideClose = document.getElementById('btn-guide-close');
+    if (btnGuideClose) {
+        btnGuideClose.addEventListener('click', () => hideGuide());
+    }
+
+    const btnGuideBack = document.getElementById('btn-guide-back');
+    if (btnGuideBack) {
+        btnGuideBack.addEventListener('click', () => hideGuide());
+    }
+
+    guideTabs.forEach((tab, idx) => {
+        tab.addEventListener('click', () => switchGuideTab(idx));
+    });
+
+    // Expose full coordinator interface to window.__app for input controller
+    Object.assign(window.__app, {
+        getAppState: () => appState,
+        showSplash,
+        showMainMenu,
+        showLoadMenu,
+        hideLoadMenu,
+        navigateLoadList,
+        loadSelectedSave,
+        deleteSelectedSave,
+        showPauseMenu,
+        resumeGame,
+        navigatePauseMenu,
+        selectPauseMenuItem,
+        activatePauseMenuItem,
+        showGuide,
+        hideGuide,
+        switchGuideTab,
+        cycleGuideTab,
+        isGuideOpen: () => appState === 'guide' || (guideModal && !guideModal.classList.contains('hidden')),
+        startNewRandomHero,
+        startNewCustomHero,
+        startCustomHeroCreation,
+        rerollHero,
+        returnToMainMenu,
+        navigateMenu,
+        selectMenuItem,
+        activateMenuItem
+    });
+
     function updateTerminalToolbar(frame) {
         const terminalTitle = document.getElementById('terminal-title');
         const quickBirthBtn = document.getElementById('btn-quick-birth');
+        const termRerollBtn = document.getElementById('btn-term-reroll');
+        const termCustomBtn = document.getElementById('btn-term-custom');
         const termAdvanceBtn = document.getElementById('btn-term-advance');
         const termEscapeBtn = document.getElementById('btn-term-escape');
         if (!terminalTitle || !termEscapeBtn) return;
 
-        if (!frame || (frame.phase && frame.phase !== 'play')) {
+        const screenText = (frame && frame.term && frame.term.rows)
+            ? frame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
+            : '';
+        const isReviewScreen = screenText.includes("use as is") || screenText.includes("'y': use") ||
+                               screenText.includes("to start over") || screenText.includes("r to reroll") ||
+                               screenText.includes("'s' to start");
+
+        // Case 1: Final character review screen (Only during setup/birth, NEVER in active play with map)
+        if (isReviewScreen && (!frame.map || !frame.player || (frame.phase && frame.phase !== 'play'))) {
+            terminalTitle.textContent = '⚔ REVIEW YOUR HERO';
+            if (quickBirthBtn) quickBirthBtn.style.display = 'none';
+            if (termRerollBtn) termRerollBtn.style.display = 'inline-flex';
+            if (termCustomBtn) termCustomBtn.style.display = 'inline-flex';
+            if (termAdvanceBtn) {
+                termAdvanceBtn.style.display = 'inline-flex';
+                termAdvanceBtn.textContent = '⚔ Accept & Play (Enter)';
+            }
+            termEscapeBtn.textContent = 'Back (Esc)';
+            return;
+        }
+
+        // Case 2: Character Creation / Birth before player exists or map exists
+        if (!frame || !frame.player || !frame.map || (frame.phase && frame.phase !== 'play')) {
             terminalTitle.textContent = '⚔ CHARACTER CREATION';
             if (quickBirthBtn) quickBirthBtn.style.display = 'inline-flex';
-            if (termAdvanceBtn) termAdvanceBtn.textContent = 'Advance (Enter)';
+            if (termRerollBtn) termRerollBtn.style.display = 'none';
+            if (termCustomBtn) termCustomBtn.style.display = 'none';
+            if (termAdvanceBtn) {
+                termAdvanceBtn.style.display = 'inline-flex';
+                termAdvanceBtn.textContent = 'Advance (Enter)';
+            }
             termEscapeBtn.textContent = 'Back (Esc)';
-        } else {
-            // In active play, ALWAYS hide the quick-birth button!
-            if (quickBirthBtn) quickBirthBtn.style.display = 'none';
+            return;
+        }
 
-            if (frame.ui && (frame.ui.overlay || 0) > 0) {
-                // In store or full-screen menu overlay
-                let storeName = 'STORE';
-                if (frame.term && frame.term.rows && frame.term.rows[0]) {
-                    const row0 = frame.term.rows[0].g || '';
-                    const m = row0.match(/([\w\s]+)\s*\(\d+\)/);
+        // Case 3: In active play (player exists) — NEVER show character creation or reroll!
+        if (quickBirthBtn) quickBirthBtn.style.display = 'none';
+        if (termRerollBtn) termRerollBtn.style.display = 'none';
+        if (termCustomBtn) termCustomBtn.style.display = 'none';
+
+        if (frame.ui && (frame.ui.overlay || 0) > 0) {
+            // In store or full-screen menu overlay
+            let storeName = 'STORE';
+            if (frame.term && frame.term.rows) {
+                for (let r = 0; r < Math.min(4, frame.term.rows.length); r++) {
+                    const line = (frame.term.rows[r].g || '').trim();
+                    const m = line.match(/([\w\s]+)\s*\(\d+\)/);
                     if (m) {
                         storeName = m[1].trim();
-                    } else if (row0.toLowerCase().includes('inventory')) {
+                        break;
+                    } else if (line.toLowerCase().includes('inventory')) {
                         storeName = 'INVENTORY';
-                    } else if (row0.toLowerCase().includes('equipment')) {
+                        break;
+                    } else if (line.toLowerCase().includes('equipment')) {
                         storeName = 'EQUIPMENT';
+                        break;
                     }
                 }
-                terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
-                if (termAdvanceBtn) termAdvanceBtn.textContent = 'Advance (Enter)';
-                termEscapeBtn.textContent = 'Exit Store (Esc)';
-            } else {
-                terminalTitle.textContent = '⚔ ANGBAND CLASSIC TERMINAL';
-                if (termAdvanceBtn) termAdvanceBtn.textContent = 'Advance (Enter)';
-                termEscapeBtn.textContent = 'Close (Esc)';
             }
+            terminalTitle.textContent = '⚔ ' + storeName.toUpperCase();
+            if (termAdvanceBtn) {
+                termAdvanceBtn.style.display = 'inline-flex';
+                termAdvanceBtn.textContent = 'Advance (Enter)';
+            }
+            termEscapeBtn.textContent = 'Exit Store (Esc)';
+        } else {
+            terminalTitle.textContent = '⚔ ANGBAND CLASSIC TERMINAL';
+            if (termAdvanceBtn) {
+                termAdvanceBtn.style.display = 'inline-flex';
+                termAdvanceBtn.textContent = 'Advance (Enter)';
+            }
+            termEscapeBtn.textContent = 'Close (Esc)';
         }
     }
 
     function needsTerminal(frame) {
         if (!frame) return true;
-        // Non-play phases (setup, menus, panic save prompts, birth) MUST route to the terminal!
-        if ((frame.phase || currentPhase) !== 'play') return true;
+        // If player does not exist yet, we are in birth / character setup
+        if (!frame.player) return true;
+        // Non-play phases (panic save prompts, etc.) route to terminal
+        if (frame.phase && frame.phase !== 'play') return true;
         // During active play, if the player is dead, the atmospheric death modal handles death presentation
-        if (frame.player && frame.player.dead) return false;
+        const isDead = Boolean(frame.player.dead || (frame.player.hp !== undefined && frame.player.hp <= 0 && frame.player.hp_max > 0));
+        if (isDead) return false;
         if (forceTerminal) return true;
         const ui = frame.ui;
         if (!ui) return false;
@@ -796,6 +952,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (needsTerm) {
             terminalContainer.classList.remove('hidden');
             input.setTerminalMode(true);
+            terminal.resize();
         } else {
             terminalContainer.classList.add('hidden');
             input.setTerminalMode(false);
@@ -822,6 +979,23 @@ window.addEventListener('DOMContentLoaded', () => {
         // Automated quick-birth advancement
         if (quickBirthActive) {
             stepQuickBirth(frame);
+        } else if (frame.phase === 'play' && frame.map && frame.player) {
+            // Once in active play with map, ensure character birth review is exited and 3D world is active
+            const hasOverlay = frame.ui && (frame.ui.overlay || 0) > 0;
+            if (!hasOverlay && (birthReviewActive || (forceTerminal && !window.__manualTerminalOpen))) {
+                confirmHeroBirth();
+            }
+        } else if (frame.ui && frame.ui.more) {
+            // Auto-flush -more- prompts seamlessly during play and store entrance
+            const screenText = (frame.term && frame.term.rows)
+                ? frame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
+                : '';
+            const isReviewScreen = screenText.includes("use as is") || screenText.includes("'y': use") ||
+                                   screenText.includes("to start over") || screenText.includes("r to reroll") ||
+                                   screenText.includes("'s' to start");
+            if (!isReviewScreen) {
+                network.sendKey('space');
+            }
         }
 
         // Check if player died

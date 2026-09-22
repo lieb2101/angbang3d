@@ -21,6 +21,8 @@
                     <div class="terminal-title" id="terminal-title">⚔ ANGBAND CLASSIC TERMINAL</div>
                     <div class="terminal-actions">
                         <button id="btn-quick-birth" class="btn-gold" title="Quickly create a random hero and jump straight into the 3D dungeon!">⚔ Quick Start Hero (@)</button>
+                        <button id="btn-term-reroll" class="btn-gold-outline" style="display: none;" title="Reroll this character with new random attributes">🎲 Reroll Hero (R)</button>
+                        <button id="btn-term-custom" class="btn-gold-outline" style="display: none;" title="Customize your character by choosing race, class, and stats">🛠 Custom Hero (C)</button>
                         <button id="btn-term-advance" class="btn-gold-outline" title="Press Enter to confirm or advance">Advance (Enter)</button>
                         <button id="btn-term-escape" class="btn-gold-outline" title="Press Escape to cancel or go back">Back (Esc)</button>
                     </div>
@@ -29,41 +31,78 @@
             </div>
         </div>
 
-        <!-- Top Message Banner -->
-        <div id="message-banner">
-            <div id="message-text">Welcome to Angband 3D. Prepare your hero.</div>
+        <!-- Top Landscape Message Feed Window (Full message history with scrollback) -->
+        <div id="message-feed-window" class="message-feed-window">
+            <div class="message-feed-header">
+                <div class="message-feed-title-wrap">
+                    <span class="message-feed-title">📜 MESSAGE LOG</span>
+                    <span id="msg-more-indicator" class="msg-more-chip" style="display: none;" title="Press Space or Enter to dismiss prompt">[-more- Press Space]</span>
+                </div>
+                <div class="message-feed-controls">
+                    <button id="btn-msg-size-toggle" class="msg-ctrl-btn" title="Toggle Message Log Size">▲ Expand</button>
+                    <button id="btn-msg-scroll-top" class="msg-ctrl-btn" title="Scroll to Oldest Messages">▲ Top</button>
+                    <button id="btn-msg-scroll-bottom" class="msg-ctrl-btn" title="Scroll to Latest Messages">▼ Latest</button>
+                    <button id="btn-msg-clear" class="msg-ctrl-btn" title="Clear Message Log">✕ Clear</button>
+                </div>
+            </div>
+            <div id="message-feed-scroll" class="message-feed-scroll">
+                <div id="message-feed-list" class="message-feed-list"></div>
+            </div>
         </div>
 
         <!-- Top Right Telemetry & Controls -->
         <div id="top-right-bar">
             <div id="ping-badge" class="badge">Cloud [Connecting...]</div>
+            <button id="btn-controls" class="icon-btn" title="View Complete Controls &amp; Commands Guide [?]">⌨ Controls (?)</button>
             <button id="btn-sound" class="icon-btn">🔊 Sound</button>
             <button id="btn-fullscreen" class="icon-btn">⛶ Fullscreen</button>
             <button id="btn-menu" class="icon-btn" title="Main Menu [Esc]">⚙ Menu</button>
         </div>
 
-        <!-- 2D Minimap -->
+        <!-- 2D Minimap & Camera Tilt Bar -->
         <div id="minimap-container" class="compact">
-            <div class="minimap-header" id="minimap-header" title="Click or [ ] to resize • Mouse wheel or PgUp/Dn to zoom">
+            <div class="minimap-header" id="minimap-header" title="Click or [ ] to resize • Mouse wheel or - / + to zoom">
                 <span id="minimap-title-text">MINIMAP</span>
                 <span id="minimap-hint-text" class="minimap-hint">[ ] Size  +/- Zoom</span>
                 <span id="val-depth" style="color:#ffd700;">Town</span>
             </div>
             <canvas id="minimap-canvas"></canvas>
-        </div>
-
-        <!-- Prompt Bar (e.g. -more-) -->
-        <div id="prompt-bar">
-            <span id="prompt-text">[-more-] Press Space or Enter</span>
+            <!-- Minimap Explicit Size & Zoom Control Bar -->
+            <div id="minimap-controls-bar" class="minimap-controls-bar">
+                <div class="map-ctrl-grp">
+                    <span class="map-ctrl-lbl">SIZE</span>
+                    <button id="btn-map-size-dec" class="map-ctrl-btn" title="Shrink Minimap Size ["><kbd>[</kbd> -</button>
+                    <button id="btn-map-size-inc" class="map-ctrl-btn" title="Enlarge Minimap Size ]">+ <kbd>]</kbd></button>
+                </div>
+                <div class="map-ctrl-divider"></div>
+                <div class="map-ctrl-grp">
+                    <span class="map-ctrl-lbl">ZOOM</span>
+                    <button id="btn-map-zoom-out" class="map-ctrl-btn" title="Zoom Out Minimap Radar -"><kbd>-</kbd></button>
+                    <button id="btn-map-zoom-in" class="map-ctrl-btn" title="Zoom In Minimap Radar + / ="><kbd>+</kbd></button>
+                </div>
+            </div>
+            <!-- Camera Head Tilt Controls Widget -->
+            <div id="camera-tilt-bar" class="camera-tilt-bar">
+                <span class="tilt-lbl">HEAD TILT:</span>
+                <div class="tilt-btn-group">
+                    <button id="btn-tilt-up" class="tilt-btn" title="Tilt Camera Up [PageUp]">▲ <kbd>PgUp</kbd></button>
+                    <button id="btn-tilt-reset" class="tilt-btn" title="Reset Horizon Level [Home]">● <kbd>Home</kbd></button>
+                    <button id="btn-tilt-down" class="tilt-btn" title="Tilt Camera Down [PageDown]">▼ <kbd>PgDn</kbd></button>
+                </div>
+            </div>
         </div>
 
         <!-- On-Screen Virtual Touch D-Pad (Mobile / Tablet) -->
         <div id="touch-controls">
-            <div id="dpad-up" class="dpad-btn dpad-up">▲</div>
-            <div id="dpad-down" class="dpad-btn dpad-down">▼</div>
-            <div id="dpad-left" class="dpad-btn dpad-left">◀</div>
-            <div id="dpad-right" class="dpad-btn dpad-right">▶</div>
-            <div id="dpad-center" class="dpad-btn dpad-center">⚔</div>
+            <div id="dpad-up" class="dpad-btn dpad-up" title="Move Forward (8)">▲</div>
+            <div id="dpad-down" class="dpad-btn dpad-down" title="Move Backward (2)">▼</div>
+            <div id="dpad-left" class="dpad-btn dpad-left" title="Turn Left (4)">◀</div>
+            <div id="dpad-right" class="dpad-btn dpad-right" title="Turn Right (6)">▶</div>
+            <div id="dpad-center" class="dpad-btn dpad-center" title="Attack / Wait (5)">⚔</div>
+            <div id="dpad-ul" class="dpad-btn dpad-diag dpad-ul" title="Step North-West (7)">↖<span class="diag-num">7</span></div>
+            <div id="dpad-ur" class="dpad-btn dpad-diag dpad-ur" title="Step North-East (9)">↗<span class="diag-num">9</span></div>
+            <div id="dpad-dl" class="dpad-btn dpad-diag dpad-dl" title="Step South-West (1)">↙<span class="diag-num">1</span></div>
+            <div id="dpad-dr" class="dpad-btn dpad-diag dpad-dr" title="Step South-East (3)">↘<span class="diag-num">3</span></div>
         </div>
 
         <!-- Bottom HUD -->
@@ -102,47 +141,54 @@
             <div id="hud-center-column">
                 <!-- Quick Action Bar -->
                 <div id="action-bar" class="hud-panel">
-                    <button id="btn-attack" class="action-btn">⚔ Attack <kbd>Space</kbd></button>
-                    <button id="btn-cast" class="action-btn">✨ Cast <kbd>m</kbd></button>
-                    <button id="btn-rest" class="action-btn">⏳ Rest <kbd>R</kbd></button>
-                    <button id="btn-pickup" class="action-btn">💎 Get <kbd>g</kbd></button>
-                    <button id="btn-inventory" class="action-btn">🎒 Pack <kbd>i</kbd></button>
-                    <button id="btn-equipment" class="action-btn">🛡 Gear <kbd>e</kbd></button>
-                    <button id="btn-terminal" class="action-btn">📜 Classic <kbd>Tab</kbd></button>
+                    <button id="btn-attack" class="action-btn" title="Attack adjacent monster in front [Space/Enter]">⚔ Attack <kbd>Space</kbd></button>
+                    <button id="btn-fire" class="action-btn" title="Shoot ranged weapon from quiver [f]">🏹 Shoot <kbd>f</kbd></button>
+                    <button id="btn-cast" class="action-btn" title="Cast spell or prayer [m]">✨ Cast <kbd>m</kbd></button>
+                    <button id="btn-quaff" class="action-btn" title="Drink / quaff potion [q]">🧪 Potion <kbd>q</kbd></button>
+                    <button id="btn-read" class="action-btn" title="Read magical scroll [r]">📜 Scroll <kbd>r</kbd></button>
+                    <button id="btn-door" class="action-btn" title="Open closed door or chest [o]">🚪 Door <kbd>o</kbd></button>
+                    <button id="btn-pickup" class="action-btn" title="Pick up item from dungeon floor [g]">💎 Get <kbd>g</kbd></button>
+                    <button id="btn-rest" class="action-btn" title="Rest until fully healed [R]">⏳ Rest <kbd>R</kbd></button>
+                    <button id="btn-inventory" class="action-btn" title="Open inventory pack [i]">🎒 Pack <kbd>i</kbd></button>
+                    <button id="btn-equipment" class="action-btn" title="Inspect worn equipment [e]">🛡 Gear <kbd>e</kbd></button>
+                    <button id="btn-stair" class="action-btn stair-btn" style="display: none;" title="Use stairs [&gt; or &lt;]">⬇ Descend <kbd>&gt;</kbd></button>
+                    <button id="btn-terminal" class="action-btn" title="Toggle 80x24 classic CRT terminal view [Tab]">📜 Classic <kbd>Tab</kbd></button>
+                    <button id="btn-guide-hud" class="action-btn" title="View Complete Controls &amp; Commands Guide [?]">❓ Help <kbd>?</kbd></button>
                 </div>
 
-                <!-- Detailed 3-Row Footer (Matches Godot Overlay.cs:1620-1740) -->
-                <div id="hud-footer" class="hud-panel">
-                    <!-- Row 1: Contextual Hint & Keybindings -->
-                    <div id="footer-row-1" class="footer-row">
-                        <span id="footer-diagonal-hint" class="footer-diagonal-hint" style="display: none; color: #ffd700; font-weight: 700; margin-right: 6px;"></span>
-                        <span id="footer-stairs-hint" class="footer-stairs-hint"></span>
-                        <span id="footer-key-hints" class="footer-key-hints">arrows: move/turn • 7/9/1/3: diagonal • PgUp/Dn: tilt head • [ ]: map size • +/-: zoom • i: pack • e: gear • m: cast • Tab: classic</span>
+                <!-- Streamlined Glassmorphic Context & Status Bar -->
+                <div id="hud-footer" class="hud-panel hud-status-bar">
+                    <!-- Left: Environment & Movement -->
+                    <div class="status-group status-left">
+                        <span id="footer-place" class="status-pill pill-depth" title="Current Location / Dungeon Depth">Town</span>
+                        <span id="footer-facing" class="status-pill pill-facing" title="Camera Facing Direction">🧭 N</span>
+                        <span id="footer-light" class="status-pill pill-light" title="Illumination &amp; Light Source">☀️ Daylight</span>
+                        <span id="footer-speed" class="status-pill pill-speed" title="Player Movement Speed">⚡ Spd Normal</span>
                     </div>
 
-                    <!-- Row 2: Comprehensive dynamic character statistics -->
-                    <div id="footer-row-2" class="footer-row">
-                        <div class="footer-vitals">
-                            <span id="footer-char-identity" class="footer-gold">Hero</span>
-                            <span id="footer-level" class="footer-stat">Lvl 1</span>
-                            <span id="footer-hp" class="footer-hp">HP 100/100</span>
-                            <span id="footer-sp" class="footer-sp" style="display: none;">SP 0/0</span>
-                            <span id="footer-ac" class="footer-stat">AC 0</span>
-                            <span id="footer-gold" class="footer-gold">AU 0</span>
-                            <span id="footer-exp" class="footer-stat">EXP 0</span>
-                            <span id="footer-place" class="footer-stat">Town</span>
-                            <span id="footer-speed" class="footer-stat">Spd Normal (0)</span>
-                            <span id="footer-light" class="footer-muted">Light: None</span>
-                            <span id="footer-facing" class="footer-gold">Facing: N</span>
-                        </div>
+                    <!-- Center: Contextual Alerts (Stairs, Target, Diagonal, Gear) -->
+                    <div class="status-group status-center">
+                        <span id="footer-stairs-hint" class="status-alert stairs-alert" style="display: none;"></span>
+                        <span id="footer-target" class="status-alert target-alert" style="display: none;"></span>
+                        <span id="footer-diagonal-hint" class="status-hint diagonal-hint" style="display: none;"></span>
+                        <span id="footer-gear" class="status-pill pill-gear" title="Primary Weapon &amp; Equipment">⚔ Bare Hands</span>
                     </div>
 
-                    <!-- Row 3: Target tracking, status condition badges, and secondary attributes -->
-                    <div id="footer-row-3" class="footer-row">
-                        <div id="footer-target" class="footer-target" style="display: none;"></div>
+                    <!-- Right: Active Status Conditions & Quick Help -->
+                    <div class="status-group status-right">
                         <div id="footer-badges" class="footer-badges"></div>
-                        <div id="footer-gear" class="footer-gear">Wielding: Bare Hands • Shield: None • Ranged: None</div>
+                        <button id="btn-quick-help" class="pill-help-trigger" title="View Full Controls &amp; Commands Guide [?]">⌨ Controls [?]</button>
                     </div>
+
+                    <!-- Hidden legacy anchors for backwards compatibility -->
+                    <span id="footer-char-identity" style="display: none;"></span>
+                    <span id="footer-level" style="display: none;"></span>
+                    <span id="footer-hp" style="display: none;"></span>
+                    <span id="footer-sp" style="display: none;"></span>
+                    <span id="footer-ac" style="display: none;"></span>
+                    <span id="footer-gold" style="display: none;"></span>
+                    <span id="footer-exp" style="display: none;"></span>
+                    <span id="footer-key-hints" style="display: none;"></span>
                 </div>
             </div>
 

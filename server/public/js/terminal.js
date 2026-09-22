@@ -102,6 +102,13 @@ class WebTerminal {
             return;
         }
 
+        // Check if row contains an indented or right-column menu item (e.g. Death Screen menu beside Tombstone)
+        const generalMatch = line.match(/([a-zA-Z0-9@*?])[\)\.\:]\s+[A-Za-z]/);
+        if (generalMatch) {
+            this.onSelectKey(generalMatch[1]);
+            return;
+        }
+
         // Check if row indicates random selection with @
         if (line.match(/^\s*@\b/) || line.includes('@ to generate') || line.includes('@ for random') || line.includes('@) Random')) {
             this.onSelectKey('@');

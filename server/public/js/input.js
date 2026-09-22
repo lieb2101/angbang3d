@@ -36,7 +36,14 @@ class InputController {
 
             // In Death Screen Modal: support tabs 1-5, [R] reload, [N] reroll, [M / Esc] menu, [u] identify, and full interactive terminal on Tab 0
             const deathModal = document.getElementById('death-modal');
-            if (deathModal && !deathModal.classList.contains('hidden')) {
+            const isDeadModal = Boolean(deathModal && !deathModal.classList.contains('hidden'));
+            const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+            const isDeadFrame = Boolean(lastFrame && lastFrame.player && (lastFrame.player.dead || (lastFrame.player.hp !== undefined && lastFrame.player.hp <= 0 && lastFrame.player.hp_max > 0)));
+
+            if (isDeadModal || isDeadFrame) {
+                if (!isDeadModal && window.__app && window.__app.hud && lastFrame) {
+                    window.__app.hud.showDeathModal(lastFrame);
+                }
                 const activeTab = (window.__app && window.__app.hud) ? (window.__app.hud.activeDeathTab || 0) : 0;
 
                 // 1-5 direct tab jump
@@ -92,8 +99,8 @@ class InputController {
                     return;
                 }
 
-                // [M] or [Escape] Main menu (matches Godot Main.cs:1692)
-                if (e.key === 'm' || e.key === 'M' || e.key === 'Escape') {
+                // [M / Esc] Main menu: Escape always returns to main menu; 'M' returns to main menu on non-terminal tabs
+                if (e.key === 'Escape' || (activeTab !== 0 && (e.key === 'm' || e.key === 'M'))) {
                     e.preventDefault();
                     if (window.__app && window.__app.returnToMainMenu) {
                         window.__app.returnToMainMenu();
@@ -294,9 +301,35 @@ class InputController {
                 window.__app.cancelQuickBirth();
             }
 
-            // Tab toggles 3D Dungeon vs CRT Terminal view (when not in death screen)
-            if (e.key === 'Tab') {
+            // Guide Modal Active: handle tab navigation and close
+            if (window.__app && window.__app.isGuideOpen && window.__app.isGuideOpen()) {
+                if (e.key === 'Escape' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (this.audio) this.audio.playMenuNav();
+                    window.__app.hideGuide();
+                    return;
+                }
+                if (e.key >= '1' && e.key <= '6') {
+                    e.preventDefault();
+                    window.__app.switchGuideTab(parseInt(e.key, 10) - 1);
+                    return;
+                }
+                if (e.key === 'Tab' || e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    window.__app.cycleGuideTab(1);
+                    return;
+                }
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    window.__app.cycleGuideTab(-1);
+                    return;
+                }
+            }
+
+            // Quick toggle between 3D world and Classic CRT Terminal
+            if (e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey) {
                 e.preventDefault();
+                if (this.audio) this.audio.playMenuNav();
                 if (this.toggleTerminalView) this.toggleTerminalView();
                 return;
             }
@@ -306,18 +339,21 @@ class InputController {
                 e.preventDefault();
                 if (this.audio) this.audio.playMenuNav();
 
-                // If in forced terminal view, toggle back to 3D world
-                if (window.__app && window.__app.isForceTerminal && window.__app.isForceTerminal()) {
-                    if (this.toggleTerminalView) this.toggleTerminalView();
-                    return;
+                if (window.__app && window.__app.cancelQuickBirth) {
+                    window.__app.cancelQuickBirth();
                 }
 
                 const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
                 const ui = lastFrame ? lastFrame.ui : null;
-                const inContextMenu = !lastFrame || (lastFrame.phase !== 'play') || (ui && (ui.overlay > 0 || ui.more || !ui.awaiting_command)) || this.inTerminal;
+                const isForcedTerm = window.__app && window.__app.isForceTerminal && window.__app.isForceTerminal();
+                const inContextMenu = !lastFrame || (lastFrame.phase !== 'play') || (ui && (ui.overlay > 0 || ui.more || !ui.awaiting_command)) || this.inTerminal || isForcedTerm;
 
                 if (inContextMenu) {
+                    // Always forward Escape to the engine to exit store/menu/prompt
                     this.network.sendKey('escape');
+                    if (window.__app && window.__app.setForceTerminal) {
+                        window.__app.setForceTerminal(false);
+                    }
                 } else {
                     // In free 3D exploration with no sub-menus open, Escape opens Game Menu
                     if (window.__app && window.__app.showPauseMenu) {
@@ -339,6 +375,50 @@ class InputController {
     }
 
     handleTerminalKey(e) {
+        const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+        const screenText = (lastFrame && lastFrame.term && lastFrame.term.rows)
+            ? lastFrame.term.rows.map(r => r.g || '').join('\n').toLowerCase()
+            : '';
+        const isReviewScreen = screenText.includes("use as is") || screenText.includes("'y': use") ||
+                               screenText.includes("to start over") || screenText.includes("r to reroll") ||
+                               screenText.includes("reroll") || screenText.includes("'s' to start");
+
+        // Reroll hotkey on review screen ('R') -> Re-randomize
+        if (isReviewScreen && (e.key === 'r' || e.key === 'R')) {
+            e.preventDefault();
+            if (this.audio) this.audio.playMenuNav();
+            if (window.__app && window.__app.rerollHero) {
+                window.__app.rerollHero();
+            } else {
+                this.network.sendKey('s');
+            }
+            return;
+        }
+
+        // Custom creation hotkey on review screen ('C' or 'S') -> Start over without autoBirth to choose race/class
+        if (isReviewScreen && (e.key === 'c' || e.key === 'C' || e.key === 's' || e.key === 'S')) {
+            e.preventDefault();
+            if (this.audio) this.audio.playMenuNav();
+            if (window.__app && window.__app.startCustomHeroCreation) {
+                window.__app.startCustomHeroCreation();
+            } else {
+                if (window.__app && window.__app.cancelQuickBirth) window.__app.cancelQuickBirth();
+                this.network.sendKey('s');
+            }
+            return;
+        }
+
+        // Confirmation on review screen (Enter, Space, or 'y') — jump straight into 3D!
+        if (isReviewScreen && (e.key === 'Enter' || e.key === 'y' || e.key === 'Y' || e.key === ' ')) {
+            e.preventDefault();
+            if (this.audio) this.audio.playWhoosh();
+            this.network.sendKey(e.key === 'y' || e.key === 'Y' ? 'y' : 'enter');
+            if (window.__app && window.__app.confirmHeroBirth) {
+                window.__app.confirmHeroBirth();
+            }
+            return;
+        }
+
         let keySpec = null;
 
         if (e.key === 'ArrowUp') keySpec = 'up';
@@ -423,6 +503,38 @@ class InputController {
             return;
         }
 
+        // Complete Controls & Commands Guide (?)
+        if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+            e.preventDefault();
+            if (window.__app && window.__app.showGuide) {
+                window.__app.showGuide(1, 'game');
+            }
+            return;
+        }
+
+        const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+        const ui = lastFrame ? lastFrame.ui : null;
+
+        // Context prompt (-more-) active: immediately dismiss with space (1:1 with Angband msg_flush)
+        // and if a move or turn key was pressed, execute it so the character never gets stuck on stairs!
+        if (ui && ui.more) {
+            e.preventDefault();
+            this.network.sendKey('space');
+
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                this.dungeon.turn(-1);
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                this.dungeon.turn(1);
+            } else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.code === 'Numpad8' || e.code === 'Digit8') {
+                const moveKey = this.getRelativeDirectionKey(8);
+                if (moveKey) setTimeout(() => this.network.sendKey(moveKey), 35);
+            } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S' || e.code === 'Numpad2' || e.code === 'Digit2') {
+                const moveKey = this.getRelativeDirectionKey(2);
+                if (moveKey) setTimeout(() => this.network.sendKey(moveKey), 35);
+            }
+            return;
+        }
+
         // Turning is instant camera yaw (0 engine turns)
         if (e.key === 'ArrowLeft') {
             e.preventDefault();
@@ -479,18 +591,6 @@ class InputController {
             e.preventDefault();
             this.network.sendKey('5'); // Rest 1 turn
             return;
-        }
-
-        const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
-        const ui = lastFrame ? lastFrame.ui : null;
-
-        // Context prompt (-more-) active: immediately dismiss with space (1:1 with Angband msg_flush)
-        if (ui && ui.more) {
-            if (e.key === ' ' || e.code === 'Space' || e.key === 'Enter' || e.key === 'Escape') {
-                e.preventDefault();
-                this.network.sendKey('space');
-                return;
-            }
         }
 
         // Attack swing on Space / Enter
@@ -592,12 +692,90 @@ class InputController {
         };
 
         bind('btn-attack', 'attack');
+        bind('btn-fire', 'f');
         bind('btn-cast', 'm');
+        bind('btn-quaff', 'q');
+        bind('btn-read', 'r');
+        bind('btn-door', 'o');
+        bind('btn-pickup', 'g');
         bind('btn-rest', 'R');
         bind('btn-inventory', 'i');
         bind('btn-equipment', 'e');
-        bind('btn-pickup', 'g');
         bind('btn-terminal', 'tab');
+
+        // Dynamic Staircase Action Button
+        const stairBtn = document.getElementById('btn-stair');
+        if (stairBtn) {
+            stairBtn.addEventListener('click', (ev) => {
+                if (ev && ev.target && typeof ev.target.blur === 'function') ev.target.blur();
+                if (this.audio) this.audio.unlock();
+                const key = stairBtn.dataset.key || '>';
+                this.network.sendKey(key);
+            });
+        }
+
+        // HUD Help / Controls Sheet Buttons
+        const guideHudBtn = document.getElementById('btn-guide-hud');
+        if (guideHudBtn) {
+            guideHudBtn.addEventListener('click', (ev) => {
+                if (ev && ev.target && typeof ev.target.blur === 'function') ev.target.blur();
+                if (window.__app && window.__app.showGuide) {
+                    window.__app.showGuide(1, 'game');
+                }
+            });
+        }
+
+        const quickHelpBtn = document.getElementById('btn-quick-help');
+        if (quickHelpBtn) {
+            quickHelpBtn.addEventListener('click', (ev) => {
+                if (ev && ev.target && typeof ev.target.blur === 'function') ev.target.blur();
+                if (window.__app && window.__app.showGuide) {
+                    window.__app.showGuide(1, 'game');
+                }
+            });
+        }
+
+        // Minimap Explicit Size & Zoom Control Buttons
+        const bindClick = (id, fn) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', (ev) => {
+                    if (ev && ev.target && typeof ev.target.blur === 'function') ev.target.blur();
+                    if (this.audio) this.audio.unlock();
+                    fn();
+                });
+            }
+        };
+
+        bindClick('btn-map-size-dec', () => {
+            if (window.__app && window.__app.hud) window.__app.hud.cycleMinimapSize(-1);
+        });
+        bindClick('btn-map-size-inc', () => {
+            if (window.__app && window.__app.hud) window.__app.hud.cycleMinimapSize(1);
+        });
+        bindClick('btn-map-zoom-out', () => {
+            if (window.__app && window.__app.hud) window.__app.hud.adjustMinimapZoom(-0.25);
+        });
+        bindClick('btn-map-zoom-in', () => {
+            if (window.__app && window.__app.hud) window.__app.hud.adjustMinimapZoom(0.25);
+        });
+
+        // Camera Head Tilt Buttons
+        bindClick('btn-tilt-up', () => {
+            if (this.dungeon) {
+                this.dungeon.userPitchOffset = Math.min(0.48, (this.dungeon.userPitchOffset || 0) + 0.08);
+            }
+        });
+        bindClick('btn-tilt-reset', () => {
+            if (this.dungeon) {
+                this.dungeon.userPitchOffset = 0.0;
+            }
+        });
+        bindClick('btn-tilt-down', () => {
+            if (this.dungeon) {
+                this.dungeon.userPitchOffset = Math.max(-0.48, (this.dungeon.userPitchOffset || 0) - 0.08);
+            }
+        });
 
         // Dismiss -more- prompt on direct click of the prompt bar
         const promptBar = document.getElementById('prompt-bar');
@@ -673,6 +851,27 @@ class InputController {
             this.dungeon.triggerAttackAnimation();
             if (this.audio) this.audio.playWhoosh();
             this.network.sendKey('enter');
+        });
+
+        // Diagonal Touch D-Pad buttons
+        bindTouch('dpad-ul', () => {
+            const key = this.getRelativeDirectionKey(7);
+            if (key) this.network.sendKey(key);
+        });
+
+        bindTouch('dpad-ur', () => {
+            const key = this.getRelativeDirectionKey(9);
+            if (key) this.network.sendKey(key);
+        });
+
+        bindTouch('dpad-dl', () => {
+            const key = this.getRelativeDirectionKey(1);
+            if (key) this.network.sendKey(key);
+        });
+
+        bindTouch('dpad-dr', () => {
+            const key = this.getRelativeDirectionKey(3);
+            if (key) this.network.sendKey(key);
         });
     }
 

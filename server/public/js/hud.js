@@ -49,8 +49,17 @@ class WebHUD {
         this.compassCtx = this.compassCanvas ? this.compassCanvas.getContext('2d') : null;
         this.compassLabel = document.getElementById('compass-label');
 
-        // Messages & Prompts
-        this.messageText = document.getElementById('message-text');
+        // Top Landscape Message Feed Window (Full message history with scrollback)
+        this.messageFeedWindow = document.getElementById('message-feed-window');
+        this.messageFeedList = document.getElementById('message-feed-list');
+        this.messageFeedScroll = document.getElementById('message-feed-scroll');
+        this.messageHistory = [];
+        this.userScrolledUp = false;
+        this.prevMessages = null;
+        this.lastTermRow0 = '';
+        this.currentTurn = 0;
+        this.isDeadInPlay = false;
+
         this.promptBar = document.getElementById('prompt-bar');
         this.promptText = document.getElementById('prompt-text');
 
@@ -86,6 +95,7 @@ class WebHUD {
 
         this.setupMinimapControls();
         this.setupDeathModal();
+        this.setupMessageFeed();
 
         if (this.promptBar) {
             this.promptBar.addEventListener('click', () => {
@@ -143,6 +153,178 @@ class WebHUD {
         }
     }
 
+    setupMessageFeed() {
+        this.messageFeedWindow = document.getElementById('message-feed-window');
+        this.messageFeedList = document.getElementById('message-feed-list');
+        this.messageFeedScroll = document.getElementById('message-feed-scroll');
+        if (!this.messageHistory) this.messageHistory = [];
+        this.userScrolledUp = false;
+
+        const btnScrollTop = document.getElementById('btn-msg-scroll-top');
+        if (btnScrollTop) {
+            btnScrollTop.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.messageFeedScroll) {
+                    this.messageFeedScroll.scrollTop = 0;
+                    this.userScrolledUp = true;
+                }
+            });
+        }
+
+        const btnScrollBottom = document.getElementById('btn-msg-scroll-bottom');
+        if (btnScrollBottom) {
+            btnScrollBottom.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.messageFeedScroll) {
+                    this.messageFeedScroll.scrollTop = this.messageFeedScroll.scrollHeight;
+                    this.userScrolledUp = false;
+                }
+            });
+        }
+
+        const btnClear = document.getElementById('btn-msg-clear');
+        if (btnClear) {
+            btnClear.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.messageFeedList) {
+                    this.messageFeedList.innerHTML = '';
+                }
+                this.messageHistory = [];
+                this.userScrolledUp = false;
+            });
+        }
+
+        const btnToggleSize = document.getElementById('btn-msg-size-toggle');
+        if (btnToggleSize) {
+            btnToggleSize.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.messageFeedWindow) {
+                    this.messageFeedWindow.classList.toggle('expanded');
+                    const isExpanded = this.messageFeedWindow.classList.contains('expanded');
+                    btnToggleSize.textContent = isExpanded ? '▼ Compact' : '▲ Expand';
+                    btnToggleSize.title = isExpanded ? 'Collapse Message Log to 2 lines' : 'Expand Message Log to show full history';
+                    if (this.messageFeedScroll) {
+                        this.messageFeedScroll.scrollTop = this.messageFeedScroll.scrollHeight;
+                    }
+                }
+            });
+        }
+
+        const moreBadge = document.getElementById('msg-more-indicator');
+        if (moreBadge) {
+            moreBadge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (window.__app && window.__app.network) {
+                    window.__app.network.sendKey('space');
+                }
+            });
+        }
+
+        if (this.messageFeedScroll) {
+            this.messageFeedScroll.addEventListener('scroll', () => {
+                const maxScroll = this.messageFeedScroll.scrollHeight - this.messageFeedScroll.clientHeight;
+                // If within 20px of bottom, stick to bottom on new messages
+                this.userScrolledUp = (maxScroll - this.messageFeedScroll.scrollTop) > 20;
+            });
+            // Stop wheel / key navigation from leaking to game movement when interacting with feed
+            this.messageFeedScroll.addEventListener('keydown', (e) => {
+                if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+                    e.stopPropagation();
+                }
+            });
+        }
+    }
+
+    addMessage(text, color = '#ffd700') {
+        if (!text || !text.trim()) return;
+        let trimmed = text.trim();
+        if (trimmed.startsWith('---') || trimmed.startsWith('===')) return;
+
+        // Clean out trailing prompt suffixes like " -more-" or " [more]"
+        trimmed = trimmed.replace(/\s*[-–—]more[-–—]\s*$/i, '');
+        trimmed = trimmed.replace(/\s*\[more\]\s*$/i, '');
+        trimmed = trimmed.trim();
+        if (!trimmed) return;
+
+        if (!this.messageFeedList) {
+            this.messageFeedList = document.getElementById('message-feed-list');
+            this.messageFeedScroll = document.getElementById('message-feed-scroll');
+        }
+        if (!this.messageHistory) {
+            this.messageHistory = [];
+        }
+
+        const now = Date.now();
+        // Prevent rapid exact duplicate within 500ms on the same turn
+        const lastMsg = this.messageHistory.length > 0 ? this.messageHistory[this.messageHistory.length - 1] : null;
+        if (lastMsg && lastMsg.text === trimmed && (now - lastMsg.timestamp < 500) && lastMsg.turn === this.currentTurn) {
+            return;
+        }
+
+        // Remove .latest highlight from previously newest entry
+        if (this.messageFeedList && this.messageFeedList.lastElementChild) {
+            this.messageFeedList.lastElementChild.classList.remove('latest');
+        }
+
+        const el = document.createElement('div');
+        el.className = 'feed-line latest';
+        el.textContent = trimmed;
+        if (color) el.style.color = color;
+
+        if (this.messageFeedList) {
+            this.messageFeedList.appendChild(el);
+        }
+
+        const msgObj = {
+            id: now + '_' + Math.random(),
+            text: trimmed,
+            color,
+            turn: this.currentTurn,
+            timestamp: now,
+            el
+        };
+        this.messageHistory.push(msgObj);
+
+        // Keep last 500 game messages in DOM history
+        if (this.messageHistory.length > 500) {
+            const evicted = this.messageHistory.shift();
+            if (evicted.el && evicted.el.parentNode) {
+                evicted.el.parentNode.removeChild(evicted.el);
+            }
+        }
+
+        // Auto-scroll to bottom unless player explicitly scrolled up to read history
+        if (this.messageFeedScroll && !this.userScrolledUp) {
+            this.messageFeedScroll.scrollTop = this.messageFeedScroll.scrollHeight;
+        }
+    }
+
+    tickMessageQueue() {
+        // With persistent landscape window, messages do not disappear from view, but retain history!
+    }
+
+    extractNewMessages(prevList, currentList) {
+        if (!prevList || prevList.length === 0) return currentList || [];
+        if (!currentList || currentList.length === 0) return [];
+
+        const maxK = Math.min(prevList.length, currentList.length);
+        for (let k = maxK; k > 0; k--) {
+            let match = true;
+            for (let j = 0; j < k; j++) {
+                const p = prevList[prevList.length - k + j];
+                const c = currentList[j];
+                if (p.text !== c.text || p.count !== c.count || p.attr !== c.attr) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                return currentList.slice(k);
+            }
+        }
+        return currentList;
+    }
+
     cycleMinimapSize(delta = 1) {
         this.minimapSizeIndex = (this.minimapSizeIndex + delta + this.minimapSizes.length) % this.minimapSizes.length;
         if (this.audio) this.audio.playMenuNav();
@@ -187,10 +369,23 @@ class WebHUD {
      * ------------------------------------------------------------- */
     onCameraTurn(yaw) {
         this.currentCameraYaw = yaw;
+        this.updateFooterFacing(yaw);
         this.renderCompass(yaw);
         if (this.lastFrame && this.lastFrame.map && this.lastFrame.player) {
             this.renderMinimap(this.lastFrame.map, this.lastFrame.player, this.lastFrame.monsters || [], yaw);
         }
+    }
+
+    updateFooterFacing(yaw) {
+        if (!this.footerFacing) return;
+        const normYaw = (yaw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        const sector = Math.round(normYaw / (Math.PI / 4)) % 8;
+        const sectorNames = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+        const sectorArrows = ['▲', '↗', '►', '↘', '▼', '↙', '◄', '↖'];
+        const dirName = sectorNames[sector] || 'N';
+        const dirArrow = sectorArrows[sector] || '▲';
+        this.footerFacing.textContent = `🧭 ${dirName}`;
+        this.footerFacing.title = `Camera Facing: ${dirName} (${dirArrow})`;
     }
 
     renderCompass(yaw) {
@@ -536,13 +731,15 @@ class WebHUD {
         const locStr = depth === 0 ? 'Town' : `${depth * 50}ft`;
         this.depthVal.textContent = locStr;
         this.goldVal.textContent = (player.gold || 0).toLocaleString();
-        this.acVal.textContent = player.ac !== undefined ? player.ac : '0';
+        const yaw = (window.__app && window.__app.dungeon) ? window.__app.dungeon.yaw : (this.currentCameraYaw || 0);
+        const normYaw = (yaw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+        const sector = Math.round(normYaw / (Math.PI / 4)) % 8;
+        const sectorNames = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+        const sectorArrows = ['▲', '↗', '►', '↘', '▼', '↙', '◄', '↖'];
+        const arrowChar = sectorArrows[sector] || '▲';
+        const facingName = sectorNames[sector] || 'N';
 
-        const facing = (window.dungeon3d && window.dungeon3d.facing !== undefined) ? window.dungeon3d.facing : 0;
-        const arrowChars = ['▲', '►', '▼', '◄'];
-        const facingNames = ['N', 'E', 'S', 'W'];
-        const arrowChar = arrowChars[facing] || '▲';
-        const facingName = facingNames[facing] || 'N';
+        this.updateFooterFacing(yaw);
 
         // Minimap Header (Overlay.cs:1404)
         if (player.x !== undefined && player.y !== undefined) {
@@ -597,20 +794,37 @@ class WebHUD {
             this.footerDiagonalHint.style.display = diagText ? 'inline' : 'none';
         }
 
-        // Contextual Stairs Hint (Row 1)
-        if (this.footerStairsHint && frame.map && player.x !== undefined && player.y !== undefined) {
+        // Contextual Stairs Hint (Row 1) & Dynamic Action Button
+        const btnStair = document.getElementById('btn-stair');
+        if (frame.map && player.x !== undefined && player.y !== undefined) {
             const currentFeat = this.getFeatAt(frame.map, player.x, player.y);
             let stairsText = '';
             if (currentFeat === 6) { // Downstairs
                 stairsText = depth === 0 ? `[>] Down to Dungeon (50')` : `[>] Down to ${(depth + 1) * 50}ft`;
+                if (btnStair) {
+                    btnStair.style.display = 'inline-flex';
+                    btnStair.innerHTML = depth === 0 ? '⬇ Enter Dungeon <kbd>&gt;</kbd>' : '⬇ Descend <kbd>&gt;</kbd>';
+                    btnStair.dataset.key = '>';
+                }
             } else if (currentFeat === 5) { // Upstairs
                 stairsText = depth === 1 ? `[<] Up to Town` : `[<] Up to ${(depth - 1) * 50}ft`;
+                if (btnStair) {
+                    btnStair.style.display = 'inline-flex';
+                    btnStair.innerHTML = depth === 1 ? '⬆ Return to Town <kbd>&lt;</kbd>' : '⬆ Ascend <kbd>&lt;</kbd>';
+                    btnStair.dataset.key = '<';
+                }
+            } else {
+                if (btnStair) {
+                    btnStair.style.display = 'none';
+                }
             }
-            this.footerStairsHint.textContent = stairsText ? `${stairsText} • ` : '';
-            this.footerStairsHint.style.display = stairsText ? 'inline' : 'none';
+            if (this.footerStairsHint) {
+                this.footerStairsHint.textContent = stairsText;
+                this.footerStairsHint.style.display = stairsText ? 'inline-flex' : 'none';
+            }
         }
 
-        // Detailed 3-Row Telemetry Footer (Row 2 & 3, Matches Overlay.cs:1620-1748)
+        // Detailed 3-Row Telemetry Footer / Streamlined Status Bar
         if (this.footerCharIdentity) {
             this.footerCharIdentity.textContent = `${player.name || 'Hero'} the ${player.race || 'Human'} ${player.class || 'Warrior'}`;
         }
@@ -641,12 +855,12 @@ class WebHUD {
             this.footerExp.textContent = `EXP ${player.exp || 0}${expNext ? `/${expNext}` : ''}`;
         }
         if (this.footerPlace) {
-            this.footerPlace.textContent = depth === 0 ? 'Town' : `${depth * 50}ft (L${depth})`;
+            this.footerPlace.textContent = depth === 0 ? 'Town' : `DL ${depth} (${depth * 50}ft)`;
         }
         if (this.footerSpeed) {
             const spd = player.speed !== undefined ? player.speed : 110;
             const spdStr = spd > 110 ? `Fast (+${spd - 110})` : (spd < 110 ? `Slow (-${110 - spd})` : 'Normal (0)');
-            this.footerSpeed.textContent = `Spd ${spdStr}`;
+            this.footerSpeed.textContent = `⚡ Spd ${spdStr}`;
         }
         if (this.footerLight) {
             const lightRadius = player.light !== undefined ? player.light : 0;
@@ -654,23 +868,19 @@ class WebHUD {
             const lightItemName = player.light_item || 'None';
             const lightFuel = player.light_fuel || 0;
             const lightStr = depth === 0
-                ? (hasLightItem ? `${lightItemName} (day)` : 'Daylight')
-                : (hasLightItem ? `${lightItemName} (R:${lightRadius}${lightFuel > 0 ? `, ${lightFuel}t` : ''})` : (lightRadius > 0 ? `Light ${lightRadius}` : 'None'));
-            this.footerLight.textContent = `Light: ${lightStr}`;
+                ? (hasLightItem ? `☀️ ${lightItemName}` : '☀️ Daylight')
+                : (hasLightItem ? `🏮 ${lightItemName} (${lightFuel > 0 ? `${lightFuel}t` : `R:${lightRadius}`})` : (lightRadius > 0 ? `🏮 Light ${lightRadius}` : '🌑 Dark'));
+            this.footerLight.textContent = lightStr;
         }
         if (this.footerFacing) {
-            this.footerFacing.textContent = `Facing: ${facingName}`;
+            this.footerFacing.textContent = `🧭 ${facingName}`;
         }
-
-        // Row 3: Target, Status Badges, Gear Summary
-        let hasBadgesOrTarget = false;
 
         // Target tracking
         if (this.footerTarget) {
             if (player.target && player.target.name) {
-                hasBadgesOrTarget = true;
-                this.footerTarget.style.display = 'inline';
-                this.footerTarget.textContent = `[ TARGET: ${player.target.name} (${player.target.pct || 100}% HP) ]`;
+                this.footerTarget.style.display = 'inline-flex';
+                this.footerTarget.textContent = `⚔ Target: ${player.target.name} (${player.target.pct || 100}%)`;
             } else {
                 this.footerTarget.style.display = 'none';
             }
@@ -680,7 +890,6 @@ class WebHUD {
         if (this.footerBadges) {
             this.footerBadges.innerHTML = '';
             if (player.statuses && Array.isArray(player.statuses) && player.statuses.length > 0) {
-                hasBadgesOrTarget = true;
                 player.statuses.forEach(st => {
                     const span = document.createElement('span');
                     span.className = 'footer-badge';
@@ -693,7 +902,6 @@ class WebHUD {
             }
 
             if (player.study && player.study > 0) {
-                hasBadgesOrTarget = true;
                 const span = document.createElement('span');
                 span.className = 'footer-badge badge-study';
                 span.textContent = `[STUDY: ${player.study}]`;
@@ -701,7 +909,6 @@ class WebHUD {
             }
 
             if (player.resting && player.resting !== 0) {
-                hasBadgesOrTarget = true;
                 const span = document.createElement('span');
                 span.className = 'footer-badge badge-resting';
                 span.textContent = `[RESTING${player.resting > 0 ? `: ${player.resting}` : ''}]`;
@@ -709,7 +916,6 @@ class WebHUD {
             }
 
             if (player.word_recall && player.word_recall > 0) {
-                hasBadgesOrTarget = true;
                 const span = document.createElement('span');
                 span.className = 'footer-badge badge-recall';
                 span.textContent = `[RECALL: ${player.word_recall}t]`;
@@ -717,49 +923,82 @@ class WebHUD {
             }
         }
 
-        // Gear summary fallback on Row 3 (Overlay.cs:1740-1747)
+        // Gear summary on status bar
         if (this.footerGear) {
-            if (!hasBadgesOrTarget) {
-                const weap = player.weapon_item || 'Bare Hands';
-                const shld = player.shield_item || 'None';
-                const bow = player.bow_item || 'None';
-                this.footerGear.style.display = 'inline';
-                this.footerGear.textContent = `Wielding: ${weap} • Shield: ${shld} • Ranged: ${bow}`;
+            const weap = player.weapon_item || 'Bare Hands';
+            this.footerGear.style.display = 'inline-flex';
+            this.footerGear.textContent = `⚔ ${weap}`;
+            this.footerGear.title = `Wielding: ${weap} • Shield: ${player.shield_item || 'None'} • Ranged: ${player.bow_item || 'None'}`;
+        }
+
+        // Turn number tracking
+        if (player.turn !== undefined) {
+            this.currentTurn = player.turn;
+        } else if (player.game_turn !== undefined) {
+            this.currentTurn = player.game_turn;
+        }
+
+        // Message Feed Window Visibility & -more- prompt chip
+        if (this.messageFeedWindow) {
+            if (frame.phase === 'play') {
+                this.messageFeedWindow.style.display = 'flex';
             } else {
-                this.footerGear.style.display = 'none';
+                this.messageFeedWindow.style.display = 'none';
             }
         }
 
-        // Header Game Messages (Streams real Angband narrative, combat, and environment logs)
-        if (frame.messages && frame.messages.length > 0) {
-            const last = frame.messages[frame.messages.length - 1];
-            if (last && last.text) {
-                let text = last.text;
-                if (last.count && last.count > 1) {
-                    text += ` (x${last.count})`;
-                }
-                this.messageText.textContent = text;
-                if (window.getAngbandColorString && last.attr !== undefined) {
-                    this.messageText.style.color = window.getAngbandColorString(last.attr);
-                } else {
-                    this.messageText.style.color = '#f1f5f9';
-                }
-            }
-        } else if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
-            const line0 = frame.term.rows[0].g.trim();
-            if (line0 && line0.length > 0 && !line0.startsWith('---') && !line0.startsWith('===') && !line0.includes('Select') && !line0.includes('Angband')) {
-                this.messageText.textContent = line0;
-                this.messageText.style.color = '#ffd700';
+        const moreBadge = document.getElementById('msg-more-indicator');
+        if (moreBadge) {
+            moreBadge.style.display = (frame.ui && frame.ui.more) ? 'inline-block' : 'none';
+        }
+
+        // Atmospheric initial greeting when entering play phase (Town or Dungeon)
+        if (frame.phase === 'play' && (!this.messageHistory || this.messageHistory.length === 0)) {
+            const depth = player.depth !== undefined ? player.depth : 0;
+            if (depth === 0) {
+                this.addMessage("Welcome to the Town of Angband! Visit the General Store and Armory to equip your journey.", "#ffd700");
+            } else {
+                this.addMessage(`You descend into Dungeon Level ${depth} (${depth * 50}ft).`, "#ffd700");
             }
         }
 
-        // Context Prompts (e.g. -more-, [y/n])
-        if (ui.more) {
-            this.promptBar.style.display = 'block';
-            this.promptText.textContent = '[-more-] Press Space or Enter';
-        } else {
-            this.promptBar.style.display = 'none';
+        // Multi-Line Message Log Queue (Streams all incoming Angband messages)
+        if (frame.messages && Array.isArray(frame.messages)) {
+            const currentMsgs = frame.messages.filter(m => m && m.text && m.text.trim().length > 0);
+            const newMsgs = this.extractNewMessages(this.prevMessages, currentMsgs);
+            this.prevMessages = currentMsgs;
+
+            for (const msg of newMsgs) {
+                let text = msg.text.trim();
+                if (msg.count && msg.count > 1) {
+                    text += ` (x${msg.count})`;
+                }
+                const col = (window.getAngbandColorString && msg.attr !== undefined)
+                    ? window.getAngbandColorString(msg.attr)
+                    : '#ffd700';
+                this.addMessage(text, col);
+            }
         }
+
+        // Also capture dynamic action lines on term row 0
+        if (frame.term && frame.term.rows && frame.term.rows[0] && frame.term.rows[0].g) {
+            let line0 = frame.term.rows[0].g.trim();
+            line0 = line0.replace(/\s*[-–—]more[-–—]\s*$/i, '');
+            line0 = line0.replace(/\s*\[more\]\s*$/i, '');
+            line0 = line0.trim();
+            if (line0 && line0.length > 0 && line0 !== this.lastTermRow0 &&
+                !line0.startsWith('---') && !line0.startsWith('===') &&
+                !line0.includes('Select an option') &&
+                !line0.includes('Press any key')) {
+                this.lastTermRow0 = line0;
+                if (!this.messageHistory || !this.messageHistory.some(m => m.text === line0 || m.text.includes(line0) || line0.includes(m.text))) {
+                    this.addMessage(line0, '#ffd700');
+                }
+            }
+        }
+
+        // Process message queue turn/time expiration tick
+        this.tickMessageQueue();
 
         // Minimap Radar & Compass
         if (frame.map && frame.player) {
@@ -767,13 +1006,13 @@ class WebHUD {
         }
         this.renderCompass(this.currentCameraYaw);
 
-        // Check if player died: ONLY display death modal during active play phase!
-        if (player.dead && (frame.phase === 'play' || this.isDeadInPlay)) {
+        // Check if player died: ALWAYS display death modal whenever player is dead or HP <= 0
+        const isDead = Boolean(player.dead || (player.hp !== undefined && player.hp <= 0 && player.hp_max > 0));
+        if (isDead) {
             this.isDeadInPlay = true;
             this.showDeathModal(frame);
-        } else if (!player.dead || frame.phase !== 'play') {
+        } else if (!this.isDeadInPlay) {
             this.hideDeathModal();
-            if (!player.dead) this.isDeadInPlay = false;
         }
     }
 
@@ -794,6 +1033,7 @@ class WebHUD {
     hideDeathModal() {
         if (!this.deathModal) return;
         this.deathModal.classList.add('hidden');
+        this.isDeadInPlay = false;
     }
 
     rerollCharacter() {
@@ -818,17 +1058,24 @@ class WebHUD {
         const btnReload = document.getElementById('btn-death-reload');
         if (btnReload) {
             btnReload.addEventListener('click', () => {
-                if (window.__app && window.__app.network) {
-                    window.__app.network.sendKey('R');
+                this.hideDeathModal();
+                if (window.__app && window.__app.startNewRandomHero) {
+                    window.__app.startNewRandomHero();
+                } else {
+                    window.location.reload();
                 }
-                window.location.reload();
             });
         }
 
         const btnReroll = document.getElementById('btn-death-reroll');
         if (btnReroll) {
             btnReroll.addEventListener('click', () => {
-                this.rerollCharacter();
+                this.hideDeathModal();
+                if (window.__app && window.__app.startNewRandomHero) {
+                    window.__app.startNewRandomHero();
+                } else {
+                    this.rerollCharacter();
+                }
             });
         }
 
@@ -836,7 +1083,11 @@ class WebHUD {
         if (btnMenu) {
             btnMenu.addEventListener('click', () => {
                 this.hideDeathModal();
-                window.location.href = '/';
+                if (window.__app && window.__app.returnToMainMenu) {
+                    window.__app.returnToMainMenu();
+                } else {
+                    window.location.href = '/';
+                }
             });
         }
     }

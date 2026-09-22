@@ -110,8 +110,8 @@ class SoundEngine {
         const source = this.ctx.createBufferSource();
         source.buffer = buffer;
 
-        // Subtle organic pitch detune (+/- 3.5%)
-        const detune = (Math.random() * 0.07 - 0.035);
+        // Subtle organic pitch detune (+/- 2%)
+        const detune = (Math.random() * 0.04 - 0.02);
         source.playbackRate.setValueAtTime(Math.max(0.4, Math.min(2.5, pitchScale + detune)), now);
 
         const gain = this.ctx.createGain();
@@ -219,14 +219,15 @@ class SoundEngine {
      * Acoustic Physical Synthesis Models
      * ------------------------------------------------------------- */
 
-    // Multi-stage acoustic footstep model (AudioManager.cs:260-319)
+    // Multi-stage acoustic footstep model (warm, muted organic impact)
     synthFootstep(stone, variation) {
-        const duration = stone ? 0.13 : 0.15;
+        const duration = stone ? 0.12 : 0.14;
         const totalSamples = Math.floor(this.sampleRate * duration);
         const samples = new Float32Array(totalSamples);
 
-        const fHeel = stone ? (115 + variation * 6) : (85 + variation * 5);
-        const fToe = stone ? (210 + variation * 10) : (140 + variation * 8);
+        // Warm, muted physical frequencies (avoiding harsh mid-frequency pings)
+        const fHeel = stone ? (85 + variation * 4) : (68 + variation * 3);
+        const fToe = stone ? (130 + variation * 6) : (105 + variation * 5);
         const toeDelay = Math.floor(this.sampleRate * 0.018);
 
         let lpNoise1 = 0, lpNoise2 = 0;
@@ -235,35 +236,36 @@ class SoundEngine {
         for (let i = 0; i < totalSamples; i++) {
             const t = i / this.sampleRate;
 
-            // Stage 1: Heel impact transient
-            const envHeel = Math.exp(-t * (stone ? 65 : 48));
-            const heelPunch = Math.sin(2 * Math.PI * fHeel * t) * envHeel * (stone ? 0.55 : 0.65);
+            // Stage 1: Heel impact transient (soft low-frequency thud)
+            const envHeel = Math.exp(-t * (stone ? 55 : 42));
+            const heelPunch = Math.sin(2 * Math.PI * fHeel * t) * envHeel * (stone ? 0.45 : 0.55);
 
             // Stage 2: Toe impact transient
             let toePunch = 0;
             if (i >= toeDelay) {
                 const tToe = (i - toeDelay) / this.sampleRate;
-                const envToe = Math.exp(-tToe * (stone ? 75 : 55));
-                toePunch = Math.sin(2 * Math.PI * fToe * tToe) * envToe * (stone ? 0.35 : 0.40);
+                const envToe = Math.exp(-tToe * (stone ? 65 : 48));
+                toePunch = Math.sin(2 * Math.PI * fToe * tToe) * envToe * (stone ? 0.28 : 0.32);
             }
 
-            // Stage 3: Surface grit texture friction
+            // Stage 3: Surface texture friction (gentle warm bandpass, NO harsh resonant peaks)
             const rawNoise = Math.random() * 2 - 1;
-            const coeff = stone ? 0.18 : 0.12;
+            const coeff = stone ? 0.12 : 0.08;
             lpNoise1 += (rawNoise - lpNoise1) * coeff;
             lpNoise2 += (lpNoise1 - lpNoise2) * coeff;
 
-            const centerFreq = stone ? 1600 : 850;
-            const q = 1.4;
+            // Use low center frequency (520Hz stone, 360Hz dirt) with low Q (0.7) for soft organic crunch
+            const centerFreq = stone ? 520 : 360;
+            const q = 0.7;
             const omega = 2 * Math.PI * centerFreq / this.sampleRate;
             const alpha = Math.sin(omega) / (2 * q);
             bpState1 = bpState1 + alpha * (rawNoise - bpState1);
             bpState2 = bpState2 + alpha * (bpState1 - bpState2);
 
-            const frictionEnv = Math.exp(-t * (stone ? 45 : 35));
-            const friction = (lpNoise2 * 0.4 + bpState2 * 0.6) * frictionEnv * (stone ? 0.28 : 0.38);
+            const frictionEnv = Math.exp(-t * (stone ? 38 : 28));
+            const friction = (lpNoise2 * 0.5 + bpState2 * 0.5) * frictionEnv * (stone ? 0.18 : 0.24);
 
-            samples[i] = (heelPunch + toePunch + friction) * 0.52;
+            samples[i] = (heelPunch + toePunch + friction) * 0.38;
         }
         return this.createBuffer(samples);
     }
@@ -1142,8 +1144,9 @@ class SoundEngine {
 
         const idx = outdoors ? (this.outdoorStepIdx++ % list.length) : (this.stoneStepIdx++ % list.length);
         const buffer = list[idx];
-        const pitchScale = Math.max(0.75, Math.min(1.35, 1.0 / Math.pow(heightRatio || 1.0, 0.35)));
-        this.playBuffer(buffer, pitchScale, 0.72);
+        const pitchScale = Math.max(0.85, Math.min(1.20, 1.0 / Math.pow(heightRatio || 1.0, 0.35)));
+        // Subtle, gentle foley volume (-8dB to -10dB)
+        this.playBuffer(buffer, pitchScale, 0.30);
     }
 
     playWhoosh() {

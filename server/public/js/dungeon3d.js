@@ -1353,6 +1353,11 @@ class Dungeon3D {
         const ringMat = new THREE.MeshStandardMaterial({ color: 0xffc400, emissive: 0x553300, metalness: 0.95, roughness: 0.15 });
         const chestMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.75, metalness: 0.25 });
         const weaponMat = new THREE.MeshStandardMaterial({ color: 0xd8e4ed, roughness: 0.20, metalness: 0.90 });
+        const armorMat = new THREE.MeshStandardMaterial({ color: 0xb0bcc8, roughness: 0.35, metalness: 0.85 });
+        const leatherMat = new THREE.MeshStandardMaterial({ color: 0x6e482b, roughness: 0.85, metalness: 0.05 });
+        const woodMat = new THREE.MeshStandardMaterial({ color: 0x82522c, roughness: 0.80, metalness: 0.05 });
+        const foodMat = new THREE.MeshStandardMaterial({ color: 0xbf6c3b, roughness: 0.85, metalness: 0.05 });
+        const gemMat = new THREE.MeshStandardMaterial({ color: 0x44ddff, emissive: 0x114466, emissiveIntensity: 0.8, roughness: 0.10, metalness: 0.2 });
 
         const loadItem = (key, url, mat, scale, yOffset = 0) => {
             this.objLoader.load(url, (obj) => {
@@ -1367,15 +1372,44 @@ class Dungeon3D {
             }, undefined, () => {});
         };
 
+        // Core consumables & treasures
         loadItem('$', '/assets/models/items/Gold_Ingots.obj', goldMat, 0.25, 0.05);
+        loadItem('coin', '/assets/models/items/Coin.obj', goldMat, 0.22, 0.05);
         loadItem('!', '/assets/models/items/Potion1_Filled.obj', potionMat, 0.22, 0.05);
         loadItem('?', '/assets/models/items/Scroll.obj', scrollMat, 0.22, 0.05);
         loadItem('book', '/assets/models/items/Book1_Closed.obj', bookMat, 0.20, 0.05);
         loadItem('=', '/assets/models/items/Ring1.obj', ringMat, 0.18, 0.08);
+        loadItem('"', '/assets/models/items/Necklace1.obj', goldMat, 0.18, 0.05);
+        loadItem('*', '/assets/models/items/Crystal1.obj', gemMat, 0.18, 0.05);
         loadItem('chest', '/assets/models/items/Chest_Closed.obj', chestMat, 0.22, 0.0);
+        loadItem(',', '/assets/models/items/ChickenLeg.obj', foodMat, 0.20, 0.05);
+
+        // Armor, Footwear & Accessories
+        loadItem('armor_metal', '/assets/models/items/Armor_Metal.obj', armorMat, 0.22, 0.05);
+        loadItem('armor_metal2', '/assets/models/items/Armor_Metal2.obj', armorMat, 0.22, 0.05);
+        loadItem('armor_leather', '/assets/models/items/Armor_Leather.obj', leatherMat, 0.22, 0.05);
+        loadItem('crown', '/assets/models/items/Crown.obj', goldMat, 0.20, 0.05);
+        loadItem('glove', '/assets/models/items/Glove.obj', leatherMat, 0.18, 0.05);
+        loadItem('backpack', '/assets/models/items/Backpack.obj', leatherMat, 0.20, 0.05);
+        loadItem('pouch', '/assets/models/items/Pouch.obj', leatherMat, 0.18, 0.05);
+        loadItem('key', '/assets/models/items/Key1.obj', goldMat, 0.18, 0.05);
+        loadItem('skull', '/assets/models/items/Skull.obj', scrollMat, 0.18, 0.05);
+
+        // Weapons & Shields
         loadItem(')', '/assets/models/weapons/Sword.obj', weaponMat, 0.18, 0.05);
-        loadItem('}', '/assets/models/weapons/Bow_Wooden.obj', scrollMat, 0.22, 0.05);
+        loadItem('sword_big', '/assets/models/weapons/Sword_Big.obj', weaponMat, 0.20, 0.05);
+        loadItem('claymore', '/assets/models/weapons/Claymore.obj', weaponMat, 0.20, 0.05);
+        loadItem('dagger', '/assets/models/weapons/Dagger.obj', weaponMat, 0.18, 0.05);
         loadItem('axe', '/assets/models/weapons/Axe_Small.obj', weaponMat, 0.20, 0.05);
+        loadItem('axe_double', '/assets/models/weapons/Axe_Double.obj', weaponMat, 0.22, 0.05);
+        loadItem('hammer', '/assets/models/weapons/Hammer_Small.obj', weaponMat, 0.20, 0.05);
+        loadItem('hammer_double', '/assets/models/weapons/Hammer_Double.obj', weaponMat, 0.20, 0.05);
+        loadItem('spear', '/assets/models/weapons/Spear.obj', weaponMat, 0.22, 0.05);
+        loadItem('scythe', '/assets/models/weapons/Scythe.obj', weaponMat, 0.22, 0.05);
+        loadItem('}', '/assets/models/weapons/Bow_Wooden.obj', woodMat, 0.22, 0.05);
+        loadItem('{', '/assets/models/weapons/Arrow.obj', woodMat, 0.20, 0.05);
+        loadItem('shield_heater', '/assets/models/weapons/Shield_Heater.obj', armorMat, 0.22, 0.05);
+        loadItem('shield_round', '/assets/models/weapons/Shield_Round.obj', armorMat, 0.20, 0.05);
     }
 
     updateViewmodel(player) {
@@ -1969,11 +2003,18 @@ class Dungeon3D {
         if (dist > this.cellSize * 1.5) {
             this.currentCamPos.copy(this.targetCamPos);
             this.isStepping = false;
+            this.stepPlayedThisMove = false;
         } else if (dist > 0.05) {
             this.isStepping = true;
             this.stepTime = 0;
-            if (this.audio) {
-                this.audio.playFootstep(outdoors, this.heightRatio || 1.0);
+            const now = performance.now();
+            if (!this.lastStepSoundTime) this.lastStepSoundTime = 0;
+            if (!this.stepPlayedThisMove && (now - this.lastStepSoundTime > 200)) {
+                this.stepPlayedThisMove = true;
+                this.lastStepSoundTime = now;
+                if (this.audio) {
+                    this.audio.playFootstep(outdoors, this.heightRatio || 1.0);
+                }
             }
         }
 
@@ -2010,6 +2051,35 @@ class Dungeon3D {
                 let inView = outdoors || (flag & 0x2) !== 0;
                 let lighting = (flag >> 2) & 0x3; // 0=LOS lit, 1=torch, 2=room lit, 3=dark
 
+                // Check if this tile is a perimeter boundary wall bordering an in-view walkable floor/door.
+                // In Angband, room boundary bedrock often remains feat 0 or unknown until directly touched by LOS rays,
+                // which previously caused visible rooms to float like disconnected floor slabs in empty black voids!
+                if (!outdoors && (feat === 0 || !inView || feat === 15 || feat === 21 || feat === 22)) {
+                    let bordersInViewWalkable = false;
+                    for (let dy = -1; dy <= 1; dy++) {
+                        for (let dx = -1; dx <= 1; dx++) {
+                            if (dx === 0 && dy === 0) continue;
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                                const nFlag = this.getFlagAt(map, nx, ny);
+                                if ((nFlag & 0x2) !== 0) { // neighbor is inView
+                                    const nFeat = this.getFeatAt(map, nx, ny);
+                                    if (this.isWalkableOrPortal(nFeat)) {
+                                        bordersInViewWalkable = true;
+                                        if (feat === 0) feat = 21; // Granite wall boundary
+                                        inView = true;
+                                        known = true;
+                                        if (lighting === 3) lighting = (nFlag >> 2) & 0x3;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (bordersInViewWalkable) break;
+                    }
+                }
+
                 // Unexplored dark space (not known and not in view) or feat 0 must NOT be rendered.
                 // True fog-of-war (1:1 with Godot DungeonWorld.cs:2410-2415):
                 // Open unexplored areas remain pure misty blackness fading into subterranean depth fog.
@@ -2039,29 +2109,6 @@ class Dungeon3D {
                     }
                     if (!hasAdjacentOpen) {
                         continue;
-                    }
-                }
-
-                // Check if known dark wall is adjacent to an inView walkable tile (1:1 with Godot DungeonWorld.cs:2420-2440)
-                if (!inView && isWall) {
-                    for (let dy = -1; dy <= 1; dy++) {
-                        for (let dx = -1; dx <= 1; dx++) {
-                            if (dx === 0 && dy === 0) continue;
-                            const nx = x + dx;
-                            const ny = y + dy;
-                            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                                const nFlag = this.getFlagAt(map, nx, ny);
-                                if ((nFlag & 0x2) !== 0) {
-                                    const nFeat = this.getFeatAt(map, nx, ny);
-                                    if (this.isWalkableOrPortal(nFeat)) {
-                                        inView = true;
-                                        if (lighting === 3) lighting = (nFlag >> 2) & 0x3;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        if (inView) break;
                     }
                 }
 
@@ -4017,50 +4064,230 @@ class Dungeon3D {
 
         let mesh = null;
 
-        // Check OBJ models
-        if (g === '$') {
-            const tmpl = this.itemTemplates.get('$');
-            if (tmpl) mesh = tmpl.clone(true);
-        } else if (g === '!') {
-            const tmpl = this.itemTemplates.get('!');
-            if (tmpl) mesh = tmpl.clone(true);
-        } else if (g === '?') {
-            if (lowerName.includes('book') || lowerName.includes('tome') || lowerName.includes('grimoire')) {
-                const tmpl = this.itemTemplates.get('book');
-                if (tmpl) mesh = tmpl.clone(true);
+        // 1. Comprehensive Model & Keyword Resolver (Matches Godot ItemModelResolver.cs:158-350)
+        let tmpl = null;
+
+        // Gold & Coins
+        if (g === '$' || lowerName.includes('gold') || lowerName.includes('coin') || lowerName.includes('copper') || lowerName.includes('silver')) {
+            tmpl = this.itemTemplates.get('$') || this.itemTemplates.get('coin');
+        }
+        // Potions & Flasks
+        else if (g === '!' || lowerName.includes('potion') || lowerName.includes('flask') || lowerName.includes('draught') || lowerName.includes('elixir')) {
+            tmpl = this.itemTemplates.get('!');
+        }
+        // Books & Spellbooks
+        else if (lowerName.includes('book') || lowerName.includes('tome') || lowerName.includes('grimoire') || lowerName.includes('prayer') || lowerName.includes('sorcery') || lowerName.includes('spellbook')) {
+            tmpl = this.itemTemplates.get('book');
+        }
+        // Scrolls & Parchment
+        else if (g === '?' || lowerName.includes('scroll') || lowerName.includes('parchment')) {
+            tmpl = this.itemTemplates.get('?');
+        }
+        // Rings
+        else if (g === '=' || lowerName.includes('ring') || lowerName.includes('band')) {
+            tmpl = this.itemTemplates.get('=');
+        }
+        // Amulets & Necklaces
+        else if (g === '"' || lowerName.includes('amulet') || lowerName.includes('necklace') || lowerName.includes('pendant') || lowerName.includes('medallion') || lowerName.includes('periapt')) {
+            tmpl = this.itemTemplates.get('"') || this.itemTemplates.get('=');
+        }
+        // Gems & Crystals
+        else if (g === '*' || lowerName.includes('gem') || lowerName.includes('crystal') || lowerName.includes('diamond') || lowerName.includes('ruby') || lowerName.includes('emerald') || lowerName.includes('sapphire') || lowerName.includes('phial') || lowerName.includes('star of') || lowerName.includes('arkenstone')) {
+            tmpl = this.itemTemplates.get('*');
+        }
+        // Chests & Boxes
+        else if (lowerName.includes('chest') || lowerName.includes('coffer') || lowerName.includes('box')) {
+            tmpl = this.itemTemplates.get('chest');
+        }
+        // Food & Rations
+        else if (g === ',' || lowerName.includes('ration') || lowerName.includes('food') || lowerName.includes('meat') || lowerName.includes('bread') || lowerName.includes('mushroom') || lowerName.includes('apple') || lowerName.includes('slime mold')) {
+            tmpl = this.itemTemplates.get(',');
+        }
+        // Skulls & Remains
+        else if (lowerName.includes('skull') || lowerName.includes('bone') || lowerName.includes('skeleton')) {
+            tmpl = this.itemTemplates.get('skull');
+        }
+        // Keys & Lockpicks
+        else if (lowerName.includes('key') || lowerName.includes('lockpick')) {
+            tmpl = this.itemTemplates.get('key');
+        }
+        // Bags & Pouches
+        else if (lowerName.includes('backpack') || lowerName.includes('sack')) {
+            tmpl = this.itemTemplates.get('backpack');
+        } else if (lowerName.includes('bag') || lowerName.includes('pouch')) {
+            tmpl = this.itemTemplates.get('pouch');
+        }
+        // Shields
+        else if (g === '(' || lowerName.includes('shield') || lowerName.includes('buckler') || lowerName.includes('targe')) {
+            if (lowerName.includes('round') || lowerName.includes('small')) {
+                tmpl = this.itemTemplates.get('shield_round');
             } else {
-                const tmpl = this.itemTemplates.get('?');
-                if (tmpl) mesh = tmpl.clone(true);
+                tmpl = this.itemTemplates.get('shield_heater') || this.itemTemplates.get('shield_round');
             }
-        } else if (g === '=' || g === '"') {
-            const tmpl = this.itemTemplates.get('=');
-            if (tmpl) mesh = tmpl.clone(true);
-        } else if (g === ')' || g === '/' || g === '|' || g === '_') {
-            if (lowerName.includes('axe')) {
-                const tmpl = this.itemTemplates.get('axe');
-                if (tmpl) mesh = tmpl.clone(true);
+        }
+        // Helms & Crowns
+        else if (lowerName.includes('crown') || lowerName.includes('coronet') || lowerName.includes('helm') || lowerName.includes('cap') || lowerName.includes('hat')) {
+            tmpl = this.itemTemplates.get('crown');
+        }
+        // Gloves & Gauntlets
+        else if (lowerName.includes('glove') || lowerName.includes('gauntlet') || lowerName.includes('cesta') || lowerName.includes('bracer')) {
+            tmpl = this.itemTemplates.get('glove');
+        }
+        // Body Armor & Cloaks (Glyph '[')
+        else if (g === '[' || lowerName.includes('plate') || lowerName.includes('chain') || lowerName.includes('mail') || lowerName.includes('armor') || lowerName.includes('cuirass') || lowerName.includes('corselet') || lowerName.includes('robe') || lowerName.includes('cloak')) {
+            if (lowerName.includes('leather') || lowerName.includes('soft') || lowerName.includes('robe') || lowerName.includes('cloak')) {
+                tmpl = this.itemTemplates.get('armor_leather');
             } else {
-                const tmpl = this.itemTemplates.get(')');
-                if (tmpl) mesh = tmpl.clone(true);
+                tmpl = this.itemTemplates.get('armor_metal') || this.itemTemplates.get('armor_metal2');
             }
-        } else if (g === '}' || g === '{') {
-            const tmpl = this.itemTemplates.get('}');
-            if (tmpl) mesh = tmpl.clone(true);
-        } else if (lowerName.includes('chest')) {
-            const tmpl = this.itemTemplates.get('chest');
-            if (tmpl) mesh = tmpl.clone(true);
+        }
+        // Footwear: Boots, Shoes, Sandals (Glyph ']')
+        else if (g === ']' || lowerName.includes('sandal') || lowerName.includes('boot') || lowerName.includes('shoe') || lowerName.includes('greave')) {
+            // Footwear will be built with dedicated procedural 3D shoe pair below if no OBJ
+            tmpl = null;
+        }
+        // Weapons: Axes
+        else if (lowerName.includes('battle axe') || lowerName.includes('great axe') || lowerName.includes('broad axe') || lowerName.includes('halberd') || lowerName.includes('poleaxe')) {
+            tmpl = this.itemTemplates.get('axe_double') || this.itemTemplates.get('axe');
+        } else if (lowerName.includes('axe') || lowerName.includes('cleaver') || lowerName.includes('hatchet')) {
+            tmpl = this.itemTemplates.get('axe');
+        }
+        // Weapons: Hammers & Maces
+        else if (lowerName.includes('war hammer') || lowerName.includes('great hammer') || lowerName.includes('mattock')) {
+            tmpl = this.itemTemplates.get('hammer_double') || this.itemTemplates.get('hammer');
+        } else if (lowerName.includes('hammer') || lowerName.includes('mace') || lowerName.includes('flail') || lowerName.includes('star') || lowerName.includes('club') || lowerName.includes('cudgel') || lowerName.includes('whip')) {
+            tmpl = this.itemTemplates.get('hammer');
+        }
+        // Weapons: Staves, Spears & Polearms
+        else if (g === '/' || g === '_' || g === '|' || lowerName.includes('spear') || lowerName.includes('lance') || lowerName.includes('pike') || lowerName.includes('trident') || lowerName.includes('staff')) {
+            tmpl = this.itemTemplates.get('spear');
+        }
+        // Weapons: Scythes
+        else if (lowerName.includes('scythe')) {
+            tmpl = this.itemTemplates.get('scythe') || this.itemTemplates.get('spear');
+        }
+        // Weapons: Daggers & Knives
+        else if (lowerName.includes('dagger') || lowerName.includes('knife') || lowerName.includes('rapier') || lowerName.includes('stiletto') || lowerName.includes('main gauche') || lowerName.includes('misericorde') || lowerName.includes('athame')) {
+            tmpl = this.itemTemplates.get('dagger');
+        }
+        // Weapons: Two-Handed Swords & Greatswords
+        else if (lowerName.includes('two-handed') || lowerName.includes('great sword') || lowerName.includes('claymore') || lowerName.includes('zweihander') || lowerName.includes('flamberge')) {
+            tmpl = this.itemTemplates.get('claymore');
+        } else if (lowerName.includes('bastard') || lowerName.includes('broad sword') || lowerName.includes('broadsword')) {
+            tmpl = this.itemTemplates.get('sword_big') || this.itemTemplates.get('claymore');
+        }
+        // Weapons: Swords & Blades (Glyph ')')
+        else if (g === ')' || lowerName.includes('sword') || lowerName.includes('blade') || lowerName.includes('sabre') || lowerName.includes('scimitar') || lowerName.includes('cutlass') || lowerName.includes('katana') || lowerName.includes('foil')) {
+            tmpl = this.itemTemplates.get(')');
+        }
+        // Bows & Crossbows (Glyph '}')
+        else if (g === '}' || lowerName.includes('bow') || lowerName.includes('crossbow') || lowerName.includes('arbalest') || lowerName.includes('sling')) {
+            tmpl = this.itemTemplates.get('}');
+        }
+        // Arrows & Missiles (Glyph '{')
+        else if (g === '{' || lowerName.includes('arrow') || lowerName.includes('bolt') || lowerName.includes('shot')) {
+            tmpl = this.itemTemplates.get('{');
         }
 
-        // Procedural 3D Item fallback
+        if (tmpl) {
+            mesh = tmpl.clone(true);
+        }
+
+        // 2. High-Quality Stylized Procedural 3D Item Pickups
+        // Ensures NO item appears as a raw generic white octahedron (Exact 1:1 Parity with Godot GetPickupMesh)
         if (!mesh) {
+            const isMetal = (g === ')' || g === '[' || g === '(' || g === '=' || lowerName.includes('iron') || lowerName.includes('steel') || lowerName.includes('metal') || lowerName.includes('chain') || lowerName.includes('plate'));
+            const isGold = (g === '$' || lowerName.includes('gold') || lowerName.includes('crown'));
             const mat = new THREE.MeshStandardMaterial({
                 color: new THREE.Color(colorHex),
                 emissive: new THREE.Color(colorHex),
-                emissiveIntensity: 0.45,
-                metalness: 0.60,
-                roughness: 0.30
+                emissiveIntensity: 0.35,
+                metalness: isMetal ? 0.88 : (isGold ? 0.95 : 0.15),
+                roughness: isMetal ? 0.30 : (isGold ? 0.20 : 0.65)
             });
-            mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), mat);
+
+            // Footwear / Boots / Sandals / Shoes (Glyph ']' or footwear keywords)
+            if (g === ']' || lowerName.includes('sandal') || lowerName.includes('boot') || lowerName.includes('shoe')) {
+                const bootsGroup = new THREE.Group();
+                const soleMat = new THREE.MeshStandardMaterial({ color: 0x3d2716, roughness: 0.85, metalness: 0.05 });
+                const strapMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(colorHex), roughness: 0.70, metalness: 0.10 });
+
+                [-0.07, 0.07].forEach(xOffset => {
+                    // Sole base
+                    const sole = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.035, 0.20), soleMat);
+                    sole.position.set(xOffset, 0.018, 0);
+                    bootsGroup.add(sole);
+
+                    // Upper foot body / strap
+                    const isBoot = lowerName.includes('boot') || lowerName.includes('greave');
+                    const upperHeight = isBoot ? 0.14 : 0.06;
+                    const upper = new THREE.Mesh(new THREE.BoxGeometry(0.08, upperHeight, isBoot ? 0.14 : 0.10), strapMat);
+                    upper.position.set(xOffset, 0.035 + upperHeight / 2, isBoot ? -0.02 : 0.01);
+                    bootsGroup.add(upper);
+                });
+                mesh = bootsGroup;
+            }
+            // Torches & Light Sources (Glyph '~')
+            else if (g === '~' || lowerName.includes('torch') || lowerName.includes('lantern')) {
+                const torchGroup = new THREE.Group();
+                const woodShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.45, 8), new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.85 }));
+                torchGroup.add(woodShaft);
+                const flame = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 8), new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff5500, emissiveIntensity: 1.5 }));
+                flame.position.y = 0.24;
+                torchGroup.add(flame);
+                mesh = torchGroup;
+            }
+            // Rings (Glyph '=')
+            else if (g === '=' || lowerName.includes('ring')) {
+                mesh = new THREE.Mesh(new THREE.TorusGeometry(0.10, 0.035, 12, 24), mat);
+                mesh.rotation.x = Math.PI / 4;
+            }
+            // Amulets & Necklaces (Glyph '"')
+            else if (g === '"' || lowerName.includes('amulet')) {
+                const amuletGroup = new THREE.Group();
+                const pendant = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.025, 16), mat);
+                pendant.rotation.x = Math.PI / 2;
+                amuletGroup.add(pendant);
+                const gem = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x0088cc, emissiveIntensity: 1.2 }));
+                gem.position.z = 0.015;
+                amuletGroup.add(gem);
+                mesh = amuletGroup;
+            }
+            // Potions (Glyph '!')
+            else if (g === '!') {
+                const flaskGroup = new THREE.Group();
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.10, 0.24, 12), mat);
+                const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.08, 12), mat);
+                neck.position.y = 0.15;
+                flaskGroup.add(body);
+                flaskGroup.add(neck);
+                mesh = flaskGroup;
+            }
+            // Scrolls (Glyph '?')
+            else if (g === '?') {
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.35, 12), mat);
+                mesh.rotation.z = Math.PI / 2;
+            }
+            // Weapons (Glyph ')')
+            else if (g === ')') {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.50, 0.10), mat);
+            }
+            // Armor & Shields (Glyphs '[', '(')
+            else if (g === '[' || g === '(') {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.36, 0.08), mat);
+            }
+            // Staves, Wands, Polearms (Glyphs '/', '_', '|')
+            else if (g === '/' || g === '_' || g === '|') {
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.55, 8), mat);
+            }
+            // Food (Glyph ',')
+            else if (g === ',') {
+                mesh = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), mat);
+            }
+            // Default Stylized Relic
+            else {
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), mat);
+            }
         }
 
         group.add(mesh);
@@ -4171,9 +4398,12 @@ class Dungeon3D {
                 this.currentCamPos.copy(this.targetCamPos);
                 this.camera.position.copy(this.targetCamPos);
                 this.isStepping = false;
+                this.stepPlayedThisMove = false;
             }
         } else {
             this.camera.position.copy(this.targetCamPos);
+            this.isStepping = false;
+            this.stepPlayedThisMove = false;
             // Idle breathing bob
             this.camera.position.y = this.eyeHeight + Math.sin(tNow * 0.002) * 0.012;
         }

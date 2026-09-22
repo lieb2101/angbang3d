@@ -227,7 +227,7 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..812030de6
+index 000000000..2fed152b7
 --- /dev/null
 +++ b/src/main-bridge.c
 @@ -0,0 +1,1209 @@
@@ -1139,7 +1139,7 @@ index 000000000..812030de6
 +	fputc(',', fp);
 +	bj_kv_int(fp, "seq", (long)++frame_seq);
 +	fputc(',', fp);
-+	bj_kv_string(fp, "phase", bridge_in_play() ? "play" : "setup");
++	bj_kv_string(fp, "phase", character_generated ? "play" : "setup");
 +	fputc(',', fp);
 +
 +	bj_key(fp, "ui");

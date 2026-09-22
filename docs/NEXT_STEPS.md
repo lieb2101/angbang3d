@@ -188,7 +188,10 @@ The project has achieved the **Tier 4 Visual & Environmental Overhaul**: deliver
   - **Dungeon Undiscovered Terrain**: Reverted unmapped tiles (`FEAT_NONE`) to authentic dark subterranean void space rather than synthesizing fake granite walls.
   - **Item Models & Textures**: Resolved pebbles, stones, rocks, shots, and bullets to `Mineral` models/fbx and procedural stone geometries instead of arrows; routed darts to `Dart` models.
   - **Monster Models**: Fixed non-humanoid FBX models (`Rat`, `Snake`, `Spider`, `Frog`, `Wasp`) by removing improper `QueueFree()` calls; added model bindings for kobolds (`Puglin.glb`) and demons/imps (`Imp.glb`).
-- **Verification**: 11/11 engine bridge smoke tests, 10/10 node server unit tests, 0 warnings dotnet build across client/angband3d.csproj.
+- **Verification**: 11/11 engine bridge smoke tests, 10/10 node server unit tests, 0 warnings dotnet build across client/angband3d.csproj. Live deployment verified on Google Cloud Run:
+  - `angband3d-cloud`: Revision `angband3d-cloud-00044-847` (https://angband3d-cloud-564958309282.us-central1.run.app)
+  - `angband3d-web`: Revision `angband3d-web-00002-zkt` (https://angband3d-web-564958309282.us-central1.run.app)
+  - Live WebSocket handshake, health check, save API, store entry, and gameplay action verified via automated cloud integration test suites.
 
 ---
 

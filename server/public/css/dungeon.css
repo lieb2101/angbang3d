@@ -637,6 +637,14 @@ html, body {
     box-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
     z-index: 6;
     display: none;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease, transform 0.1s ease;
+}
+
+#prompt-bar:hover {
+    background: rgba(212, 175, 55, 0.35);
+    transform: translateX(-50%) scale(1.02);
 }
 
 /* Loading Overlay */

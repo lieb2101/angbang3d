@@ -87,6 +87,14 @@ class WebHUD {
         this.setupMinimapControls();
         this.setupDeathModal();
 
+        if (this.promptBar) {
+            this.promptBar.addEventListener('click', () => {
+                if (window.__app && window.__app.network) {
+                    window.__app.network.sendKey('space');
+                }
+            });
+        }
+
         // Offscreen canvas cache for static minimap tiles (eliminates hundreds of fillText calls per frame on turn)
         this.minimapTileCanvas = document.createElement('canvas');
         this.minimapTileCtx = this.minimapTileCanvas.getContext('2d');

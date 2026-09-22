@@ -1768,7 +1768,7 @@ class Dungeon3D {
         this.currentBiome = biome;
         this.targetTorchEnergy = biome.torchEnergy;
 
-        this.scene.background.setHex(biome.bgColor);
+        this.scene.background.setHex(outdoors ? biome.bgColor : biome.fogColor);
 
         this.sunLight.visible = biome.sunLight;
         this.sunLight.intensity = biome.sunEnergy;
@@ -1790,10 +1790,14 @@ class Dungeon3D {
                 this.scene.fog.density = biome.fogDensity;
             }
         } else {
-            // Subterranean dungeon: strict linear fog that drops to pitch black outside torchlight range
-            const fogNear = Math.max(2.0, (this.torchRadius + 1.0) * this.cellSize);
-            const fogFar = Math.max(fogNear + 4.0, (this.torchRadius + 5.5) * this.cellSize + 2.0);
-            this.scene.fog = new THREE.Fog(biome.fogColor, fogNear, fogFar);
+            // Subterranean dungeon: atmospheric misty blackness fading smoothly into dark void
+            const dungeonFogDensity = Math.max(0.024, biome.fogDensity * 2.2);
+            if (!(this.scene.fog instanceof THREE.FogExp2)) {
+                this.scene.fog = new THREE.FogExp2(biome.fogColor, dungeonFogDensity);
+            } else {
+                this.scene.fog.color.setHex(biome.fogColor);
+                this.scene.fog.density = dungeonFogDensity;
+            }
         }
 
         // Torch distance calculation matching Godot DungeonWorld.cs:3468:
@@ -2006,40 +2010,11 @@ class Dungeon3D {
                 let inView = outdoors || (flag & 0x2) !== 0;
                 let lighting = (flag >> 2) & 0x3; // 0=LOS lit, 1=torch, 2=room lit, 3=dark
 
-                // Fog-of-War Corridor Sealing Invariant:
-                // If this tile is unmapped or unknown/not in view, check if it directly borders
-                // an in-view walkable corridor or room. If so, it forms the visible perimeter
-                // boundary wall! We must render it as a solid wall to seal the corridor and
-                // prevent transparent gaps/holes looking into the void.
+                // Unexplored dark space (not known and not in view) or feat 0 must NOT be rendered.
+                // True fog-of-war (1:1 with Godot DungeonWorld.cs:2410-2415):
+                // Open unexplored areas remain pure misty blackness fading into subterranean depth fog.
                 if (feat === 0 || (!known && !inView)) {
-                    let isPerimeterWall = false;
-                    let neighborLighting = 3;
-                    for (let dy = -1; dy <= 1 && !isPerimeterWall; dy++) {
-                        for (let dx = -1; dx <= 1 && !isPerimeterWall; dx++) {
-                            if (dx === 0 && dy === 0) continue;
-                            const nx = x + dx;
-                            const ny = y + dy;
-                            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-                                const nFlag = this.getFlagAt(map, nx, ny);
-                                if ((nFlag & 0x2) !== 0) { // In-view neighbor
-                                    const nFeat = this.getFeatAt(map, nx, ny);
-                                    if (this.isWalkableOrPortal(nFeat)) {
-                                        isPerimeterWall = true;
-                                        neighborLighting = (nFlag >> 2) & 0x3;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (isPerimeterWall) {
-                        feat = 21; // Render as solid granite boundary wall
-                        known = true;
-                        inView = true;
-                        lighting = neighborLighting < 3 ? neighborLighting : 1;
-                    } else {
-                        // True unvisited subterranean void — do not render
-                        continue;
-                    }
+                    continue;
                 }
 
                 const isWall = feat === 15 || feat === 21 || feat === 22 || feat === 17 || feat === 18 || feat === 19 || feat === 20;

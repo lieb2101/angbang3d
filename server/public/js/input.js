@@ -481,8 +481,20 @@ class InputController {
             return;
         }
 
+        const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+        const ui = lastFrame ? lastFrame.ui : null;
+
+        // Context prompt (-more-) active: immediately dismiss with space (1:1 with Angband msg_flush)
+        if (ui && ui.more) {
+            if (e.key === ' ' || e.code === 'Space' || e.key === 'Enter' || e.key === 'Escape') {
+                e.preventDefault();
+                this.network.sendKey('space');
+                return;
+            }
+        }
+
         // Attack swing on Space / Enter
-        if (e.key === ' ' || e.key === 'Enter') {
+        if (e.key === ' ' || e.code === 'Space' || e.key === 'Enter') {
             e.preventDefault();
             this.dungeon.triggerAttackAnimation();
             if (this.audio) this.audio.playWhoosh();
@@ -553,9 +565,15 @@ class InputController {
         const bind = (id, key) => {
             const btn = document.getElementById(id);
             if (btn) {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', (ev) => {
+                    if (ev && ev.target && typeof ev.target.blur === 'function') ev.target.blur();
                     if (this.audio) this.audio.unlock();
                     if (key === 'attack') {
+                        const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+                        if (lastFrame && lastFrame.ui && lastFrame.ui.more) {
+                            this.network.sendKey('space');
+                            return;
+                        }
                         this.dungeon.triggerAttackAnimation();
                         if (this.audio) this.audio.playWhoosh();
                         this.network.sendKey('enter');
@@ -580,6 +598,26 @@ class InputController {
         bind('btn-equipment', 'e');
         bind('btn-pickup', 'g');
         bind('btn-terminal', 'tab');
+
+        // Dismiss -more- prompt on direct click of the prompt bar
+        const promptBar = document.getElementById('prompt-bar');
+        if (promptBar) {
+            promptBar.style.cursor = 'pointer';
+            promptBar.addEventListener('click', () => {
+                this.network.sendKey('space');
+            });
+        }
+
+        // Clicking anywhere in world exploration while -more- prompt is up dismisses prompt
+        window.addEventListener('click', (e) => {
+            const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+            if (lastFrame && lastFrame.ui && lastFrame.ui.more) {
+                const inModal = e.target.closest('#pause-modal, #load-modal, #guide-modal, #death-modal');
+                if (!inModal) {
+                    this.network.sendKey('space');
+                }
+            }
+        });
 
         const fsBtn = document.getElementById('btn-fullscreen');
         if (fsBtn) fsBtn.addEventListener('click', () => this.toggleFullscreen());
@@ -627,6 +665,11 @@ class InputController {
         });
 
         bindTouch('dpad-center', () => {
+            const lastFrame = (window.__app && window.__app.lastFrame) ? window.__app.lastFrame : null;
+            if (lastFrame && lastFrame.ui && lastFrame.ui.more) {
+                this.network.sendKey('space');
+                return;
+            }
             this.dungeon.triggerAttackAnimation();
             if (this.audio) this.audio.playWhoosh();
             this.network.sendKey('enter');

@@ -96,7 +96,25 @@
       - Ornate splash credits footer and quick-access navigation buttons (`[1] Key Features`, `[4] Guide`, `[5] Pro Tips`, `[6] Credits`).
       - Comprehensive technical features tab outlining headless C engine, zero-turn yaw, save portability, and dual-engine architecture.
       - Roguelike pro tips guide covering corridor funneling, lighting & infravision, speed imperatives, emergency teleportation, stair scouting, and stat drain recovery.
-   - **Graphics & Spatial Occlusion Culling (`DungeonWorld.cs`)**:
+    - **Dedicated Procedural 3D Whip Viewmodel & Floor Model (`dungeon3d.js`)**:
+       - Replaced the sword fallback for whips with a dedicated procedural 3D braided leather bullwhip:
+         - Hand-wrapped dark leather grip cylinder (`#3a2012`), polished brass spherical pommel (`#d4a034`), wrist strap loop, and brass collar.
+         - Gracefully curving braided leather lash generated via `CatmullRomCurve3` and `TubeGeometry` sweeping forward and downward from the right hand.
+         - Tapered popper/cracker tip trailing at the end.
+       - Updated `resolveRightWeaponModel()` with keyword matching for `whip`, `bullwhip`, `scourge`, and `cat-o`.
+       - Rendered floor pickups as concentric coiled leather bullwhips with brass pommels instead of default hammers.
+    - **HUD Footer Level & EXP Telemetry Display (`index.html`, `dungeon.css`, `hud.js`)**:
+       - Positioned `⭐ Lvl` and `✨ EXP` status pills directly into the primary `.status-left` group of `#hud-footer`.
+       - Styled `.pill-level` (luminous gold/amber `#fbbf24`) and `.pill-exp` (mystic amethyst `#c084fc`) with formatted numbers and thousand separators.
+    - **Universal Save Game Portability & Direct Fallback (`server.js`, `app.js`)**:
+       - Added `-dsave=${SAVE_DIR}` and `-dpanic=${path.join(SAVE_DIR, 'panic')}` to headless engine spawn arguments so saves write directly to `/data/save`.
+       - Added multi-directory scanner `getSaveDirs()` discovering saves across `/data/save`, `lib/save`, and `~/.angband/Angband/save`, auto-mirroring files to `/data/save`.
+       - Added direct fallback streaming endpoint `GET /api/saves/latest?char=...` with raw binary file detection.
+       - Implemented `triggerFileDownload()` using blob streams with error trapping.
+    - **Character Stats Strip AC & Gold Relocation (`index.html`, `dungeon.css`, `hud.js`)**:
+       - Relocated Armor (AC) and Gold indicators from the bottom-right panel directly into the bottom-left character stats strip next to `STR`, `INT`, `WIS`, `DEX`, `CON` separated by a subtle vertical divider.
+       - Wired real-time AC calculation in `WebHUD.update()` displaying base AC and magical bonuses (e.g. `10` or `14 (+4)`), and removed the redundant bottom-right economy container.
+    - **Graphics & Spatial Occlusion Culling (`DungeonWorld.cs`)**:
       - Radial horizon culling ($R \le 28$ tiles) eliminating instance buffer updates outside the maximum visible fog horizon.
 
 ### Priority 6: Deep Efficiency, Performance, Operations & Standalone Packaging (COMPLETED)

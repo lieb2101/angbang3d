@@ -541,7 +541,7 @@ html, body {
 
 /* Character & Health Panel */
 #char-panel {
-    min-width: 280px;
+    min-width: 310px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -598,7 +598,9 @@ html, body {
 /* Middle Stats Strip */
 #stats-strip {
     display: flex;
-    gap: 16px;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
     font-family: var(--font-terminal);
     font-size: 13px;
 }
@@ -607,6 +609,15 @@ html, body {
     display: flex;
     flex-direction: column;
     align-items: center;
+    white-space: nowrap;
+}
+
+.stat-divider {
+    width: 1px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.15);
+    margin: 0 1px;
+    flex-shrink: 0;
 }
 
 .stat-label {

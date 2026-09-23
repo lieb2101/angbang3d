@@ -954,8 +954,17 @@ class WebHUD {
         // Depth, Gold, AC
         const depth = player.depth !== undefined ? player.depth : 0;
         const locStr = depth === 0 ? 'Town' : `${depth * 50}ft`;
-        this.depthVal.textContent = locStr;
-        this.goldVal.textContent = (player.gold || 0).toLocaleString();
+        if (this.depthVal) this.depthVal.textContent = locStr;
+        if (this.goldVal) {
+            this.goldVal.textContent = (player.gold || 0).toLocaleString();
+            this.goldVal.title = `Gold: ${(player.gold || 0).toLocaleString()} AU`;
+        }
+        if (this.acVal) {
+            const acTotal = player.ac !== undefined ? player.ac : 0;
+            const acToA = player.ac_to_a || 0;
+            this.acVal.textContent = acToA !== 0 ? `${acTotal} (${acToA > 0 ? '+' : ''}${acToA})` : `${acTotal}`;
+            this.acVal.title = `Armor Class: ${acTotal} (Base: ${player.ac_base || 0}, Bonus: ${acToA >= 0 ? '+' : ''}${acToA})`;
+        }
         const yaw = (window.__app && window.__app.dungeon) ? window.__app.dungeon.yaw : (this.currentCameraYaw || 0);
         const normYaw = (yaw % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
         const sector = Math.round(normYaw / (Math.PI / 4)) % 8;

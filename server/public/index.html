@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/dungeon.css?v=3.3">
+    <link rel="stylesheet" href="/css/dungeon.css?v=3.4">
 </head>
 <body>
     <div id="app-container">
@@ -74,7 +74,13 @@
         <div id="top-right-bar">
             <div id="ping-badge" class="badge">Cloud [Connecting...]</div>
             <button id="btn-controls" class="icon-btn" title="View Complete Controls &amp; Commands Guide [?]">⌨ Controls (?)</button>
-            <button id="btn-sound" class="icon-btn" title="Toggle Sound / Mute [Ctrl-M]">🔊 Sound</button>
+            <div id="sound-control-group" class="sound-control-group" title="Global Audio Volume &amp; Mute [Ctrl-M]">
+                <button id="btn-sound" class="icon-btn btn-sound" title="Toggle Sound / Mute [Ctrl-M]">🔊</button>
+                <div class="volume-slider-wrap">
+                    <input type="range" id="volume-slider" class="volume-range-slider" min="0" max="100" value="75" step="1" title="Adjust Master Volume">
+                    <span id="volume-label" class="volume-label">75%</span>
+                </div>
+            </div>
             <button id="btn-fullscreen" class="icon-btn">⛶ Fullscreen</button>
             <button id="btn-menu" class="icon-btn" title="Main Menu [Esc]">⚙ Menu</button>
         </div>
@@ -185,6 +191,8 @@
                     <!-- Left: Environment & Movement -->
                     <div class="status-group status-left">
                         <span id="footer-place" class="status-pill pill-depth" title="Current Location / Dungeon Depth">Town</span>
+                        <span id="footer-level" class="status-pill pill-level" title="Character Level">⭐ Lvl 1</span>
+                        <span id="footer-exp" class="status-pill pill-exp" title="Current Experience / Next Level">✨ EXP 0</span>
                         <span id="footer-facing" class="status-pill pill-facing" title="Camera Facing Direction">🧭 N</span>
                         <span id="footer-light" class="status-pill pill-light" title="Illumination &amp; Light Source">☀️ Daylight</span>
                         <span id="footer-speed" class="status-pill pill-speed" title="Player Movement Speed">⚡ Spd Normal</span>
@@ -206,12 +214,10 @@
 
                     <!-- Hidden legacy anchors for backwards compatibility -->
                     <span id="footer-char-identity" style="display: none;"></span>
-                    <span id="footer-level" style="display: none;"></span>
                     <span id="footer-hp" style="display: none;"></span>
                     <span id="footer-sp" style="display: none;"></span>
                     <span id="footer-ac" style="display: none;"></span>
                     <span id="footer-gold" style="display: none;"></span>
-                    <span id="footer-exp" style="display: none;"></span>
                     <span id="footer-key-hints" style="display: none;"></span>
                 </div>
             </div>
@@ -306,9 +312,15 @@
 
                 <div class="splash-shortcuts">
                     <button class="splash-shortcut-btn" id="btn-splash-menu"><kbd>[1]</kbd> Main Menu</button>
-                    <button class="splash-shortcut-btn" id="btn-splash-guide"><kbd>[2]</kbd> Game Guide &amp; Primer</button>
-                    <button class="splash-shortcut-btn" id="btn-splash-credits"><kbd>[3]</kbd> Summary &amp; Credits</button>
+                    <button class="splash-shortcut-btn" id="btn-splash-features"><kbd>[2]</kbd> ✨ Key Features</button>
+                    <button class="splash-shortcut-btn" id="btn-splash-protips"><kbd>[3]</kbd> 💡 Pro Tips</button>
+                    <button class="splash-shortcut-btn" id="btn-splash-guide"><kbd>[4]</kbd> 📖 Survival Guide</button>
+                    <button class="splash-shortcut-btn" id="btn-splash-credits"><kbd>[5]</kbd> 📜 Full Credits</button>
                     <a href="https://angband.readthedocs.io/" target="_blank" rel="noopener noreferrer" class="splash-shortcut-btn"><kbd>[W]</kbd> Angband Wiki</a>
+                </div>
+
+                <div class="splash-credits-footer">
+                    <span>Angband 4.2.6 C Engine by the Angband Development Team • 3D WebGL Architecture &amp; Direction by Thunderbear Studios</span>
                 </div>
             </div>
         </div>
@@ -440,6 +452,15 @@
                     <div class="main-menu-subtitle" id="pause-char-display">Current Character: Hero</div>
                 </div>
 
+                <div class="pause-audio-toolbar">
+                    <button id="btn-pause-mute" class="btn-pause-mute" title="Toggle Sound / Mute">🔊 Sound On</button>
+                    <div class="pause-volume-wrap">
+                        <span class="pause-vol-label">Volume:</span>
+                        <input type="range" id="pause-volume-slider" class="volume-range-slider" min="0" max="100" value="75" step="1" title="Adjust Volume">
+                        <span id="pause-volume-label" class="volume-label">75%</span>
+                    </div>
+                </div>
+
                 <div class="main-menu-options" id="pause-menu-options">
                     <button class="menu-option-btn selected" id="btn-pause-resume" data-index="0">
                         <span class="menu-bullet">►</span>
@@ -530,11 +551,12 @@
                 </div>
                 <div class="guide-tabs">
                     <button class="guide-tab active" data-tab="0">1. Overview</button>
-                    <button class="guide-tab" data-tab="1">2. 3D Controls</button>
-                    <button class="guide-tab" data-tab="2">3. Commands</button>
-                    <button class="guide-tab" data-tab="3">4. Survival</button>
-                    <button class="guide-tab" data-tab="4">5. Stats &amp; Magic</button>
-                    <button class="guide-tab" data-tab="5">6. Credits &amp; Links</button>
+                    <button class="guide-tab" data-tab="1">2. ✨ Key Features</button>
+                    <button class="guide-tab" data-tab="2">3. 3D Controls</button>
+                    <button class="guide-tab" data-tab="3">4. Commands</button>
+                    <button class="guide-tab" data-tab="4">5. 💡 Pro Tips</button>
+                    <button class="guide-tab" data-tab="5">6. Stats &amp; Magic</button>
+                    <button class="guide-tab" data-tab="6">7. 📜 Credits</button>
                 </div>
                 <div class="guide-body" id="guide-body">
                     <!-- Tab 0: Overview -->
@@ -549,8 +571,25 @@
                         </ul>
                     </div>
 
-                    <!-- Tab 1: 3D Controls -->
+                    <!-- Tab 1: Key Features of this Implementation -->
                     <div class="guide-tab-content" id="guide-tab-1">
+                        <div class="guide-section-header">[ ✨ KEY FEATURES OF ANGBAND 3D ]</div>
+                        <p class="guide-p">Angband 3D represents a groundbreaking synthesis of traditional roguelike depth and modern 3D dungeon crawling:</p>
+                        <ul class="guide-list">
+                            <li>• <strong>Authoritative Headless C Engine</strong>: Game logic, monster AI, RNG, and world generation run strictly on upstream Angband 4.2.6 C code with zero gameplay divergence.</li>
+                            <li>• <strong>First-Person Viewmodel Hands &amp; Weapon Rigs</strong>: Dynamic articulated hands, weapons, shields, books, and torches that naturally adapt to your character's race and physical height.</li>
+                            <li>• <strong>Zero-Turn Camera Yaw Navigation</strong>: Looking around corners or rotating 360° is client-side and consumes 0 game turns, preserving pure tactical turn-based decisions.</li>
+                            <li>• <strong>Ethereal Monster Sensing in 3D</strong>: Monsters detected through spells, telepathy, or infra-vision in pitch black corridors are depicted with a glowing misty apparition aura and sensory beacon.</li>
+                            <li>• <strong>Universal Save Game Portability</strong>: 1-click downloads of your `.sav` character, drag-and-drop save uploads, in-game pause menu exports, and 100% interoperability with desktop Godot.</li>
+                            <li>• <strong>Dual-Engine Architecture (Local &amp; Cloud)</strong>: Seamlessly play locally via high-speed process stdio or connect to the Google Cloud Run WebSocket relay with live latency telemetry.</li>
+                            <li>• <strong>Procedural Subterranean Illumination</strong>: Dynamic torch falloff, molten lava emissive shaders with line-of-sight gating, and deterministic corridor sconces.</li>
+                            <li>• <strong>Real-Time Combat Message Streaming</strong>: Top-mounted action banner and landscape HUD feed with turn-by-turn combat damage, status alerts, and full scrollback history.</li>
+                            <li>• <strong>Interactive Contextual Action Bars</strong>: Dynamic touch and hotkey item selection pills for throwing, casting, quaffing potions, reading scrolls, and shop interactions.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Tab 2: 3D Controls -->
+                    <div class="guide-tab-content" id="guide-tab-2">
                         <div class="guide-section-header">[ 3D FIRST-PERSON NAVIGATION ]</div>
                         <ul class="guide-list">
                             <li>• <kbd>↑ / W</kbd> or <kbd>Numpad 8</kbd>: Step forward in camera facing direction.</li>
@@ -567,8 +606,8 @@
                         </ul>
                     </div>
 
-                    <!-- Tab 2: Commands -->
-                    <div class="guide-tab-content" id="guide-tab-2">
+                    <!-- Tab 3: Commands -->
+                    <div class="guide-tab-content" id="guide-tab-3">
                         <div class="guide-section-header">[ COMBAT &amp; ACTION COMMANDS ]</div>
                         <ul class="guide-list">
                             <li>• <kbd>Space / Enter</kbd>: Attack adjacent monster in front or confirm message prompt.</li>
@@ -581,6 +620,8 @@
                             <li>• <kbd>q</kbd>: Quaff potion (Healing, Cure Poison, Speed, Resistances).</li>
                             <li>• <kbd>r</kbd>: Read magic scroll (Phase Door, Teleport, Word of Recall).</li>
                             <li>• <kbd>m</kbd>: Cast spell or pray (Mages, Priests, Rangers, Paladins, Rogues).</li>
+                            <li>• <kbd>v</kbd>: Throw / hurl flask, stone, or weapon at a targeted monster.</li>
+                            <li>• <kbd>f</kbd>: Fire missile from equipped bow, sling, or crossbow.</li>
                             <li>• <kbd>&gt;</kbd>: Descend downstairs to deeper dungeon floor.</li>
                             <li>• <kbd>&lt;</kbd>: Ascend upstairs toward the safety of town.</li>
                             <li>• <kbd>R</kbd>: Rest until fully recovered in Hit Points and Mana.</li>
@@ -588,21 +629,25 @@
                         </ul>
                     </div>
 
-                    <!-- Tab 3: Survival -->
-                    <div class="guide-tab-content" id="guide-tab-3">
-                        <div class="guide-section-header">[ ESSENTIAL SURVIVAL TACTICS ]</div>
+                    <!-- Tab 4: Pro Tips & Strategy -->
+                    <div class="guide-tab-content" id="guide-tab-4">
+                        <div class="guide-section-header">[ 💡 PRO TIPS &amp; TACTICAL ROGUELIKE MASTERY ]</div>
+                        <p class="guide-p">Angband is an unforgiving permadeath roguelike. Mastering these veteran principles will turn mortal perils into triumphant dives:</p>
                         <ul class="guide-list">
-                            <li>• <strong>Light Is Life</strong>: Subterranean depths are shrouded in pitch blackness. Always maintain an active brass lantern, torches, and flasks of oil purchased from the General Store.</li>
-                            <li>• <strong>Never Run Out of Food</strong>: Starvation will weaken and ultimately kill your adventurer. Always keep food rations or hard biscuits in your pack.</li>
-                            <li>• <strong>Emergency Escapes</strong>: Always carry multiple <em>Scrolls of Phase Door</em> and <em>Scrolls of Teleportation</em>. In dangerous fights, fleeing to fight another day is always the right decision.</li>
-                            <li>• <strong>Word of Recall</strong>: A magical scroll that teleports you between the town and your deepest dungeon depth. It takes several turns to charge; use it in safe corridors.</li>
-                            <li>• <strong>Audio Awareness</strong>: Positional 3D audio alerts you to monster movements, spell impacts, trap triggers, and footfalls before they come into visual sight.</li>
-                            <li>• <strong>Town Services</strong>: Visit the General Store, Armory, Weaponsmith, Magic Shop, Temple, and Alchemist in town (Depth 0) to re-supply between dungeon dives.</li>
+                            <li>• <strong>Corridor Funneling (The Golden Rule)</strong>: Never fight multiple monsters in open rooms where they can surround you! Retreat into a 1-tile wide corridor so foes are forced to engage you strictly one at a time.</li>
+                            <li>• <strong>Speed is King</strong>: In Angband, speed is multiplicative. At +10 speed you act twice as fast as normal monsters; at +20 you take three actions. Prioritize <em>Boots of Speed</em>, <em>Rings of Speed</em>, and <em>Potions of Speed</em> above all other gear.</li>
+                            <li>• <strong>Emergency Escapes (Have an Exit Plan)</strong>: Always keep at least 5 <em>Scrolls of Phase Door</em> and 3 <em>Scrolls of Teleportation</em> in your pack. Fleeing at 25% HP is standard tactical play, not cowardice!</li>
+                            <li>• <strong>Light is Life</strong>: Subterranean corridors are pitch black. Unlit tiles prevent you from spotting approaching horrors and conceal lethal breath ambushes. Always stock extra torches, lanterns, and flasks of oil.</li>
+                            <li>• <strong>Pre-emptive Detection</strong>: Before opening closed doors or exploring vaults, always cast <em>Detect Monsters</em>, <em>Detect Invisible</em>, or <em>Detect Evil</em>. Sensed creatures will glow with a misty ethereal apparition in 3D.</li>
+                            <li>• <strong>Stair Scumming &amp; Level Feelings</strong>: The engine evaluates each dungeon floor's danger and loot upon entry. If your feeling is ominous and you lack supplies, retreat immediately up the stairs! If your feeling is superb, hunt for the vault.</li>
+                            <li>• <strong>Stat Draining Recovery</strong>: Undead creatures (wights, wraiths, vampires) permanently drain Strength, Constitution, and Dexterity. Always carry <em>Potions of Restore Strength</em> and <em>Restore Life Levels</em> purchased from the Alchemy Shop.</li>
+                            <li>• <strong>Safe Resting Protocols</strong>: When low on HP or Mana, never rest in open corridors. Retreat to a dead-end room, close the door behind you, and use <kbd>R</kbd> or <kbd>#</kbd> to recover.</li>
+                            <li>• <strong>Word of Recall Timing</strong>: <em>Scrolls of Word of Recall</em> take 15 to 25 turns to activate before teleporting you between Town and the Dungeon. Cast it while still healthy in a safe corridor before you run out of healing!</li>
                         </ul>
                     </div>
 
-                    <!-- Tab 4: Stats & Magic -->
-                    <div class="guide-tab-content" id="guide-tab-4">
+                    <!-- Tab 5: Stats & Magic -->
+                    <div class="guide-tab-content" id="guide-tab-5">
                         <div class="guide-section-header">[ ATTRIBUTES &amp; MAGIC DISCIPLINES ]</div>
                         <ul class="guide-list">
                             <li>• <strong>STR (Strength)</strong>: Determines melee attack damage, number of blows per round, and carrying weight capacity.</li>
@@ -614,22 +659,25 @@
                         </ul>
                     </div>
 
-                    <!-- Tab 5: Credits -->
-                    <div class="guide-tab-content" id="guide-tab-5">
-                        <div class="guide-section-header">[ CREDITS &amp; ACKNOWLEDGMENTS ]</div>
-                        <p class="guide-p"><strong>Angband 3D</strong> is proudly presented by <strong>Thunderbear Studios</strong>.</p>
+                    <!-- Tab 6: Credits -->
+                    <div class="guide-tab-content" id="guide-tab-6">
+                        <div class="guide-section-header">[ 📜 CREDITS &amp; ACKNOWLEDGMENTS ]</div>
+                        <p class="guide-p"><strong>Angband 3D</strong> is proudly developed and presented by <strong>Thunderbear Studios</strong>.</p>
                         <ul class="guide-list">
-                            <li>• <strong>Production &amp; 3D Direction</strong>: Thunderbear Studios</li>
-                            <li>• <strong>Original Game Engine</strong>: The Angband Development Team (Angband 4.2.6 C Engine)</li>
-                            <li>• <strong>3D WebGL Graphics Engine</strong>: Three.js (r128)</li>
-                            <li>• <strong>Desktop C# Reference Client</strong>: Godot Engine 4.x</li>
-                            <li>• <strong>Audio &amp; Soundscapes</strong>: Freesound &amp; OpenGameArt community contributors</li>
-                            <li>• <strong>Community Wiki &amp; Manual</strong>: <a href="https://angband.readthedocs.io/" target="_blank" rel="noopener noreferrer" style="color: var(--gold-bright);">https://angband.readthedocs.io/</a></li>
+                            <li>• <strong>Production, 3D Architecture &amp; Direction</strong>: Thunderbear Studios</li>
+                            <li>• <strong>Original Game Engine &amp; Mechanics</strong>: The Angband Development Team (Angband 4.2.6 C Engine)</li>
+                            <li>• <strong>Historical Roguelike Pioneers</strong>: Robert Alan Koeneke &amp; Jimmey Wayne Todd Jr. (original Moria), Alex Cutler &amp; Andy Astrand (Umoria), Keith Horner, Charles Swiger, Ben Harrison, Robert Rühlmann, and the Angband community.</li>
+                            <li>• <strong>3D WebGL Graphics Engine</strong>: Three.js by Ricardo Cabello (Mr.doob) and the Three.js open-source community.</li>
+                            <li>• <strong>Desktop C# Reference Client</strong>: Godot Engine 4.x (Juan Linietsky, Ariel Manzur, and Godot contributors).</li>
+                            <li>• <strong>3D Asset &amp; Monster Model Packs</strong>: KayKit Medieval &amp; Dungeon Remastered by Kay Lousberg.</li>
+                            <li>• <strong>Procedural Audio &amp; Foley</strong>: Web Audio API procedural synthesis engine with acoustic cues inspired by the Freesound and OpenGameArt communities.</li>
+                            <li>• <strong>Legendarium &amp; Literary Inspiration</strong>: J.R.R. Tolkien's Middle-earth mythology (The Silmarillion, The Hobbit, and The Lord of the Rings).</li>
+                            <li>• <strong>Community Manual &amp; Spoilers</strong>: <a href="https://angband.readthedocs.io/" target="_blank" rel="noopener noreferrer" style="color: var(--gold-bright);">https://angband.readthedocs.io/</a></li>
                         </ul>
                     </div>
                 </div>
                 <div class="guide-footer">
-                    <span>[1-6] Tabs • [Tab / Left / Right] Cycle Tabs • [Up/Down/Wheel] Scroll • [Esc] Back</span>
+                    <span>[1-7] Tabs • [Tab / Left / Right] Cycle Tabs • [Up/Down/Wheel] Scroll • [Esc] Back</span>
                     <button id="btn-guide-back" class="btn-gold-outline">[Esc / Enter] Return to Menu</button>
                 </div>
             </div>
@@ -649,12 +697,12 @@
     <script src="/js/vendor/GLTFLoader.js"></script>
 
     <!-- Client Subsystems -->
-    <script src="/js/audio.js?v=3.3"></script>
-    <script src="/js/terminal.js?v=3.3"></script>
-    <script src="/js/dungeon3d.js?v=3.3"></script>
-    <script src="/js/hud.js?v=3.3"></script>
-    <script src="/js/network.js?v=3.3"></script>
-    <script src="/js/input.js?v=3.3"></script>
-    <script src="/js/app.js?v=3.3"></script>
+    <script src="/js/audio.js?v=3.4"></script>
+    <script src="/js/terminal.js?v=3.4"></script>
+    <script src="/js/dungeon3d.js?v=3.4"></script>
+    <script src="/js/hud.js?v=3.4"></script>
+    <script src="/js/network.js?v=3.4"></script>
+    <script src="/js/input.js?v=3.4"></script>
+    <script src="/js/app.js?v=3.4"></script>
 </body>
 </html>

@@ -227,10 +227,10 @@ index 000000000..207cde9e9
 +endmacro()
 diff --git a/src/main-bridge.c b/src/main-bridge.c
 new file mode 100644
-index 000000000..2fed152b7
+index 000000000..03fb256e4
 --- /dev/null
 +++ b/src/main-bridge.c
-@@ -0,0 +1,1209 @@
+@@ -0,0 +1,1223 @@
 +/**
 + * \file main-bridge.c
 + * \brief JSON state bridge front end, for driving Angband from an external client.
@@ -261,6 +261,8 @@ index 000000000..2fed152b7
 +#include "monster.h"
 +#include "mon-desc.h"
 +#include "mon-timed.h"
++#include "mon-predicate.h"
++#include "mon-util.h"
 +#include "obj-desc.h"
 +#include "obj-gear.h"
 +#include "object.h"
@@ -925,6 +927,18 @@ index 000000000..2fed152b7
 +			bj_kv_int(fp, "hp", mon->hp);
 +			fputc(',', fp);
 +			bj_kv_int(fp, "hp_max", mon->maxhp);
++			if (monster_is_invisible(mon) || rf_has(mon->race->flags, RF_INVISIBLE)) {
++				fputc(',', fp);
++				bj_kv_bool(fp, "invisible", true);
++			}
++			if (mflag_has(mon->mflag, MFLAG_MARK)) {
++				fputc(',', fp);
++				bj_kv_bool(fp, "detected", true);
++			}
++			if (cave && (!square_isview(cave, mon->grid) || !square_isseen(cave, mon->grid) || !square_islit(cave, mon->grid))) {
++				fputc(',', fp);
++				bj_kv_bool(fp, "unlit", true);
++			}
 +			if (mon->m_timed[MON_TMD_SLEEP] > 0) {
 +				fputc(',', fp);
 +				bj_kv_bool(fp, "asleep", true);

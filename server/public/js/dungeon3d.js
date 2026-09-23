@@ -2631,6 +2631,7 @@ class Dungeon3D {
         let curY = 6;
 
         // Line 1: Status badge (e.g. 💤 Zzz... matching Godot MonsterModelResolver.cs:500-504)
+        const isSensed = m.invisible || m.detected || m.unlit;
         if (m.asleep) {
             ctx.font = '700 22px "Fira Code", monospace';
             ctx.textAlign = 'center';
@@ -2648,6 +2649,16 @@ class Dungeon3D {
             ctx.strokeText('⌖ TARGET ⌖', 192, curY + 18);
             ctx.fillStyle = '#ffd700';
             ctx.fillText('⌖ TARGET ⌖', 192, curY + 18);
+            curY += 22;
+        } else if (isSensed) {
+            ctx.font = '700 18px "Cinzel", serif';
+            ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 4;
+            const badgeText = m.invisible ? '👁 SENSED [INVIS]' : '👁 SENSED';
+            ctx.strokeText(badgeText, 192, curY + 18);
+            ctx.fillStyle = '#55ffff';
+            ctx.fillText(badgeText, 192, curY + 18);
             curY += 22;
         }
 
@@ -3841,6 +3852,82 @@ class Dungeon3D {
         });
     }
 
+    createFoggyMonsterAura(glyph, rawName, colorHex, modelHeight, isFloating) {
+        const group = new THREE.Group();
+        const mats = [];
+        const baseColor = new THREE.Color(colorHex || 0x66ccff);
+        const etherealColor = baseColor.clone().lerp(new THREE.Color(0x77eeff), 0.65);
+
+        // 1. Ethereal Shroud / Misty Apparition Envelope
+        const radius = Math.max(0.35, modelHeight * 0.40);
+        const shroudGeo = new THREE.SphereGeometry(radius, 16, 12);
+        shroudGeo.scale(1.0, 1.35, 1.0);
+        const shroudMat = new THREE.MeshBasicMaterial({
+            color: etherealColor,
+            transparent: true,
+            opacity: 0.38,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        mats.push(shroudMat);
+        const shroudMesh = new THREE.Mesh(shroudGeo, shroudMat);
+        shroudMesh.position.y = isFloating ? 0.35 + modelHeight * 0.45 : modelHeight * 0.45;
+        group.add(shroudMesh);
+
+        // 2. Inner Glowing Core / Silhouette
+        const coreGeo = new THREE.CylinderGeometry(radius * 0.35, radius * 0.70, Math.max(0.45, modelHeight * 0.75), 12);
+        const coreMat = new THREE.MeshBasicMaterial({
+            color: 0xddffff,
+            transparent: true,
+            opacity: 0.52,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        mats.push(coreMat);
+        const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+        coreMesh.position.y = shroudMesh.position.y;
+        group.add(coreMesh);
+
+        // 3. Floating Eye special ethereal pupil / eye ring
+        if (glyph === 'e') {
+            const eyeGeo = new THREE.TorusGeometry(radius * 0.65, 0.04, 8, 20);
+            const eyeMat = new THREE.MeshBasicMaterial({
+                color: 0xffd700,
+                transparent: true,
+                opacity: 0.85,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            mats.push(eyeMat);
+            const eyeMesh = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeMesh.position.y = shroudMesh.position.y;
+            group.add(eyeMesh);
+        }
+
+        // 4. Ground Sensed Ripple / Detection Beacon
+        const rippleGeo = new THREE.RingGeometry(0.12, 0.52, 24);
+        const rippleMat = new THREE.MeshBasicMaterial({
+            color: etherealColor,
+            transparent: true,
+            opacity: 0.45,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        mats.push(rippleMat);
+        const rippleMesh = new THREE.Mesh(rippleGeo, rippleMat);
+        rippleMesh.rotation.x = -Math.PI / 2;
+        rippleMesh.position.y = 0.03;
+        group.add(rippleMesh);
+
+        group.foggyMaterials = mats;
+        group.groundRipples = rippleMesh;
+        group.visible = false;
+
+        return group;
+    }
+
     createMonster3DEntity(m, isTargeted) {
         const root = new THREE.Group();
         const glyph = m.glyph || '?';
@@ -3909,6 +3996,13 @@ class Dungeon3D {
         root.glyph = glyph;
         root.race = m.race || m.name || '';
 
+        // Sensed / Invisible Foggy Misty Aura (depicts invisible or dark unlit sensed creatures)
+        const foggyAura = this.createFoggyMonsterAura(glyph, m.race || m.name, colorHex, modelHeight, isFloating);
+        root.add(foggyAura);
+        root.foggyAura = foggyAura;
+        root.foggyMaterials = foggyAura.foggyMaterials;
+        root.groundRipples = foggyAura.groundRipples;
+
         // Overhead Billboarding Nameplate & Health Bar (always clear of creature model with generous margin)
         const nameplate = this.createNameplateSprite(m, isTargeted);
         nameplate.position.set(0, modelHeight + 0.42, 0);
@@ -3922,6 +4016,11 @@ class Dungeon3D {
         const activeIds = new Set();
         const targetId = (player && player.target && player.target.id !== undefined) ? player.target.id.toString() : null;
 
+        const px = player ? player.x : 0;
+        const py = player ? player.y : 0;
+        const depth = player && player.depth !== undefined ? player.depth : 0;
+        const outdoors = depth === 0;
+
         monsters.forEach(m => {
             const id = m.id !== undefined ? m.id.toString() : `${m.x}_${m.y}_${m.glyph}`;
             activeIds.add(id);
@@ -3932,11 +4031,23 @@ class Dungeon3D {
             const wz = m.y * this.cellSize;
             const baseY = 0.0;
 
+            // Sensed / Invisible / Darkness Visibility Logic:
+            let isTileLit = outdoors;
+            if (!isTileLit && this.lastMap) {
+                const flag = this.getFlagAt(this.lastMap, m.x, m.y);
+                const inView = (flag & 0x2) !== 0;
+                const lighting = (flag >> 2) & 0x3;
+                const distSq = (m.x - px) ** 2 + (m.y - py) ** 2;
+                isTileLit = inView && (lighting < 3 || distSq <= (this.torchRadius + 1) ** 2);
+            }
+            const isSensed = !!(m.invisible || m.detected || m.unlit || !isTileLit);
+
             if (!entity) {
                 entity = this.createMonster3DEntity(m, isTargeted);
                 entity.position.set(wx, baseY, wz);
                 entity.targetPos = new THREE.Vector3(wx, baseY, wz);
                 entity.lastHp = m.hp;
+                entity.lastSensed = isSensed;
                 this.scene.add(entity);
                 this.monsters.set(id, entity);
             } else {
@@ -3987,8 +4098,8 @@ class Dungeon3D {
                     }
                 }
 
-                // Refresh nameplate if HP, status, or target state changed
-                if (entity.lastHp !== m.hp || entity.lastTargeted !== isTargeted || entity.lastAsleep !== m.asleep || entity.lastAfraid !== m.afraid) {
+                // Refresh nameplate if HP, status, target state, or sensed state changed
+                if (entity.lastHp !== m.hp || entity.lastTargeted !== isTargeted || entity.lastAsleep !== m.asleep || entity.lastAfraid !== m.afraid || entity.lastSensed !== isSensed) {
                     entity.remove(entity.nameplate);
                     entity.nameplate = this.createNameplateSprite(m, isTargeted);
                     entity.nameplate.position.set(0, entity.modelHeight + 0.42, 0);
@@ -3997,24 +4108,19 @@ class Dungeon3D {
                     entity.lastTargeted = isTargeted;
                     entity.lastAsleep = m.asleep;
                     entity.lastAfraid = m.afraid;
+                    entity.lastSensed = isSensed;
                 }
             }
 
-            // Strict Subterranean Visibility Invariant:
-            // Monster is only visible in 3D if outdoors, or if within player's lit field of view or torchlight
-            const px = player ? player.x : 0;
-            const py = player ? player.y : 0;
-            const depth = player && player.depth !== undefined ? player.depth : 0;
-            const outdoors = depth === 0;
-            let isVisible = outdoors;
-            if (!isVisible && this.lastMap) {
-                const flag = this.getFlagAt(this.lastMap, m.x, m.y);
-                const inView = (flag & 0x2) !== 0;
-                const lighting = (flag >> 2) & 0x3;
-                const distSq = (m.x - px) ** 2 + (m.y - py) ** 2;
-                isVisible = inView && (lighting < 3 || distSq <= (this.torchRadius + 1) ** 2);
+            // In Angband, all monsters emitted in frame.monsters are detected / sensed by the player
+            entity.visible = true;
+            if (isSensed) {
+                if (entity.creatureMesh) entity.creatureMesh.visible = false;
+                if (entity.foggyAura) entity.foggyAura.visible = true;
+            } else {
+                if (entity.creatureMesh) entity.creatureMesh.visible = true;
+                if (entity.foggyAura) entity.foggyAura.visible = false;
             }
-            entity.visible = isVisible;
         });
 
         for (const [id, entity] of this.monsters.entries()) {
@@ -4622,6 +4728,21 @@ class Dungeon3D {
             // Vertical hover/float
             const baseY = entity.isFloating ? 0.45 : 0.0;
             entity.position.y = baseY + Math.sin(monTime + entity.position.x * 2.0) * (entity.isFloating ? 0.08 : 0.02);
+
+            // Ethereal pulse & ripple rotation for sensed / invisible foggy aura
+            if (entity.foggyAura && entity.foggyAura.visible) {
+                const pulse = 0.38 + Math.sin(monTime * 2.2 + entity.position.x) * 0.16;
+                if (entity.foggyMaterials) {
+                    for (let mIdx = 0; mIdx < entity.foggyMaterials.length; mIdx++) {
+                        entity.foggyMaterials[mIdx].opacity = pulse;
+                    }
+                }
+                if (entity.groundRipples) {
+                    entity.groundRipples.rotation.z += delta * 0.9;
+                    const rScale = 1.0 + Math.sin(monTime * 1.8) * 0.12;
+                    entity.groundRipples.scale.set(rScale, rScale, 1.0);
+                }
+            }
         }
 
         // 3D Items continuous rotation & hover bob

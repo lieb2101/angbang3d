@@ -28,6 +28,23 @@ class SoundEngine {
         this.lastLowHpTime = 0;
         this.lastStatusTimes = {};
 
+        // Restore persisted volume and mute state
+        if (typeof window !== 'undefined' && window.localStorage) {
+            try {
+                const savedVol = localStorage.getItem('angband3d_volume');
+                if (savedVol !== null) {
+                    const parsed = parseFloat(savedVol);
+                    if (!isNaN(parsed) && parsed >= 0 && parsed <= 1.0) {
+                        this.masterVolume = parsed;
+                    }
+                }
+                const savedMuted = localStorage.getItem('angband3d_muted');
+                if (savedMuted !== null) {
+                    this.enabled = (savedMuted !== 'true');
+                }
+            } catch (_) {}
+        }
+
         // Pre-initialize audio graph and synthesize library
         try {
             this.init();
@@ -42,6 +59,42 @@ class SoundEngine {
                 window.addEventListener(evt, unlockHandler, { passive: true });
             });
         }
+    }
+
+    setMasterVolume(volume) {
+        this.masterVolume = Math.max(0.0, Math.min(1.0, parseFloat(volume) || 0.0));
+        if (typeof window !== 'undefined' && window.localStorage) {
+            try { localStorage.setItem('angband3d_volume', this.masterVolume.toString()); } catch (_) {}
+        }
+        if (this.ctx && this.masterGain) {
+            const effectiveVol = this.enabled ? this.masterVolume : 0.0;
+            this.masterGain.gain.setValueAtTime(effectiveVol, this.ctx.currentTime);
+        }
+        return this.masterVolume;
+    }
+
+    setMute(isMuted) {
+        this.enabled = !isMuted;
+        if (typeof window !== 'undefined' && window.localStorage) {
+            try { localStorage.setItem('angband3d_muted', (!this.enabled).toString()); } catch (_) {}
+        }
+        if (this.ctx && this.masterGain) {
+            const effectiveVol = this.enabled ? this.masterVolume : 0.0;
+            this.masterGain.gain.setValueAtTime(effectiveVol, this.ctx.currentTime);
+        }
+        return !this.enabled;
+    }
+
+    toggleMute() {
+        return this.setMute(this.enabled);
+    }
+
+    getMasterVolume() {
+        return this.masterVolume;
+    }
+
+    isMuted() {
+        return !this.enabled;
     }
 
     init() {
@@ -61,7 +114,7 @@ class SoundEngine {
             this.masterCompressor.release.setValueAtTime(0.12, this.ctx.currentTime);
 
             this.masterGain = this.ctx.createGain();
-            this.masterGain.gain.setValueAtTime(this.masterVolume, this.ctx.currentTime);
+            this.masterGain.gain.setValueAtTime(this.enabled ? this.masterVolume : 0.0, this.ctx.currentTime);
 
             this.masterCompressor.connect(this.masterGain);
             this.masterGain.connect(this.ctx.destination);

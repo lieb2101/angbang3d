@@ -422,6 +422,100 @@ html, body {
     color: #fff;
 }
 
+/* Sound Control Group & Volume Slider */
+.sound-control-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.sound-control-group:hover {
+    border-color: var(--gold-primary);
+    background: rgba(212, 175, 55, 0.08);
+}
+
+.sound-control-group .icon-btn {
+    background: transparent;
+    border: none;
+    padding: 2px 4px;
+    font-size: 11.5px;
+}
+
+.sound-control-group .icon-btn:hover {
+    background: transparent;
+    border: none;
+    color: var(--gold-primary);
+}
+
+.volume-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.volume-range-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 65px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    accent-color: #ffd700;
+    transition: background 0.15s ease;
+}
+
+.volume-range-slider:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.volume-range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ffd700;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(255, 215, 0, 0.8);
+    border: 1px solid #ffffff;
+    transition: transform 0.15s ease;
+}
+
+.volume-range-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.volume-range-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ffd700;
+    cursor: pointer;
+    box-shadow: 0 0 6px rgba(255, 215, 0, 0.8);
+    border: 1px solid #ffffff;
+    transition: transform 0.15s ease;
+}
+
+.volume-range-slider::-moz-range-thumb:hover {
+    transform: scale(1.2);
+}
+
+.volume-label {
+    font-family: var(--font-terminal);
+    font-size: 11px;
+    color: #cbd5e1;
+    min-width: 28px;
+    text-align: right;
+    user-select: none;
+}
+
 /* Bottom HUD (Health, Mana, Depth, Gold, Quick stats) */
 #hud-overlay {
     position: absolute;
@@ -656,6 +750,20 @@ html, body {
     font-weight: 700;
     background: rgba(212, 175, 55, 0.12);
     border-color: rgba(212, 175, 55, 0.35);
+}
+
+.pill-level {
+    color: #fbbf24;
+    font-weight: 700;
+    background: rgba(251, 191, 36, 0.12);
+    border-color: rgba(251, 191, 36, 0.35);
+}
+
+.pill-exp {
+    color: #c084fc;
+    font-weight: 600;
+    background: rgba(192, 132, 252, 0.10);
+    border-color: rgba(192, 132, 252, 0.30);
 }
 
 .pill-facing {
@@ -2232,5 +2340,87 @@ html, body {
 .pause-card {
     max-width: 680px;
 }
+
+.pause-audio-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 16px;
+    background: rgba(18, 24, 36, 0.75);
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-radius: 6px;
+    margin-bottom: 14px;
+}
+
+.pause-mute-btn {
+    background: rgba(14, 18, 28, 0.9);
+    border: 1px solid rgba(212, 175, 55, 0.4);
+    border-radius: 4px;
+    color: #ffd700;
+    font-family: var(--font-fantasy);
+    font-size: 13px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pause-mute-btn:hover {
+    background: rgba(30, 40, 60, 0.9);
+    border-color: #ffd700;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.35);
+}
+
+.pause-audio-toolbar .volume-slider-wrap {
+    gap: 10px;
+}
+
+.pause-audio-toolbar .volume-slider-wrap label {
+    font-family: var(--font-fantasy);
+    font-size: 13px;
+    color: #ffd700;
+    letter-spacing: 0.5px;
+}
+
+.pause-audio-toolbar .volume-range-slider {
+    width: 140px;
+    height: 6px;
+}
+
+.pause-audio-toolbar .volume-label {
+    font-size: 12px;
+    color: #ffffff;
+    min-width: 34px;
+}
+
+/* Splash Screen Credits Footer */
+.splash-credits-footer {
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(212, 175, 55, 0.2);
+    font-size: 11.5px;
+    color: #718096;
+    font-family: var(--font-terminal);
+    width: 100%;
+    text-align: center;
+    letter-spacing: 0.5px;
+}
+
+/* Guide Modal Enhancements */
+.guide-tab-content strong {
+    color: #ffd700;
+}
+
+.guide-list li {
+    padding-left: 4px;
+    border-left: 2px solid transparent;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.guide-list li:hover {
+    border-left-color: #ffd700;
+    padding-left: 8px;
+}
+
 
 

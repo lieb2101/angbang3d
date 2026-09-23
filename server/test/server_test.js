@@ -266,7 +266,35 @@ async function runTests() {
     assert(dungeonCss.includes('.load-toolbar'), 'dungeon.css must define .load-toolbar');
     console.log('  -> Save download buttons integrated in load list cards and in-game pause menu');
     console.log('  -> Save upload button, file picker, and drag-and-drop support verified');
-    console.log('  -> Keyboard hotkeys (U for upload, X/E for download) bound in load menu');
+    // Test 18: Sensed/Invisible 3D Depiction, Volume Controls, Splash Credits, Features & Pro Tips
+    console.log('Test 18: Sensed/Invisible 3D Depiction, Volume Controls, Splash Credits, Features & Pro Tips');
+    const dungeon3dJs = fs.readFileSync(path.join(__dirname, '../public/js/dungeon3d.js'), 'utf8');
+    const audioJs = fs.readFileSync(path.join(__dirname, '../public/js/audio.js'), 'utf8');
+    assert(dungeon3dJs.includes('createFoggyMonsterAura('), 'dungeon3d.js must implement createFoggyMonsterAura');
+    assert(dungeon3dJs.includes('isSensed'), 'dungeon3d.js must calculate isSensed for invisible and unlit/darkness detection');
+    assert(dungeon3dJs.includes('entity.foggyAura.visible = true;'), 'dungeon3d.js must display foggy aura when monster is sensed');
+    assert(dungeon3dJs.includes('👁 SENSED'), 'dungeon3d.js must add SENSED badge to monster nameplate');
+    assert(audioJs.includes('setMasterVolume('), 'audio.js must implement setMasterVolume');
+    assert(audioJs.includes('setMute('), 'audio.js must implement setMute');
+    assert(audioJs.includes('toggleMute()'), 'audio.js must implement toggleMute');
+    assert(indexRes.body.includes('id="volume-slider"'), 'volume-slider must be present in index.html');
+    assert(indexRes.body.includes('id="pause-volume-slider"'), 'pause-volume-slider must be present in index.html');
+    assert(indexRes.body.includes('id="btn-splash-features"'), 'btn-splash-features must be present in index.html');
+    assert(indexRes.body.includes('id="btn-splash-protips"'), 'btn-splash-protips must be present in index.html');
+    assert(indexRes.body.includes('id="btn-splash-credits"'), 'btn-splash-credits must be present in index.html');
+    assert(indexRes.body.includes('splash-credits-footer'), 'splash-credits-footer must be present in index.html');
+    assert(indexRes.body.includes('KEY FEATURES OF ANGBAND 3D'), 'Guide tab 1 must contain Key Features');
+    assert(indexRes.body.includes('PRO TIPS &amp; TACTICAL ROGUELIKE MASTERY') || indexRes.body.includes('PRO TIPS & TACTICAL ROGUELIKE MASTERY'), 'Guide tab 4 must contain Pro Tips');
+    assert(indexRes.body.includes('CREDITS &amp; ACKNOWLEDGMENTS') || indexRes.body.includes('CREDITS & ACKNOWLEDGMENTS'), 'Guide tab 6 must contain Credits');
+    assert(dungeonCss.includes('.sound-control-group'), 'dungeon.css must define .sound-control-group');
+    assert(dungeonCss.includes('.pause-audio-toolbar'), 'dungeon.css must define .pause-audio-toolbar');
+    assert(dungeonCss.includes('.splash-credits-footer'), 'dungeon.css must define .splash-credits-footer');
+    assert(freshAppJs.includes('btnSplashFeatures'), 'app.js must wire btnSplashFeatures');
+    assert(freshAppJs.includes('btnSplashProtips'), 'app.js must wire btnSplashProtips');
+    assert(freshAppJs.includes('syncAudioUI'), 'app.js must implement syncAudioUI');
+    console.log('  -> Sensed and invisible creatures rendered in 3D with glowing foggy misty aura and badge');
+    console.log('  -> Global volume slider and mute controls active in top bar and pause modal');
+    console.log('  -> Splash screen credits, key implementation features, and tactical pro tips guide verified');
 
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);

@@ -49,6 +49,26 @@ if (!fs.existsSync(WEB_DIR)) {
     try { fs.mkdirSync(WEB_DIR, { recursive: true }); } catch (_) {}
 }
 
+function getSaveDirs() {
+    const dirs = new Set();
+    if (SAVE_DIR) dirs.add(path.resolve(SAVE_DIR));
+    const engineDir = path.dirname(ENGINE_EXE);
+    const homeDir = process.env.HOME || '/app';
+    const candidates = [
+        SAVE_DIR,
+        path.join(engineDir, 'lib/save'),
+        path.join(engineDir, 'lib/user/save'),
+        path.join(homeDir, '.angband/Angband/save'),
+        path.join('/root/.angband/Angband/save'),
+        path.join('/app/.angband/Angband/save'),
+        path.join('/data/save')
+    ];
+    for (const c of candidates) {
+        if (c && fs.existsSync(c)) dirs.add(path.resolve(c));
+    }
+    return Array.from(dirs);
+}
+
 console.log(`[Angband3D Cloud] Engine executable: ${ENGINE_EXE}`);
 console.log(`[Angband3D Cloud] Save directory:    ${SAVE_DIR}`);
 console.log(`[Angband3D Cloud] Standalone dist:   ${DIST_DIR}`);
@@ -175,16 +195,41 @@ const server = http.createServer((req, res) => {
     // REST: List saves
     if (pathname === '/api/saves' && req.method === 'GET') {
         try {
-            const files = fs.readdirSync(SAVE_DIR);
+            const saveDirs = getSaveDirs();
             const saves = [];
-            for (const file of files) {
-                const fullPath = path.join(SAVE_DIR, file);
-                const stat = fs.statSync(fullPath);
-                if (stat.isFile()) {
-                    const meta = readSaveMetadata(fullPath);
-                    if (meta) {
-                        saves.push(meta);
-                    }
+            const seenFiles = new Set();
+
+            for (const sDir of saveDirs) {
+                if (!fs.existsSync(sDir)) continue;
+                const files = fs.readdirSync(sDir);
+                for (const file of files) {
+                    if (file.startsWith('.') || seenFiles.has(file)) continue;
+                    const fullPath = path.join(sDir, file);
+                    try {
+                        const stat = fs.statSync(fullPath);
+                        if (stat.isFile() && stat.size > 0) {
+                            let meta = readSaveMetadata(fullPath);
+                            if (!meta && stat.size >= 36) {
+                                meta = {
+                                    filename: file,
+                                    characterName: file,
+                                    description: file,
+                                    sizeBytes: stat.size,
+                                    lastModified: stat.mtime.toISOString(),
+                                };
+                            }
+                            if (meta) {
+                                seenFiles.add(file);
+                                // Ensure save is mirrored into primary SAVE_DIR if found in a secondary dir
+                                if (SAVE_DIR && sDir !== SAVE_DIR) {
+                                    try {
+                                        fs.copyFileSync(fullPath, path.join(SAVE_DIR, file));
+                                    } catch (_) {}
+                                }
+                                saves.push(meta);
+                            }
+                        }
+                    } catch (_) {}
                 }
             }
             saves.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
@@ -197,16 +242,107 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // REST: Download latest or current save direct fallback
+    if ((pathname === '/api/saves/latest' || pathname === '/api/saves-download-current') && req.method === 'GET') {
+        const charName = urlObj.searchParams.get('char');
+        const saveDirs = getSaveDirs();
+        let allSaves = [];
+
+        for (const sDir of saveDirs) {
+            if (!fs.existsSync(sDir)) continue;
+            const files = fs.readdirSync(sDir);
+            for (const file of files) {
+                if (file.startsWith('.')) continue;
+                const fullPath = path.join(sDir, file);
+                try {
+                    const stat = fs.statSync(fullPath);
+                    if (stat.isFile() && stat.size > 0) {
+                        let meta = readSaveMetadata(fullPath);
+                        if (!meta && stat.size >= 36) {
+                            meta = {
+                                filename: file,
+                                characterName: file,
+                                description: file,
+                                sizeBytes: stat.size,
+                                lastModified: stat.mtime.toISOString(),
+                            };
+                        }
+                        if (meta) {
+                            allSaves.push({ ...meta, fullPath });
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+
+        allSaves.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+        let match = null;
+        if (charName) {
+            match = allSaves.find(s =>
+                (s.characterName && s.characterName.toLowerCase() === charName.toLowerCase()) ||
+                (s.filename && s.filename.toLowerCase() === charName.toLowerCase()) ||
+                (s.filename && s.filename.toLowerCase().startsWith(charName.toLowerCase()))
+            );
+        }
+        if (!match && allSaves.length > 0) {
+            match = allSaves[0];
+        }
+
+        // Final fallback: check for any non-empty file in any save directory
+        if (!match) {
+            let newestMtime = 0;
+            for (const sDir of saveDirs) {
+                if (!fs.existsSync(sDir)) continue;
+                const files = fs.readdirSync(sDir);
+                for (const file of files) {
+                    if (file.startsWith('.')) continue;
+                    const fullPath = path.join(sDir, file);
+                    try {
+                        const stat = fs.statSync(fullPath);
+                        if (stat.isFile() && stat.size > 0 && stat.mtimeMs > newestMtime) {
+                            newestMtime = stat.mtimeMs;
+                            match = { fullPath, filename: file, characterName: charName || file };
+                        }
+                    } catch (_) {}
+                }
+            }
+        }
+
+        if (match && fs.existsSync(match.fullPath)) {
+            const outName = (match.characterName || match.filename).replace(/[^a-zA-Z0-9_-]/g, '_') + '.sav';
+            res.writeHead(200, {
+                'Content-Type': 'application/octet-stream',
+                'Content-Disposition': `attachment; filename="${outName}"`,
+            });
+            fs.createReadStream(match.fullPath).pipe(res);
+        } else {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'No save files available' }));
+        }
+        return;
+    }
+
     // REST: Download single save
     if (pathname.startsWith('/api/saves/') && req.method === 'GET') {
         const saveName = path.basename(pathname.substring('/api/saves/'.length));
-        const savePath = path.join(SAVE_DIR, saveName);
-        if (fs.existsSync(savePath) && fs.statSync(savePath).isFile()) {
+        const saveDirs = getSaveDirs();
+        let targetPath = null;
+
+        for (const sDir of saveDirs) {
+            const p = path.join(sDir, saveName);
+            if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+                targetPath = p;
+                break;
+            }
+        }
+
+        if (targetPath) {
+            const outName = saveName.endsWith('.sav') ? saveName : `${saveName}.sav`;
             res.writeHead(200, {
                 'Content-Type': 'application/octet-stream',
-                'Content-Disposition': `attachment; filename="${saveName}"`,
+                'Content-Disposition': `attachment; filename="${outName}"`,
             });
-            fs.createReadStream(savePath).pipe(res);
+            fs.createReadStream(targetPath).pipe(res);
         } else {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Save file not found' }));
@@ -426,6 +562,10 @@ wss.on('connection', (ws, request) => {
     const isNew = urlObj.searchParams.get('new') === '1' || urlObj.searchParams.get('reroll') === '1';
 
     const args = ['-mbridge'];
+    if (SAVE_DIR) {
+        args.push(`-dsave=${SAVE_DIR}`);
+        args.push(`-dpanic=${path.join(SAVE_DIR, 'panic')}`);
+    }
     if (save) {
         args.push(`-u${save}`);
     } else if (user) {
@@ -441,6 +581,7 @@ wss.on('connection', (ws, request) => {
     if (isNew) {
         const targetSlot = save || user || 'Adventurer';
         const panicDirs = [
+            path.join(SAVE_DIR, 'panic'),
             path.join(engineDir, 'lib/user/panic'),
             path.join(engineDir, 'lib/save/panic')
         ];

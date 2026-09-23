@@ -661,18 +661,41 @@ window.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function downloadSave(save = null) {
+    async function triggerFileDownload(url, defaultFilename) {
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                throw new Error(`Server returned HTTP ${resp.status}`);
+            }
+            const blob = await resp.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = defaultFilename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+            return true;
+        } catch (err) {
+            console.warn('[triggerFileDownload failed, fallback to direct anchor click]', err);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = defaultFilename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            return true;
+        }
+    }
+
+    async function downloadSave(save = null) {
         const target = save || (loadedSaves.length > 0 ? loadedSaves[selectedSaveIndex] : null);
         if (!target || !target.filename) return;
         if (audio) audio.playMenuSelect();
         const url = `/api/saves/${encodeURIComponent(target.filename)}`;
-        const a = document.createElement('a');
-        a.href = url;
         const outName = (target.characterName || target.filename).replace(/[^a-zA-Z0-9_-]/g, '_') + '.sav';
-        a.download = outName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        await triggerFileDownload(url, outName);
     }
 
     function downloadSelectedSave() {
@@ -738,33 +761,58 @@ window.addEventListener('DOMContentLoaded', () => {
 
     async function downloadCurrentSave() {
         if (audio) audio.playMenuSelect();
-        network.sendKey('C-s');
+        try {
+            network.sendCommand('save');
+            network.sendKey('C-s');
+        } catch (_) {}
+
         const banner = document.getElementById('message-text');
         if (banner) {
             banner.textContent = 'Saving progress and preparing export...';
         }
-        await new Promise(r => setTimeout(r, 300));
+
+        // Allow engine time to flush authoritative savefile to disk
+        await new Promise(r => setTimeout(r, 600));
+
         try {
-            const res = await fetch('/api/saves');
-            if (!res.ok) throw new Error('Failed to retrieve saves list from server');
-            const data = await res.json();
-            const saves = data.saves || [];
             const currentChar = (lastFrame && lastFrame.player && lastFrame.player.name)
                 ? lastFrame.player.name.trim()
                 : (network.currentChar || 'Adventurer');
-            let match = saves.find(s => s.characterName && s.characterName.toLowerCase() === currentChar.toLowerCase());
-            if (!match && saves.length > 0) {
-                match = saves[0];
+
+            const res = await fetch('/api/saves');
+            let matchedSave = null;
+            if (res.ok) {
+                const data = await res.json();
+                const saves = data.saves || [];
+                matchedSave = saves.find(s =>
+                    (s.characterName && s.characterName.toLowerCase() === currentChar.toLowerCase()) ||
+                    (s.filename && s.filename.toLowerCase() === currentChar.toLowerCase()) ||
+                    (s.filename && s.filename.toLowerCase().startsWith(currentChar.toLowerCase()))
+                );
+                if (!matchedSave && saves.length > 0) {
+                    matchedSave = saves[0];
+                }
             }
-            if (match) {
-                downloadSave(match);
-                if (banner) banner.textContent = `Exported '${match.characterName || match.filename}.sav' successfully!`;
+
+            const outName = `${currentChar.replace(/[^a-zA-Z0-9_-]/g, '_')}.sav`;
+            if (matchedSave) {
+                await downloadSave(matchedSave);
+                if (banner) banner.textContent = `Exported '${matchedSave.characterName || matchedSave.filename}.sav' successfully!`;
             } else {
-                alert('No save file found on server for current character. Please try saving again.');
+                // Direct fallback: Download directly from /api/saves/latest
+                const fallbackUrl = `/api/saves/latest?char=${encodeURIComponent(currentChar)}`;
+                await triggerFileDownload(fallbackUrl, outName);
+                if (banner) banner.textContent = `Exported '${currentChar}.sav' successfully!`;
             }
         } catch (err) {
             console.error('[DownloadCurrentSave Error]', err);
-            alert(`Error exporting save: ${err.message}`);
+            // Fallback direct download
+            const currentChar = (lastFrame && lastFrame.player && lastFrame.player.name)
+                ? lastFrame.player.name.trim()
+                : (network.currentChar || 'Adventurer');
+            const fallbackUrl = `/api/saves/latest?char=${encodeURIComponent(currentChar)}`;
+            const outName = `${currentChar.replace(/[^a-zA-Z0-9_-]/g, '_')}.sav`;
+            await triggerFileDownload(fallbackUrl, outName);
         }
         resumeGame();
     }
@@ -1095,8 +1143,101 @@ window.addEventListener('DOMContentLoaded', () => {
     const btnSplashGuide = document.getElementById('btn-splash-guide');
     if (btnSplashGuide) btnSplashGuide.addEventListener('click', () => showGuide(0, 'splash'));
 
+    const btnSplashFeatures = document.getElementById('btn-splash-features');
+    if (btnSplashFeatures) btnSplashFeatures.addEventListener('click', () => showGuide(1, 'splash'));
+
+    const btnSplashProtips = document.getElementById('btn-splash-protips');
+    if (btnSplashProtips) btnSplashProtips.addEventListener('click', () => showGuide(4, 'splash'));
+
     const btnSplashCredits = document.getElementById('btn-splash-credits');
-    if (btnSplashCredits) btnSplashCredits.addEventListener('click', () => showGuide(5, 'splash'));
+    if (btnSplashCredits) btnSplashCredits.addEventListener('click', () => showGuide(6, 'splash'));
+
+    // Audio Volume & Mute Control Synchronization
+    function syncAudioUI() {
+        if (!audio) return;
+        const isMuted = audio.isMuted();
+        const volPct = Math.round(audio.getMasterVolume() * 100);
+
+        const btnSound = document.getElementById('btn-sound');
+        if (btnSound) {
+            btnSound.textContent = isMuted ? '🔇 Muted' : '🔊 Sound';
+            btnSound.title = isMuted ? 'Unmute Sound' : 'Mute Sound';
+        }
+
+        const volSlider = document.getElementById('volume-slider');
+        if (volSlider) volSlider.value = volPct;
+
+        const volLabel = document.getElementById('volume-label');
+        if (volLabel) volLabel.textContent = isMuted ? '0%' : `${volPct}%`;
+
+        const btnPauseMute = document.getElementById('btn-pause-mute');
+        if (btnPauseMute) {
+            btnPauseMute.textContent = isMuted ? '🔇 Sound: OFF' : '🔊 Sound: ON';
+        }
+
+        const pauseVolSlider = document.getElementById('pause-volume-slider');
+        if (pauseVolSlider) pauseVolSlider.value = volPct;
+
+        const pauseVolLabel = document.getElementById('pause-volume-label');
+        if (pauseVolLabel) pauseVolLabel.textContent = isMuted ? '0%' : `${volPct}%`;
+    }
+    window.__syncAudioUI = syncAudioUI;
+
+    const btnSound = document.getElementById('btn-sound');
+    if (btnSound) {
+        btnSound.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (audio) {
+                audio.unlock();
+                audio.toggleMute();
+                syncAudioUI();
+            }
+        });
+    }
+
+    const volSlider = document.getElementById('volume-slider');
+    if (volSlider) {
+        volSlider.addEventListener('input', (e) => {
+            e.stopPropagation();
+            if (audio) {
+                audio.unlock();
+                const val = parseInt(volSlider.value, 10) / 100;
+                audio.setMasterVolume(val);
+                if (audio.isMuted() && val > 0) audio.setMute(false);
+                syncAudioUI();
+            }
+        });
+        volSlider.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    const btnPauseMute = document.getElementById('btn-pause-mute');
+    if (btnPauseMute) {
+        btnPauseMute.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (audio) {
+                audio.unlock();
+                audio.toggleMute();
+                syncAudioUI();
+            }
+        });
+    }
+
+    const pauseVolSlider = document.getElementById('pause-volume-slider');
+    if (pauseVolSlider) {
+        pauseVolSlider.addEventListener('input', (e) => {
+            e.stopPropagation();
+            if (audio) {
+                audio.unlock();
+                const val = parseInt(pauseVolSlider.value, 10) / 100;
+                audio.setMasterVolume(val);
+                if (audio.isMuted() && val > 0) audio.setMute(false);
+                syncAudioUI();
+            }
+        });
+        pauseVolSlider.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    syncAudioUI();
 
     if (splashOverlay) {
         splashOverlay.addEventListener('click', (e) => {

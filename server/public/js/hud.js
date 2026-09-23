@@ -1056,7 +1056,7 @@ class WebHUD {
             this.footerCharIdentity.textContent = `${player.name || 'Hero'} the ${player.race || 'Human'} ${player.class || 'Warrior'}`;
         }
         if (this.footerLevel) {
-            this.footerLevel.textContent = `Lvl ${player.level || 1}`;
+            this.footerLevel.textContent = `⭐ Lvl ${player.level || 1}`;
         }
         if (this.footerHp) {
             this.footerHp.textContent = `HP ${curHp}/${maxHp}`;
@@ -1079,7 +1079,9 @@ class WebHUD {
         }
         if (this.footerExp) {
             const expNext = player.exp_next;
-            this.footerExp.textContent = `EXP ${player.exp || 0}${expNext ? `/${expNext}` : ''}`;
+            const expVal = (player.exp !== undefined) ? player.exp.toLocaleString() : '0';
+            const nextStr = (expNext !== undefined && expNext > 0) ? `/${expNext.toLocaleString()}` : '';
+            this.footerExp.textContent = `✨ EXP ${expVal}${nextStr}`;
         }
         if (this.footerPlace) {
             this.footerPlace.textContent = depth === 0 ? 'Town' : `DL ${depth} (${depth * 50}ft)`;

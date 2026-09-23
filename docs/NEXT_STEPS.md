@@ -85,6 +85,17 @@
          - In-game `Save Game Manager` menu: archive saves to timestamped backups (`lib/save/backups/`), export `.sav` files directly to user Downloads, and restore backups with `SaveVNLA` binary validation.
          - Bi-directional Cloud Sync: Upload local characters to cloud server and synchronize cloud characters down to local disk.
        - In-game Standalone Package Download: Menu action to download the offline game bundle (`.zip`) directly from within the game.
+   - **Sensed & Invisible Creature 3D Depiction (`main-bridge.c`, `dungeon3d.js`)**:
+      - Engine bridge emits `invisible`, `detected` (`MFLAG_MARK`), and `unlit` (outside direct FOV/torchlight) flags.
+      - Multi-layered procedural foggy aura in Three.js: glowing ethereal shroud, luminous inner core, floating eye iris torus, and rotating ground detection ripple.
+      - Sensed monsters depicted with pulsing ghostly mist and `👁 SENSED` / `👁 SENSED [INVIS]` overhead nameplate badges.
+   - **Global Audio Controls & Mute (`audio.js`, `index.html`, `dungeon.css`, `app.js`)**:
+      - Smooth volume range sliders in top bar and pause menu with percentage labels and `localStorage` persistence.
+      - Instant global mute button and <kbd>Ctrl+M</kbd> shortcut with bidirectional UI synchronization.
+   - **Splash Screen Presentation, Credits, Key Features & Pro Tips (`index.html`, `dungeon.css`, `app.js`)**:
+      - Ornate splash credits footer and quick-access navigation buttons (`[1] Key Features`, `[4] Guide`, `[5] Pro Tips`, `[6] Credits`).
+      - Comprehensive technical features tab outlining headless C engine, zero-turn yaw, save portability, and dual-engine architecture.
+      - Roguelike pro tips guide covering corridor funneling, lighting & infravision, speed imperatives, emergency teleportation, stair scouting, and stat drain recovery.
    - **Graphics & Spatial Occlusion Culling (`DungeonWorld.cs`)**:
       - Radial horizon culling ($R \le 28$ tiles) eliminating instance buffer updates outside the maximum visible fog horizon.
 

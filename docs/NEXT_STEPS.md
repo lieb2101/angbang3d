@@ -260,9 +260,9 @@ The project has achieved the **Tier 4 Visual & Environmental Overhaul**: deliver
   - Exclusively displays `store-actions-bar` (`💰 Buy (p)`, `🏷 Sell (s)`, `🔍 Examine (i)`, `🚪 Exit (Esc)`) and hides generic advance/creation buttons.
   - Guarded auto-space flushing so spaces are NEVER auto-sent while inside a store overlay (`!isOverlay`), preventing store interactions from being unintentionally cancelled or dismissed.
 - **Verification**: 11/11 engine bridge smoke tests, 11/11 node server unit tests, 0 warnings dotnet build across client/angband3d.csproj. Live deployment verified on Google Cloud Run:
-  - `angband3d-cloud` (us-central1): Revision `angband3d-cloud-00047-6rl` (https://angband3d-cloud-564958309282.us-central1.run.app)
-  - `angband3d-cloud` (us-east1): Revision `angband3d-cloud-00008-2gt` (https://angband3d-cloud-564958309282.us-east1.run.app)
-  - `angband3d-web` (us-central1): Revision `angband3d-web-00005-djt` (https://angband3d-web-564958309282.us-central1.run.app)
+  - `angband3d-cloud` (us-central1): Revision `angband3d-cloud-00058-sgw` (https://angband3d-cloud-564958309282.us-central1.run.app)
+  - `angband3d-cloud` (us-east1): Revision `angband3d-cloud-00018-472` (https://angband3d-cloud-564958309282.us-east1.run.app)
+  - `angband3d-web` (us-central1): Revision `angband3d-web-00016-d49` (https://angband3d-web-564958309282.us-central1.run.app)
   - Live WebSocket handshake, health check, save API, store entry, and gameplay action verified via automated cloud integration test suites.
 
 ---

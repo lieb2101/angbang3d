@@ -1345,6 +1345,88 @@ class Dungeon3D {
         loadWeapon('bow', '/assets/models/weapons/Bow_Wooden.obj', 0.085, { x: 0.15, y: Math.PI / 2, z: 0 }, { x: 0, y: -0.02, z: 0.04 });
         loadWeapon('shield', '/assets/models/weapons/Shield_Round.obj', 0.085, { x: 0.18, y: 0.35, z: 0 }, { x: 0, y: -0.03, z: 0 });
 
+        // Procedural 3D Whip for Viewmodel (Braided Leather Bullwhip with Brass Pommel & Collar)
+        const createWhipViewmodelMesh = () => {
+            const whipGroup = new THREE.Group();
+
+            const handleLeatherMat = new THREE.MeshStandardMaterial({
+                color: 0x3a2012,
+                roughness: 0.85,
+                metalness: 0.10
+            });
+            const brassMat = new THREE.MeshStandardMaterial({
+                color: 0xd4a034,
+                roughness: 0.28,
+                metalness: 0.85
+            });
+            const lashMat = new THREE.MeshStandardMaterial({
+                color: 0x24140b,
+                roughness: 0.80,
+                metalness: 0.12
+            });
+            const popperMat = new THREE.MeshStandardMaterial({
+                color: 0x9c7a52,
+                roughness: 0.90,
+                metalness: 0.05
+            });
+
+            // 1. Grip / Handle (Grip length 0.22m, held in hand)
+            const handleGeom = new THREE.CylinderGeometry(0.016, 0.018, 0.22, 12);
+            const handleMesh = new THREE.Mesh(handleGeom, handleLeatherMat);
+            whipGroup.add(handleMesh);
+
+            // 2. Brass Pommel & Wrist Loop
+            const pommelGeom = new THREE.SphereGeometry(0.024, 12, 8);
+            const pommelMesh = new THREE.Mesh(pommelGeom, brassMat);
+            pommelMesh.position.set(0, -0.115, 0);
+            whipGroup.add(pommelMesh);
+
+            const loopGeom = new THREE.TorusGeometry(0.022, 0.005, 8, 16);
+            const loopMesh = new THREE.Mesh(loopGeom, handleLeatherMat);
+            loopMesh.position.set(0, -0.135, 0);
+            loopMesh.rotation.x = Math.PI / 2;
+            whipGroup.add(loopMesh);
+
+            // 3. Brass Collar at hilt
+            const collarGeom = new THREE.CylinderGeometry(0.020, 0.018, 0.03, 12);
+            const collarMesh = new THREE.Mesh(collarGeom, brassMat);
+            collarMesh.position.set(0, 0.115, 0);
+            whipGroup.add(collarMesh);
+
+            // 4. Braided Flexible Leather Lash (Curving forward and downward gracefully)
+            const curvePoints = [
+                new THREE.Vector3(0, 0.125, 0),
+                new THREE.Vector3(0.015, 0.18, -0.04),
+                new THREE.Vector3(0.035, 0.23, -0.12),
+                new THREE.Vector3(0.045, 0.21, -0.22),
+                new THREE.Vector3(0.030, 0.13, -0.32),
+                new THREE.Vector3(0.005, -0.01, -0.40),
+                new THREE.Vector3(-0.025, -0.18, -0.46),
+                new THREE.Vector3(-0.040, -0.34, -0.50),
+            ];
+            const curve = new THREE.CatmullRomCurve3(curvePoints);
+            const lashGeom = new THREE.TubeGeometry(curve, 32, 0.012, 8, false);
+            const lashMesh = new THREE.Mesh(lashGeom, lashMat);
+            whipGroup.add(lashMesh);
+
+            // 5. Whip Fall & Popper/Cracker (Thinner tip trailing at the end)
+            const tipPoints = [
+                new THREE.Vector3(-0.040, -0.34, -0.50),
+                new THREE.Vector3(-0.048, -0.44, -0.52),
+                new THREE.Vector3(-0.052, -0.52, -0.53)
+            ];
+            const tipCurve = new THREE.CatmullRomCurve3(tipPoints);
+            const tipGeom = new THREE.TubeGeometry(tipCurve, 12, 0.006, 6, false);
+            const tipMesh = new THREE.Mesh(tipGeom, popperMat);
+            whipGroup.add(tipMesh);
+
+            return whipGroup;
+        };
+
+        const whipObj = createWhipViewmodelMesh();
+        whipObj.rotation.set(18 * Math.PI / 180, -14 * Math.PI / 180, 6 * Math.PI / 180);
+        this.weaponCache.set('whip', whipObj);
+
         // Item templates
         const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x553300, metalness: 0.95, roughness: 0.18 });
         const potionMat = new THREE.MeshStandardMaterial({ color: 0xff3355, emissive: 0xbb1133, emissiveIntensity: 1.2, roughness: 0.15, metalness: 0.2 });
@@ -1501,7 +1583,9 @@ class Dungeon3D {
         const lowerB = (bowItem || '').toLowerCase();
 
         if (lowerW.length > 0) {
-            if (lowerW.includes('dagger') || lowerW.includes('knife') || lowerW.includes('blade') || lowerW.includes('main gauche') || lowerW.includes('misericorde')) {
+            if (lowerW.includes('whip') || lowerW.includes('bullwhip') || lowerW.includes('scourge') || lowerW.includes('cat-o')) {
+                key = 'whip';
+            } else if (lowerW.includes('dagger') || lowerW.includes('knife') || lowerW.includes('blade') || lowerW.includes('main gauche') || lowerW.includes('misericorde')) {
                 key = 'dagger';
             } else if (lowerW.includes('claymore') || lowerW.includes('two-handed') || lowerW.includes('great sword') || lowerW.includes('executioner') || lowerW.includes('zweihander')) {
                 key = 'claymore';
@@ -4234,7 +4318,7 @@ class Dungeon3D {
         // Weapons: Hammers & Maces
         else if (lowerName.includes('war hammer') || lowerName.includes('great hammer') || lowerName.includes('mattock')) {
             tmpl = this.itemTemplates.get('hammer_double') || this.itemTemplates.get('hammer');
-        } else if (lowerName.includes('hammer') || lowerName.includes('mace') || lowerName.includes('flail') || lowerName.includes('star') || lowerName.includes('club') || lowerName.includes('cudgel') || lowerName.includes('whip')) {
+        } else if (lowerName.includes('hammer') || lowerName.includes('mace') || lowerName.includes('flail') || lowerName.includes('star') || lowerName.includes('club') || lowerName.includes('cudgel')) {
             tmpl = this.itemTemplates.get('hammer');
         }
         // Weapons: Staves, Spears & Polearms
@@ -4317,6 +4401,32 @@ class Dungeon3D {
                     bootsGroup.add(upper);
                 });
                 mesh = bootsGroup;
+            }
+            // Whips, Bullwhips & Scourges (Floor Coiled Whip)
+            else if (lowerName.includes('whip') || lowerName.includes('scourge') || lowerName.includes('bullwhip')) {
+                const whipFloorGroup = new THREE.Group();
+                const leatherMat = new THREE.MeshStandardMaterial({ color: 0x3a2012, roughness: 0.85, metalness: 0.10 });
+                const brassMat = new THREE.MeshStandardMaterial({ color: 0xd4a034, roughness: 0.28, metalness: 0.85 });
+
+                // Handle resting on floor
+                const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.22, 10), leatherMat);
+                handle.rotation.z = Math.PI / 2;
+                handle.position.set(-0.06, 0.018, 0.10);
+                whipFloorGroup.add(handle);
+
+                const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 8), brassMat);
+                pommel.position.set(-0.17, 0.018, 0.10);
+                whipFloorGroup.add(pommel);
+
+                // Coiled lash (3 concentric rings on the ground)
+                [0.07, 0.11, 0.15].forEach((r, idx) => {
+                    const coil = new THREE.Mesh(new THREE.TorusGeometry(r, 0.012 - idx * 0.002, 8, 20), leatherMat);
+                    coil.rotation.x = Math.PI / 2;
+                    coil.position.set(0.04, 0.014 + idx * 0.004, -0.01);
+                    whipFloorGroup.add(coil);
+                });
+
+                mesh = whipFloorGroup;
             }
             // Torches & Light Sources (Glyph '~')
             else if (g === '~' || lowerName.includes('torch') || lowerName.includes('lantern')) {

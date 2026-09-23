@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/dungeon.css?v=3.2">
+    <link rel="stylesheet" href="/css/dungeon.css?v=3.3">
 </head>
 <body>
     <div id="app-container">
@@ -404,6 +404,15 @@
                     <div class="main-menu-subtitle">Select an adventurer from your realm archive to continue the descent</div>
                 </div>
 
+                <div class="load-toolbar">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <button id="btn-save-upload" class="btn-gold-outline" title="Upload an Angband .sav file from your computer">📤 Upload Save (.sav)</button>
+                        <input type="file" id="file-save-upload" accept=".sav,*" style="display: none;">
+                        <span id="save-upload-status" class="save-status-msg"></span>
+                    </div>
+                    <span style="font-size: 11.5px; color: #8892b0; font-family: var(--font-terminal);">Drag &amp; drop .sav files here</span>
+                </div>
+
                 <div id="load-save-list" class="load-save-list">
                     <div class="save-loading-state">
                         <div class="spinner"></div>
@@ -412,7 +421,7 @@
                 </div>
 
                 <div class="load-footer">
-                    <span>[↑/↓] Navigate &nbsp;•&nbsp; [Enter] Load Selected &nbsp;•&nbsp; [Del / D] Delete Save &nbsp;•&nbsp; [Esc] Back</span>
+                    <span>[↑/↓] Navigate &nbsp;•&nbsp; [Enter] Load Selected &nbsp;•&nbsp; [📥 Download] &nbsp;•&nbsp; [Del / D] Delete &nbsp;•&nbsp; [Esc] Back</span>
                     <button id="btn-load-back" class="btn-gold-outline">[Esc] Back</button>
                 </div>
             </div>
@@ -448,49 +457,57 @@
                             <span class="menu-desc">Commit your hero's progress immediately to the server.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-pause-load" data-index="2">
+                    <button class="menu-option-btn" id="btn-pause-download" data-index="2">
                         <span class="menu-bullet">►</span>
                         <span class="menu-num">[3]</span>
+                        <div class="menu-text-col">
+                            <span class="menu-label">Download Current Save (.sav)</span>
+                            <span class="menu-desc">Export and download a local copy of your current character.</span>
+                        </div>
+                    </button>
+                    <button class="menu-option-btn" id="btn-pause-load" data-index="3">
+                        <span class="menu-bullet">►</span>
+                        <span class="menu-num">[4]</span>
                         <div class="menu-text-col">
                             <span class="menu-label">Load Other Character...</span>
                             <span class="menu-desc">Switch to an alternate adventurer or previous checkpoint.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-pause-random" data-index="3">
+                    <button class="menu-option-btn" id="btn-pause-random" data-index="4">
                         <span class="menu-bullet">►</span>
-                        <span class="menu-num">[4]</span>
+                        <span class="menu-num">[5]</span>
                         <div class="menu-text-col">
                             <span class="menu-label">Start Over (Random Hero)</span>
                             <span class="menu-desc">Roll a brand-new ready-to-play adventurer from scratch.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-pause-custom" data-index="4">
+                    <button class="menu-option-btn" id="btn-pause-custom" data-index="5">
                         <span class="menu-bullet">►</span>
-                        <span class="menu-num">[5]</span>
+                        <span class="menu-num">[6]</span>
                         <div class="menu-text-col">
                             <span class="menu-label">Start Over (Custom Hero)</span>
                             <span class="menu-desc">Choose race, class, and roll stats in the classic wizard.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-pause-guide" data-index="5">
+                    <button class="menu-option-btn" id="btn-pause-guide" data-index="6">
                         <span class="menu-bullet">►</span>
-                        <span class="menu-num">[6]</span>
+                        <span class="menu-num">[7]</span>
                         <div class="menu-text-col">
                             <span class="menu-label">Game Guide &amp; Primer</span>
                             <span class="menu-desc">Controls, combat, spells, and survival handbook.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-pause-fullscreen" data-index="6">
+                    <button class="menu-option-btn" id="btn-pause-fullscreen" data-index="7">
                         <span class="menu-bullet">►</span>
-                        <span class="menu-num">[7]</span>
+                        <span class="menu-num">[8]</span>
                         <div class="menu-text-col">
                             <span class="menu-label">Toggle Fullscreen (F11)</span>
                             <span class="menu-desc">Expand viewport to fill your display.</span>
                         </div>
                     </button>
-                    <button class="menu-option-btn" id="btn-pause-quit" data-index="7">
+                    <button class="menu-option-btn" id="btn-pause-quit" data-index="8">
                         <span class="menu-bullet">►</span>
-                        <span class="menu-num">[8]</span>
+                        <span class="menu-num">[9]</span>
                         <div class="menu-text-col">
                             <span class="menu-label">Save &amp; Quit to Main Menu</span>
                             <span class="menu-desc">Safely save your adventurer and return to the main title screen.</span>
@@ -499,7 +516,7 @@
                 </div>
 
                 <div class="main-menu-footer">
-                    <span>[↑/↓] Navigate &nbsp;•&nbsp; [1-8] Quick Select &nbsp;•&nbsp; [Enter/Click] Choose &nbsp;•&nbsp; [Esc] Resume Game</span>
+                    <span>[↑/↓] Navigate &nbsp;•&nbsp; [1-9] Quick Select &nbsp;•&nbsp; [Enter/Click] Choose &nbsp;•&nbsp; [Esc] Resume Game</span>
                 </div>
             </div>
         </div>
@@ -632,12 +649,12 @@
     <script src="/js/vendor/GLTFLoader.js"></script>
 
     <!-- Client Subsystems -->
-    <script src="/js/audio.js?v=3.2"></script>
-    <script src="/js/terminal.js?v=3.2"></script>
-    <script src="/js/dungeon3d.js?v=3.2"></script>
-    <script src="/js/hud.js?v=3.2"></script>
-    <script src="/js/network.js?v=3.2"></script>
-    <script src="/js/input.js?v=3.2"></script>
-    <script src="/js/app.js?v=3.2"></script>
+    <script src="/js/audio.js?v=3.3"></script>
+    <script src="/js/terminal.js?v=3.3"></script>
+    <script src="/js/dungeon3d.js?v=3.3"></script>
+    <script src="/js/hud.js?v=3.3"></script>
+    <script src="/js/network.js?v=3.3"></script>
+    <script src="/js/input.js?v=3.3"></script>
+    <script src="/js/app.js?v=3.3"></script>
 </body>
 </html>

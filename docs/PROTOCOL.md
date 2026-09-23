@@ -213,14 +213,14 @@ The bridge protocol can be carried over WebSockets (`ws://` or `wss://`) through
   - Server emits JSON text frames (`{"t":"hello",...}`, `{"t":"frame",...}`, `{"t":"bye",...}`).
 - **Keep-alive**: Ping/pong heartbeat frames measure roundtrip network latency (displayed on the client HUD).
 
-### REST Endpoints
+### REST Endpoints & Save Portability
 The cloud daemon also exposes REST endpoints alongside the WebSocket gateway:
 - `GET /health` — Service uptime and engine health status.
 - `GET /download/angband3d-standalone.zip` — Download pre-packaged standalone client & engine zip.
-- `GET /api/saves` — List saved characters with metadata.
-- `GET /api/saves/:name` — Download a binary `.sav` file.
-- `POST /api/saves/upload` — Upload a validated `SaveVNLA` binary save file.
-- `DELETE /api/saves/:name` — Delete a save slot.
+- `GET /api/saves` — List saved characters with metadata (`name`, `file`, `size`, `mtime`).
+- `GET /api/saves/:filename` — Download a binary `.sav` file (`application/octet-stream`, `Content-Disposition: attachment`).
+- `POST /api/saves/upload` — Upload a validated binary save file (supports raw binary body with `?name=<slot>` query param or `multipart/form-data`). Must begin with the 8-byte magic header `SaveVNLA` (ASCII `0x53 0x61 0x76 0x65 0x56 0x4E 0x4C 0x41`).
+- `DELETE /api/saves/:filename` — Delete a save slot.
 
 ## Compatibility
 

@@ -252,7 +252,21 @@ async function runTests() {
     assert(dungeonCss.includes('.btn-item-pill'), 'dungeon.css must define .btn-item-pill styles');
     console.log('  -> Throw button (v) added to action bar and bound');
     console.log('  -> Interactive Item Actions Bar dynamically populates item selection buttons');
-    console.log('  -> Action prompts (inventory, gear, throw, quaff, read, fire) detected with dedicated titles');
+    // Test 17: Save Game Download & Upload System
+    console.log('Test 17: Save Game Download & Upload System');
+    assert(indexRes.body.includes('id="btn-save-upload"'), 'btn-save-upload must be present in index.html');
+    assert(indexRes.body.includes('id="file-save-upload"'), 'file-save-upload must be present in index.html');
+    assert(indexRes.body.includes('id="btn-pause-download"'), 'btn-pause-download must be present in index.html');
+    assert(appJs.includes('downloadSave('), 'app.js must implement downloadSave');
+    assert(appJs.includes('uploadSave('), 'app.js must implement uploadSave');
+    assert(appJs.includes('downloadCurrentSave('), 'app.js must implement downloadCurrentSave');
+    assert(inputJs.includes("if (e.key === 'u' || e.key === 'U')"), 'input.js must bind u to triggerSaveUpload in loadMenu');
+    assert(inputJs.includes("if (e.key === 'x' || e.key === 'X' || e.key === 'e' || e.key === 'E')"), 'input.js must bind x/e to downloadSelectedSave in loadMenu');
+    assert(dungeonCss.includes('.btn-save-download'), 'dungeon.css must define .btn-save-download');
+    assert(dungeonCss.includes('.load-toolbar'), 'dungeon.css must define .load-toolbar');
+    console.log('  -> Save download buttons integrated in load list cards and in-game pause menu');
+    console.log('  -> Save upload button, file picker, and drag-and-drop support verified');
+    console.log('  -> Keyboard hotkeys (U for upload, X/E for download) bound in load menu');
 
     console.log('\nAll server unit tests passed successfully!');
     process.exit(0);

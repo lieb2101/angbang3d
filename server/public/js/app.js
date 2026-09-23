@@ -584,12 +584,13 @@ window.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="save-item-actions">
                     <button class="btn-save-load btn-gold">Load [Enter]</button>
+                    <button class="btn-save-download btn-gold-outline" title="Download local copy of save (.sav)">📥 Download</button>
                     <button class="btn-save-delete btn-danger-outline" title="Delete save file">🗑 Delete</button>
                 </div>
             `;
 
             card.addEventListener('click', (e) => {
-                if (e.target.closest('.btn-save-delete')) return;
+                if (e.target.closest('.btn-save-delete') || e.target.closest('.btn-save-download')) return;
                 selectedSaveIndex = idx;
                 updateSaveSelectionUI();
                 loadSelectedSave(save);
@@ -605,6 +606,14 @@ window.addEventListener('DOMContentLoaded', () => {
                 btnLoad.addEventListener('click', (e) => {
                     e.stopPropagation();
                     loadSelectedSave(save);
+                });
+            }
+
+            const btnDownload = card.querySelector('.btn-save-download');
+            if (btnDownload) {
+                btnDownload.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    downloadSave(save);
                 });
             }
 
@@ -650,6 +659,114 @@ window.addEventListener('DOMContentLoaded', () => {
             isNew: false,
             autoBirth: false
         });
+    }
+
+    function downloadSave(save = null) {
+        const target = save || (loadedSaves.length > 0 ? loadedSaves[selectedSaveIndex] : null);
+        if (!target || !target.filename) return;
+        if (audio) audio.playMenuSelect();
+        const url = `/api/saves/${encodeURIComponent(target.filename)}`;
+        const a = document.createElement('a');
+        a.href = url;
+        const outName = (target.characterName || target.filename).replace(/[^a-zA-Z0-9_-]/g, '_') + '.sav';
+        a.download = outName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    function downloadSelectedSave() {
+        downloadSave();
+    }
+
+    async function uploadSave(file) {
+        if (!file) return;
+        const statusEl = document.getElementById('save-upload-status');
+        if (statusEl) statusEl.textContent = 'Validating savefile...';
+
+        try {
+            const buf = await file.arrayBuffer();
+            if (buf.byteLength < 36) {
+                alert('Selected file is too small to be a valid Angband save file.');
+                if (statusEl) statusEl.textContent = '';
+                return;
+            }
+            const header = new TextDecoder('ascii').decode(new Uint8Array(buf.slice(0, 8)));
+            if (header !== 'SaveVNLA') {
+                alert('Invalid savefile: Missing SaveVNLA header format.');
+                if (statusEl) statusEl.textContent = '';
+                return;
+            }
+
+            if (statusEl) statusEl.textContent = 'Uploading to realm...';
+            const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const res = await fetch('/api/saves/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                    'X-Character-Name': cleanName
+                },
+                body: buf
+            });
+
+            if (!res.ok) {
+                const errJson = await res.json().catch(() => ({}));
+                alert(`Upload failed: ${errJson.error || res.statusText}`);
+                if (statusEl) statusEl.textContent = '';
+                return;
+            }
+
+            const data = await res.json();
+            if (statusEl) {
+                statusEl.textContent = `✓ Uploaded '${data.metadata?.characterName || cleanName}'!`;
+                setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 4000);
+            }
+            if (audio) audio.playMenuSelect();
+            await fetchAndRenderSaves();
+            checkSaves();
+        } catch (err) {
+            console.error('[Upload Error]', err);
+            alert(`Error uploading save: ${err.message}`);
+            if (statusEl) statusEl.textContent = '';
+        }
+    }
+
+    function triggerSaveUpload() {
+        const fileInput = document.getElementById('file-save-upload');
+        if (fileInput) fileInput.click();
+    }
+
+    async function downloadCurrentSave() {
+        if (audio) audio.playMenuSelect();
+        network.sendKey('C-s');
+        const banner = document.getElementById('message-text');
+        if (banner) {
+            banner.textContent = 'Saving progress and preparing export...';
+        }
+        await new Promise(r => setTimeout(r, 300));
+        try {
+            const res = await fetch('/api/saves');
+            if (!res.ok) throw new Error('Failed to retrieve saves list from server');
+            const data = await res.json();
+            const saves = data.saves || [];
+            const currentChar = (lastFrame && lastFrame.player && lastFrame.player.name)
+                ? lastFrame.player.name.trim()
+                : (network.currentChar || 'Adventurer');
+            let match = saves.find(s => s.characterName && s.characterName.toLowerCase() === currentChar.toLowerCase());
+            if (!match && saves.length > 0) {
+                match = saves[0];
+            }
+            if (match) {
+                downloadSave(match);
+                if (banner) banner.textContent = `Exported '${match.characterName || match.filename}.sav' successfully!`;
+            } else {
+                alert('No save file found on server for current character. Please try saving again.');
+            }
+        } catch (err) {
+            console.error('[DownloadCurrentSave Error]', err);
+            alert(`Error exporting save: ${err.message}`);
+        }
+        resumeGame();
     }
 
     async function deleteSelectedSave(save = null) {
@@ -746,22 +863,25 @@ window.addEventListener('DOMContentLoaded', () => {
             case 1: // Save Game Now
                 saveGameNow();
                 break;
-            case 2: // Load Other Character...
+            case 2: // Download Current Save (.sav)
+                downloadCurrentSave();
+                break;
+            case 3: // Load Other Character...
                 showLoadMenu(true);
                 break;
-            case 3: // Start Over (Random)
+            case 4: // Start Over (Random)
                 startNewRandomHero();
                 break;
-            case 4: // Start Over (Custom)
+            case 5: // Start Over (Custom)
                 startNewCustomHero();
                 break;
-            case 5: // Game Guide & Primer
+            case 6: // Game Guide & Primer
                 showGuide(0, 'pauseMenu');
                 break;
-            case 6: // Toggle Fullscreen
+            case 7: // Toggle Fullscreen
                 if (input) input.toggleFullscreen();
                 break;
-            case 7: // Save & Quit to Main Menu
+            case 8: // Save & Quit to Main Menu
                 returnToMainMenu();
                 break;
         }
@@ -1025,6 +1145,40 @@ window.addEventListener('DOMContentLoaded', () => {
         btnLoadBack.addEventListener('click', () => hideLoadMenu());
     }
 
+    const btnSaveUpload = document.getElementById('btn-save-upload');
+    const fileSaveUpload = document.getElementById('file-save-upload');
+    if (btnSaveUpload && fileSaveUpload) {
+        btnSaveUpload.addEventListener('click', () => {
+            fileSaveUpload.click();
+        });
+        fileSaveUpload.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                uploadSave(e.target.files[0]);
+                fileSaveUpload.value = '';
+            }
+        });
+    }
+
+    if (loadModal) {
+        const loadCard = loadModal.querySelector('.load-card');
+        loadModal.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (loadCard) loadCard.classList.add('drag-over');
+        });
+        loadModal.addEventListener('dragleave', (e) => {
+            if (e.target === loadModal && loadCard) {
+                loadCard.classList.remove('drag-over');
+            }
+        });
+        loadModal.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (loadCard) loadCard.classList.remove('drag-over');
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                uploadSave(e.dataTransfer.files[0]);
+            }
+        });
+    }
+
     // Guide Modal & Controls Toolbar Listeners
     const btnControls = document.getElementById('btn-controls');
     if (btnControls) {
@@ -1064,6 +1218,11 @@ window.addEventListener('DOMContentLoaded', () => {
         navigateLoadList,
         loadSelectedSave,
         deleteSelectedSave,
+        downloadSave,
+        downloadSelectedSave,
+        uploadSave,
+        triggerSaveUpload,
+        downloadCurrentSave,
         showPauseMenu,
         resumeGame,
         navigatePauseMenu,

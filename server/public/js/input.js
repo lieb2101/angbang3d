@@ -226,9 +226,19 @@ class InputController {
                     if (window.__app) window.__app.loadSelectedSave();
                     return;
                 }
-                if (e.key === 'Delete' || e.key === 'd' || e.key === 'D') {
+                if (e.key === 'Delete') {
                     e.preventDefault();
                     if (window.__app) window.__app.deleteSelectedSave();
+                    return;
+                }
+                if (e.key === 'u' || e.key === 'U') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.triggerSaveUpload();
+                    return;
+                }
+                if (e.key === 'x' || e.key === 'X' || e.key === 'e' || e.key === 'E') {
+                    e.preventDefault();
+                    if (window.__app) window.__app.downloadSelectedSave();
                     return;
                 }
                 return;
@@ -251,7 +261,7 @@ class InputController {
                     if (window.__app) window.__app.navigatePauseMenu(1);
                     return;
                 }
-                if (['1', '2', '3', '4', '5', '6', '7', '8'].includes(e.key)) {
+                if (['1', '2', '3', '4', '5', '6', '7', '8', '9'].includes(e.key)) {
                     e.preventDefault();
                     const idx = parseInt(e.key, 10) - 1;
                     if (window.__app) {

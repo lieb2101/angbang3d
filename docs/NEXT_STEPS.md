@@ -75,10 +75,16 @@
          - **Top Landscape Opaque Message Feed Window**: Replaced ephemeral floating chips with an opaque landscape HUD window (#message-feed-window) at top center (`#080b12`, gold borders) that streams the complete narrative and combat feed, supports scrollback history, and includes `▲ Top`, `▼ Latest`, and `✕ Clear` controls.
          - **Resilient Death & Permadeath Transition**: Fixed unhandled exception in `hud.update` that previously blocked the death screen, ensuring the atmospheric death modal and embedded tombstone canvas (#death-terminal-canvas) appear immediately on lethal damage (`player.dead || player.hp <= 0`) while forwarding keys to dismiss prompts or restart.
          - **Warm Acoustic Footstep Audio & Movement Throttle**: Softened synthetic footstep frequencies (warm low-frequency thuds, lowpass surface friction, eliminated harsh 1.6kHz resonant pings) and reduced volume to subtle foley (`0.30`). Throttled footstep triggers per movement step to eliminate rapid machine-gun audio spikes.
-   - **Universal Save Game Portability & Permadeath Snapshots (`Main.cs`, `Overlay.cs`)**:
-      - In-game `Save Game Manager` menu: archive saves to timestamped backups (`lib/save/backups/`), export `.sav` files directly to user Downloads, and restore backups with `SaveVNLA` binary validation.
-      - Bi-directional Cloud Sync: Upload local characters to cloud server and synchronize cloud characters down to local disk.
-      - In-game Standalone Package Download: Menu action to download the offline game bundle (`.zip`) directly from within the game.
+    - **Universal Save Game Portability & Permadeath Snapshots (`Main.cs`, `Overlay.cs`, `app.js`, `server.js`)**:
+       - **Web Client Save Download & Upload**:
+         - 1-click `📥 Download (.sav)` on every save item card in the Load Saved Game modal (`/api/saves/:filename`).
+         - In-game Pause Menu option `[3] Download Current Save (.sav)`: flushes save to disk and immediately downloads a local backup copy to the user's computer.
+         - `📤 Upload Save (.sav)` button + drag-and-drop support on `#load-modal`: reads local binary `.sav` files, verifies `SaveVNLA` magic header, posts to `/api/saves/upload`, automatically extracts character metadata, and refreshes the save archive listing.
+         - Keyboard shortcuts: <kbd>U</kbd> triggers upload file picker; <kbd>X</kbd> or <kbd>E</kbd> downloads selected save.
+       - **Desktop Godot Client Sync**:
+         - In-game `Save Game Manager` menu: archive saves to timestamped backups (`lib/save/backups/`), export `.sav` files directly to user Downloads, and restore backups with `SaveVNLA` binary validation.
+         - Bi-directional Cloud Sync: Upload local characters to cloud server and synchronize cloud characters down to local disk.
+       - In-game Standalone Package Download: Menu action to download the offline game bundle (`.zip`) directly from within the game.
    - **Graphics & Spatial Occlusion Culling (`DungeonWorld.cs`)**:
       - Radial horizon culling ($R \le 28$ tiles) eliminating instance buffer updates outside the maximum visible fog horizon.
 
